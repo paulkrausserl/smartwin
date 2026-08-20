@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traumtagebuch · Nachtwelten</title>
+<style>
+  :root {
+    --bg-deep: #060819;
+    --bg-mid: #0d1030;
+    --bg-glow: #1b1650;
+    --panel: rgba(20, 22, 54, 0.55);
+    --panel-solid: #14183a;
+    --border: rgba(140, 150, 230, 0.18);
+    --text: #e8eaff;
+    --muted: #9aa0d4;
+    --accent: #a98bff;
+    --accent-2: #6ee7ff;
+    --accent-3: #ff9ecb;
+    --good: #7ee787;
+    --shadow: 0 20px 60px rgba(0,0,0,0.5);
+    --radius: 20px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg-deep);
+    overflow-x: hidden;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ---------- Cosmic background ---------- */
+  #sky {
+    position: fixed;
+    inset: 0;
+    z-index: -3;
+    background:
+      radial-gradient(1200px 800px at 78% -10%, rgba(110,80,220,0.35), transparent 60%),
+      radial-gradient(1000px 700px at 10% 110%, rgba(30,120,180,0.30), transparent 60%),
+      radial-gradient(800px 600px at 50% 40%, rgba(80,40,140,0.18), transparent 70%),
+      linear-gradient(180deg, #05061a 0%, #0a0c28 45%, #0d0a2e 100%);
+  }
+  #stars { position: fixed; inset: 0; z-index: -2; display: block; }
+  #aurora {
+    position: fixed; inset: 0; z-index: -2; pointer-events: none;
+    background:
+      radial-gradient(60% 40% at 20% 20%, rgba(120,90,255,0.10), transparent 70%),
+      radial-gradient(50% 40% at 85% 30%, rgba(100,230,255,0.08), transparent 70%);
+    filter: blur(6px);
+    animation: drift 22s ease-in-out infinite alternate;
+  }
+  @keyframes drift {
+    0% { transform: translate3d(0,0,0) scale(1); opacity: .8; }
+    100% { transform: translate3d(-2%, 2%, 0) scale(1.08); opacity: 1; }
+  }
+
+  .moon {
+    position: fixed;
+    top: 42px; right: 60px;
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 32%, #fdfbe9 0%, #eef0d6 40%, #c9cbb0 75%, #a6a894 100%);
+    box-shadow:
+      0 0 60px 12px rgba(245,245,210,0.35),
+      inset -14px -10px 30px rgba(60,60,80,0.5);
+    z-index: -1;
+    animation: moonGlow 8s ease-in-out infinite alternate;
+  }
+  .moon::before, .moon::after {
+    content: ""; position: absolute; border-radius: 50%;
+    background: rgba(150,150,130,0.25);
+  }
+  .moon::before { width: 20px; height: 20px; top: 24px; left: 30px; }
+  .moon::after { width: 12px; height: 12px; top: 54px; left: 58px; box-shadow: -22px -18px 0 4px rgba(150,150,130,0.2); }
+  @keyframes moonGlow {
+    from { filter: brightness(0.96); }
+    to { filter: brightness(1.06); }
+  }
+  @media (max-width: 640px) { .moon { width: 64px; height: 64px; top: 20px; right: 22px; } }
+
+  /* ---------- Layout ---------- */
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 22px 80px; position: relative; }
+
+  header.hero { text-align: center; margin-bottom: 34px; }
+  .hero h1 {
+    font-size: clamp(2rem, 6vw, 3.4rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(120deg, #fff 10%, var(--accent) 45%, var(--accent-2) 80%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 40px rgba(169,139,255,0.25);
+  }
+  .hero p { color: var(--muted); margin-top: 8px; font-size: 1.02rem; }
+
+  /* ---------- Stats ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 14px;
+    margin-bottom: 30px;
+  }
+  .stat {
+    background: var(--panel);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 16px;
+    text-align: center;
+    transition: transform .25s ease, border-color .25s;
+  }
+  .stat:hover { transform: translateY(-3px); border-color: rgba(169,139,255,0.4); }
+  .stat .num {
+    font-size: 1.9rem; font-weight: 800;
+    background: linear-gradient(120deg, var(--accent-2), var(--accent));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .stat .lbl { color: var(--muted); font-size: .8rem; margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
+
+  /* ---------- Panels ---------- */
+  .panel {
+    background: var(--panel);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px;
+    box-shadow: var(--shadow);
+    margin-bottom: 26px;
+  }
+  .panel h2 {
+    font-size: 1.15rem; margin-bottom: 18px; display: flex; align-items: center; gap: 10px;
+    font-weight: 700;
+  }
+  .panel h2 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+
+  /* ---------- Form ---------- */
+  .field { margin-bottom: 16px; }
+  label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 7px; font-weight: 600; letter-spacing: .02em; }
+  input[type="text"], input[type="date"], textarea, select {
+    width: 100%;
+    background: rgba(8,10,30,0.6);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-size: .95rem;
+    font-family: inherit;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(169,139,255,0.18);
+  }
+  textarea { resize: vertical; min-height: 110px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+
+  /* mood picker */
+  .moods { display: flex; gap: 10px; flex-wrap: wrap; }
+  .mood-btn {
+    flex: 1 1 auto; min-width: 70px;
+    background: rgba(8,10,30,0.5);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 8px; cursor: pointer; text-align: center;
+    transition: all .2s; color: var(--muted); font-size: .78rem;
+  }
+  .mood-btn .emo { font-size: 1.5rem; display: block; margin-bottom: 3px; filter: grayscale(.3); transition: filter .2s, transform .2s; }
+  .mood-btn:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .mood-btn.active { border-color: var(--accent); background: rgba(169,139,255,0.16); color: var(--text); box-shadow: 0 0 18px rgba(169,139,255,0.25); }
+  .mood-btn.active .emo { filter: none; transform: scale(1.12); }
+
+  /* lucid toggle */
+  .toggle-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+  .switch { position: relative; width: 50px; height: 28px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; cursor: pointer;
+    background: rgba(8,10,30,0.7); border: 1px solid var(--border);
+    border-radius: 28px; transition: .3s;
+  }
+  .slider::before {
+    content: ""; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px;
+    background: var(--muted); border-radius: 50%; transition: .3s;
+  }
+  .switch input:checked + .slider { background: linear-gradient(120deg, var(--accent), var(--accent-2)); border-color: transparent; }
+  .switch input:checked + .slider::before { transform: translateX(22px); background: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.6); }
+
+  .btn {
+    background: linear-gradient(120deg, var(--accent), #7b5cff);
+    color: #fff; border: none; border-radius: 12px;
+    padding: 13px 24px; font-size: .96rem; font-weight: 700; cursor: pointer;
+    transition: transform .18s, box-shadow .18s; font-family: inherit;
+    box-shadow: 0 8px 24px rgba(123,92,255,0.35);
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(123,92,255,0.5); }
+  .btn:active { transform: translateY(0); }
+  .btn.ghost { background: transparent; border: 1px solid var(--border); box-shadow: none; color: var(--muted); }
+  .btn.ghost:hover { border-color: var(--accent); color: var(--text); }
+
+  /* ---------- Filters / search ---------- */
+  .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+  .toolbar input[type="text"] { flex: 1 1 220px; }
+  .chip-filter { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    background: rgba(8,10,30,0.5); border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 13px; border-radius: 20px; font-size: .8rem; cursor: pointer; transition: all .2s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--text); }
+  .chip.active { background: rgba(169,139,255,0.2); border-color: var(--accent); color: var(--text); }
+
+  /* ---------- Entry cards ---------- */
+  #entries { display: grid; gap: 18px; }
+  .card {
+    position: relative;
+    background: linear-gradient(150deg, rgba(30,28,70,0.6), rgba(16,18,44,0.6));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 22px 22px 20px;
+    overflow: hidden;
+    animation: rise .5s ease both;
+    transition: transform .25s, border-color .25s;
+  }
+  .card:hover { transform: translateY(-3px); border-color: rgba(169,139,255,0.4); }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: linear-gradient(180deg, var(--mood-c, var(--accent)), transparent);
+  }
+  .card.lucid { box-shadow: inset 0 0 40px rgba(110,231,255,0.08); border-color: rgba(110,231,255,0.35); }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+  .card-title { font-size: 1.2rem; font-weight: 700; }
+  .card-meta { color: var(--muted); font-size: .8rem; margin-top: 2px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .card-mood { font-size: 1.7rem; line-height: 1; }
+  .card-body { color: #cfd3f5; font-size: .95rem; white-space: pre-wrap; margin: 10px 0 14px; }
+  .lucid-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(110,231,255,0.14); color: var(--accent-2);
+    border: 1px solid rgba(110,231,255,0.35);
+    padding: 3px 10px; border-radius: 20px; font-size: .72rem; font-weight: 600;
+  }
+  .card-tags { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tag { background: rgba(169,139,255,0.14); color: var(--accent); border: 1px solid rgba(169,139,255,0.3); padding: 3px 11px; border-radius: 20px; font-size: .74rem; }
+  .card-actions { position: absolute; top: 16px; right: 16px; display: flex; gap: 6px; opacity: 0; transition: opacity .2s; }
+  .card:hover .card-actions { opacity: 1; }
+  .icon-btn {
+    background: rgba(8,10,30,0.6); border: 1px solid var(--border); color: var(--muted);
+    width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: .85rem;
+    display: flex; align-items: center; justify-content: center; transition: all .2s;
+  }
+  .icon-btn:hover { color: var(--accent-3); border-color: var(--accent-3); }
+
+  .empty { text-align: center; color: var(--muted); padding: 50px 20px; }
+  .empty .big { font-size: 3rem; margin-bottom: 12px; opacity: .7; }
+
+  /* mood distribution bars */
+  .mood-chart { display: grid; gap: 10px; }
+  .mood-bar-row { display: flex; align-items: center; gap: 12px; }
+  .mood-bar-row .emo { font-size: 1.3rem; width: 30px; text-align: center; }
+  .bar-track { flex: 1; height: 12px; background: rgba(8,10,30,0.6); border-radius: 10px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 10px; width: 0; transition: width .9s cubic-bezier(.2,.8,.2,1); }
+  .mood-bar-row .cnt { width: 34px; text-align: right; color: var(--muted); font-size: .82rem; }
+
+  footer { text-align: center; color: var(--muted); font-size: .8rem; margin-top: 30px; opacity: .7; }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* toast */
+  #toast {
+    position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(120%);
+    background: var(--panel-solid); border: 1px solid var(--accent); color: var(--text);
+    padding: 13px 22px; border-radius: 14px; font-size: .9rem; z-index: 100;
+    box-shadow: var(--shadow); transition: transform .4s cubic-bezier(.2,.9,.2,1);
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  .header-actions { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <div id="sky"></div>
+  <canvas id="stars"></canvas>
+  <div id="aurora"></div>
+  <div class="moon"></div>
+
+  <div class="wrap">
+    <header class="hero">
+      <h1>✦ Traumtagebuch</h1>
+      <p>Halte deine Nachtwelten fest, bevor sie im Morgenlicht verblassen.</p>
+      <div class="header-actions">
+        <button class="btn ghost" id="exportBtn">↓ Exportieren</button>
+        <button class="btn ghost" id="importBtn">↑ Importieren</button>
+        <input type="file" id="importFile" accept="application/json" hidden>
+      </div>
+    </header>
+
+    <section class="stats" id="stats"></section>
+
+    <!-- New entry -->
+    <section class="panel">
+      <h2><span class="dot"></span> Neuen Traum festhalten</h2>
+      <form id="dreamForm">
+        <div class="row">
+          <div class="field">
+            <label for="title">Titel</label>
+            <input type="text" id="title" placeholder="z. B. Flug über die Stadt" required>
+          </div>
+          <div class="field">
+            <label for="date">Datum</label>
+            <input type="date" id="date" required>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Stimmung</label>
+          <div class="moods" id="moodPicker"></div>
+        </div>
+
+        <div class="field">
+          <label for="body">Beschreibung</label>
+          <textarea id="body" placeholder="Was hast du geträumt? Wer war dabei? Wie hat es sich angefühlt?" required></textarea>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="tags">Symbole / Tags <span style="opacity:.6">(mit Komma trennen)</span></label>
+            <input type="text" id="tags" placeholder="fliegen, wasser, kindheit">
+          </div>
+          <div class="field">
+            <label>Klartraum?</label>
+            <div class="toggle-row">
+              <label class="switch">
+                <input type="checkbox" id="lucid">
+                <span class="slider"></span>
+              </label>
+              <span id="lucidLabel" style="color:var(--muted);font-size:.85rem">Nein – normaler Traum</span>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn" id="submitBtn">✦ Traum speichern</button>
+        <button type="button" class="btn ghost" id="cancelEdit" hidden>Abbrechen</button>
+      </form>
+    </section>
+
+    <!-- Mood insight -->
+    <section class="panel" id="insightPanel" hidden>
+      <h2><span class="dot"></span> Stimmungslandschaft</h2>
+      <div class="mood-chart" id="moodChart"></div>
+    </section>
+
+    <!-- Entries -->
+    <section class="panel">
+      <h2><span class="dot"></span> Deine Träume</h2>
+      <div class="toolbar">
+        <input type="text" id="search" placeholder="🔍 Träume durchsuchen …">
+        <div class="chip-filter" id="tagFilter"></div>
+      </div>
+      <div id="entries"></div>
+    </section>
+
+    <footer>
+      Alle Daten bleiben nur in diesem Browser (localStorage). ✦ Süße Träume.
+    </footer>
+  </div>
+
+  <div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Starfield canvas ----------
+  const canvas = document.getElementById("stars");
+  const ctx = canvas.getContext("2d");
+  let W, H, stars = [], shooting = [];
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    const count = Math.min(220, Math.floor(W * H / 7000));
+    stars = [];
+    for (let i = 0; i < count; i++) {
+      stars.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: Math.random() * 1.4 + 0.3,
+        base: Math.random() * 0.5 + 0.3,
+        tw: Math.random() * 0.02 + 0.005,
+        phase: Math.random() * Math.PI * 2,
+        hue: Math.random() < 0.15 ? 200 : (Math.random() < 0.5 ? 260 : 45)
+      });
+    }
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  function spawnShooting() {
+    if (Math.random() < 0.985) return;
+    const startX = Math.random() * W;
+    shooting.push({ x: startX, y: -20, vx: -(Math.random() * 4 + 4), vy: Math.random() * 4 + 4, life: 1 });
+  }
+
+  function draw(t) {
+    ctx.clearRect(0, 0, W, H);
+    for (const s of stars) {
+      const a = s.base + Math.sin(t * s.tw + s.phase) * 0.35;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      const light = s.hue === 45 ? "255,250,220" : (s.hue === 200 ? "180,230,255" : "210,190,255");
+      ctx.fillStyle = "rgba(" + light + "," + Math.max(0, a) + ")";
+      ctx.shadowBlur = s.r * 3;
+      ctx.shadowColor = "rgba(" + light + ",0.8)";
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    spawnShooting();
+    for (let i = shooting.length - 1; i >= 0; i--) {
+      const m = shooting[i];
+      m.x += m.vx; m.y += m.vy; m.life -= 0.012;
+      const grad = ctx.createLinearGradient(m.x, m.y, m.x - m.vx * 8, m.y - m.vy * 8);
+      grad.addColorStop(0, "rgba(255,255,255," + m.life + ")");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(m.x, m.y);
+      ctx.lineTo(m.x - m.vx * 8, m.y - m.vy * 8);
+      ctx.stroke();
+      if (m.life <= 0 || m.y > H + 40) shooting.splice(i, 1);
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  // ---------- Data ----------
+  const KEY = "traumtagebuch.v1";
+  const MOODS = [
+    { id: "friedlich", emo: "😌", label: "Friedlich", color: "#7ee787" },
+    { id: "freudig",   emo: "😄", label: "Freudig",   color: "#ffd166" },
+    { id: "seltsam",   emo: "🌀", label: "Seltsam",   color: "#a98bff" },
+    { id: "aufregend", emo: "⚡", label: "Aufregend", color: "#6ee7ff" },
+    { id: "angstvoll", emo: "😰", label: "Angstvoll", color: "#ff9ecb" },
+    { id: "traurig",   emo: "🌧️", label: "Traurig",   color: "#8ab4ff" }
+  ];
+  const moodMap = Object.fromEntries(MOODS.map(m => [m.id, m]));
+
+  let dreams = load();
+  let selectedMood = "seltsam";
+  let editingId = null;
+  let activeTag = null;
+  let searchTerm = "";
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || []; }
+    catch (e) { return []; }
+  }
+  function save() { localStorage.setItem(KEY, JSON.stringify(dreams)); }
+
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  // ---------- Mood picker ----------
+  const moodPicker = document.getElementById("moodPicker");
+  function renderMoodPicker() {
+    moodPicker.innerHTML = "";
+    MOODS.forEach(m => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mood-btn" + (m.id === selectedMood ? " active" : "");
+      b.innerHTML = '<span class="emo">' + m.emo + '</span>' + m.label;
+      b.onclick = () => { selectedMood = m.id; renderMoodPicker(); };
+      moodPicker.appendChild(b);
+    });
+  }
+  renderMoodPicker();
+
+  // lucid label
+  const lucidCb = document.getElementById("lucid");
+  const lucidLabel = document.getElementById("lucidLabel");
+  lucidCb.addEventListener("change", () => {
+    lucidLabel.textContent = lucidCb.checked ? "Ja – ich war mir bewusst!" : "Nein – normaler Traum";
+  });
+
+  // ---------- Form ----------
+  const form = document.getElementById("dreamForm");
+  const dateInput = document.getElementById("date");
+  dateInput.value = new Date().toISOString().slice(0, 10);
+
+  form.addEventListener("submit", e => {
+    e.preventDefault();
+    const title = document.getElementById("title").value.trim();
+    const body = document.getElementById("body").value.trim();
+    const date = dateInput.value;
+    const tags = document.getElementById("tags").value.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+    if (!title || !body) return;
+
+    if (editingId) {
+      const d = dreams.find(x => x.id === editingId);
+      Object.assign(d, { title, body, date, tags, mood: selectedMood, lucid: lucidCb.checked });
+      toast("Traum aktualisiert ✦");
+      editingId = null;
+      document.getElementById("submitBtn").textContent = "✦ Traum speichern";
+      document.getElementById("cancelEdit").hidden = true;
+    } else {
+      dreams.unshift({ id: uid(), title, body, date, tags, mood: selectedMood, lucid: lucidCb.checked, created: Date.now() });
+      toast("Traum gespeichert ✦");
+    }
+    save();
+    resetForm();
+    renderAll();
+  });
+
+  function resetForm() {
+    form.reset();
+    dateInput.value = new Date().toISOString().slice(0, 10);
+    selectedMood = "seltsam";
+    renderMoodPicker();
+    lucidLabel.textContent = "Nein – normaler Traum";
+  }
+
+  document.getElementById("cancelEdit").onclick = () => {
+    editingId = null;
+    document.getElementById("submitBtn").textContent = "✦ Traum speichern";
+    document.getElementById("cancelEdit").hidden = true;
+    resetForm();
+  };
+
+  function startEdit(id) {
+    const d = dreams.find(x => x.id === id);
+    if (!d) return;
+    editingId = id;
+    document.getElementById("title").value = d.title;
+    document.getElementById("body").value = d.body;
+    dateInput.value = d.date;
+    document.getElementById("tags").value = (d.tags || []).join(", ");
+    selectedMood = d.mood;
+    lucidCb.checked = !!d.lucid;
+    lucidLabel.textContent = d.lucid ? "Ja – ich war mir bewusst!" : "Nein – normaler Traum";
+    renderMoodPicker();
+    document.getElementById("submitBtn").textContent = "✦ Änderungen speichern";
+    document.getElementById("cancelEdit").hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function del(id) {
+    if (!confirm("Diesen Traum wirklich löschen?")) return;
+    dreams = dreams.filter(x => x.id !== id);
+    save();
+    renderAll();
+    toast("Traum gelöscht");
+  }
+
+  // ---------- Rendering ----------
+  function renderStats() {
+    const total = dreams.length;
+    const lucid = dreams.filter(d => d.lucid).length;
+    const streak = calcStreak();
+    const topMood = mostCommonMood();
+    const el = document.getElementById("stats");
+    el.innerHTML = "";
+    const cards = [
+      { num: total, lbl: "Träume" },
+      { num: lucid, lbl: "Klarträume" },
+      { num: streak, lbl: "Serie (Tage)" },
+      { num: topMood ? topMood.emo : "—", lbl: "Häufigste Stimmung" }
+    ];
+    cards.forEach(c => {
+      const d = document.createElement("div");
+      d.className = "stat";
+      d.innerHTML = '<div class="num">' + c.num + '</div><div class="lbl">' + c.lbl + '</div>';
+      el.appendChild(d);
+    });
+  }
+
+  function calcStreak() {
+    if (!dreams.length) return 0;
+    const days = new Set(dreams.map(d => d.date));
+    let streak = 0;
+    let cur = new Date();
+    // allow today or yesterday to start the streak
+    const has = ds => days.has(ds);
+    const fmt = dt => dt.toISOString().slice(0, 10);
+    if (!has(fmt(cur))) { cur.setDate(cur.getDate() - 1); if (!has(fmt(cur))) return 0; }
+    while (has(fmt(cur))) { streak++; cur.setDate(cur.getDate() - 1); }
+    return streak;
+  }
+
+  function mostCommonMood() {
+    if (!dreams.length) return null;
+    const counts = {};
+    dreams.forEach(d => counts[d.mood] = (counts[d.mood] || 0) + 1);
+    let best = null, n = -1;
+    for (const k in counts) if (counts[k] > n) { n = counts[k]; best = k; }
+    return moodMap[best];
+  }
+
+  function renderMoodChart() {
+    const panel = document.getElementById("insightPanel");
+    if (dreams.length < 1) { panel.hidden = true; return; }
+    panel.hidden = false;
+    const counts = {};
+    dreams.forEach(d => counts[d.mood] = (counts[d.mood] || 0) + 1);
+    const max = Math.max(...Object.values(counts), 1);
+    const chart = document.getElementById("moodChart");
+    chart.innerHTML = "";
+    MOODS.forEach(m => {
+      const c = counts[m.id] || 0;
+      const row = document.createElement("div");
+      row.className = "mood-bar-row";
+      row.innerHTML =
+        '<span class="emo">' + m.emo + '</span>' +
+        '<div class="bar-track"><div class="bar-fill" style="background:linear-gradient(90deg,' + m.color + ',' + m.color + '99)"></div></div>' +
+        '<span class="cnt">' + c + '</span>';
+      chart.appendChild(row);
+      requestAnimationFrame(() => {
+        row.querySelector(".bar-fill").style.width = (c / max * 100) + "%";
+      });
+    });
+  }
+
+  function renderTagFilter() {
+    const all = {};
+    dreams.forEach(d => (d.tags || []).forEach(t => all[t] = (all[t] || 0) + 1));
+    const tags = Object.keys(all).sort((a, b) => all[b] - all[a]).slice(0, 12);
+    const el = document.getElementById("tagFilter");
+    el.innerHTML = "";
+    if (!tags.length) return;
+    const allChip = document.createElement("span");
+    allChip.className = "chip" + (activeTag === null ? " active" : "");
+    allChip.textContent = "Alle";
+    allChip.onclick = () => { activeTag = null; renderEntries(); renderTagFilter(); };
+    el.appendChild(allChip);
+    tags.forEach(t => {
+      const c = document.createElement("span");
+      c.className = "chip" + (activeTag === t ? " active" : "");
+      c.textContent = "#" + t + " " + all[t];
+      c.onclick = () => { activeTag = activeTag === t ? null : t; renderEntries(); renderTagFilter(); };
+      el.appendChild(c);
+    });
+  }
+
+  function fmtDate(ds) {
+    const d = new Date(ds + "T00:00:00");
+    return d.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function renderEntries() {
+    const el = document.getElementById("entries");
+    let list = dreams.slice();
+    if (activeTag) list = list.filter(d => (d.tags || []).includes(activeTag));
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      list = list.filter(d =>
+        d.title.toLowerCase().includes(q) ||
+        d.body.toLowerCase().includes(q) ||
+        (d.tags || []).some(t => t.includes(q)));
+    }
+    list.sort((a, b) => (b.date === a.date ? (b.created || 0) - (a.created || 0) : b.date.localeCompare(a.date)));
+
+    if (!list.length) {
+      el.innerHTML = '<div class="empty"><div class="big">🌙</div>' +
+        (dreams.length ? "Keine Träume gefunden." : "Noch keine Träume. Halte deinen ersten oben fest!") + '</div>';
+      return;
+    }
+
+    el.innerHTML = "";
+    list.forEach(d => {
+      const m = moodMap[d.mood] || MOODS[2];
+      const card = document.createElement("article");
+      card.className = "card" + (d.lucid ? " lucid" : "");
+      card.style.setProperty("--mood-c", m.color);
+      const tagsHtml = (d.tags || []).map(t => '<span class="tag">#' + escapeHtml(t) + '</span>').join("");
+      card.innerHTML =
+        '<div class="card-actions">' +
+          '<button class="icon-btn" title="Bearbeiten" data-edit="' + d.id + '">✎</button>' +
+          '<button class="icon-btn" title="Löschen" data-del="' + d.id + '">✕</button>' +
+        '</div>' +
+        '<div class="card-head">' +
+          '<div>' +
+            '<div class="card-title">' + escapeHtml(d.title) + '</div>' +
+            '<div class="card-meta"><span>' + fmtDate(d.date) + '</span>' +
+              (d.lucid ? '<span class="lucid-badge">✦ Klartraum</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="card-mood" title="' + m.label + '">' + m.emo + '</div>' +
+        '</div>' +
+        (tagsHtml ? '<div class="card-tags">' + tagsHtml + '</div>' : '') +
+        '<div class="card-body">' + escapeHtml(d.body) + '</div>';
+      el.appendChild(card);
+    });
+
+    el.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => startEdit(b.dataset.edit));
+    el.querySelectorAll("[data-del]").forEach(b => b.onclick = () => del(b.dataset.del));
+  }
+
+  document.getElementById("search").addEventListener("input", e => {
+    searchTerm = e.target.value.trim();
+    renderEntries();
+  });
+
+  function renderAll() {
+    renderStats();
+    renderMoodChart();
+    renderTagFilter();
+    renderEntries();
+  }
+
+  // ---------- Export / Import ----------
+  document.getElementById("exportBtn").onclick = () => {
+    const blob = new Blob([JSON.stringify(dreams, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "traumtagebuch-" + new Date().toISOString().slice(0, 10) + ".json";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast("Exportiert ✦");
+  };
+  document.getElementById("importBtn").onclick = () => document.getElementById("importFile").click();
+  document.getElementById("importFile").addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (!Array.isArray(data)) throw new Error("bad");
+        const existing = new Set(dreams.map(d => d.id));
+        let added = 0;
+        data.forEach(d => {
+          if (d && d.title && !existing.has(d.id)) {
+            dreams.push({ ...d, id: d.id || uid() });
+            added++;
+          }
+        });
+        save();
+        renderAll();
+        toast(added + " Träume importiert ✦");
+      } catch (err) { toast("Import fehlgeschlagen ✕"); }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  // ---------- Toast ----------
+  let toastTimer;
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+
+  // ---------- Seed sample on first ever visit ----------
+  if (!localStorage.getItem(KEY) && dreams.length === 0) {
+    dreams = [
+      { id: uid(), title: "Flug über die Nachtstadt", date: new Date(Date.now() - 86400000).toISOString().slice(0,10),
+        mood: "aufregend", lucid: true, tags: ["fliegen", "stadt", "freiheit"], created: Date.now() - 86400000,
+        body: "Ich merkte plötzlich, dass ich träume, und stieß mich vom Dach ab. Die Lichter der Stadt zogen unter mir vorbei wie ein Meer aus Sternen." },
+      { id: uid(), title: "Der endlose Bahnhof", date: new Date().toISOString().slice(0,10),
+        mood: "seltsam", lucid: false, tags: ["reisen", "labyrinth"], created: Date.now(),
+        body: "Ein Bahnhof, dessen Gleise sich immer weiter verzweigten. Jeder Zug fuhr in eine andere Erinnerung." }
+    ];
+    save();
+  }
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
