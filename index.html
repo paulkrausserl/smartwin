@@ -2,7 +2,13 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Vom Home-Bildschirm gestartet: ohne Browserleisten -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Risk-Reward" />
+  <meta name="theme-color" content="#0b0f19" />
   <title>SmartWin Risk-Reward</title>
   <script src="https://cdn.tailwindcss.com/3.4.5"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -48,9 +54,18 @@
         <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mt-1">Risk-Reward Scanner</h1>
         <p class="text-slate-400 mt-1 text-sm">Fundamentaldaten, Bilanz, Momentum &amp; Burggraben – verdichtet zu einem Score von 0 bis 100.</p>
       </div>
-      <p class="text-[11px] text-slate-500 max-w-xs md:text-right">
-        Illustrative Beispieldaten, keine Echtzeitkurse. Keine Anlageberatung.
-      </p>
+      <div class="flex flex-col md:items-end gap-2">
+        <button id="fullscreenBtn" type="button" class="self-start md:self-end inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <span id="fullscreenLabel">Vollbild</span>
+        </button>
+        <p id="fullscreenHint" hidden class="text-[11px] text-amber-300 max-w-xs md:text-right">
+          Vollbild ist in dieser Ansicht gesperrt. Öffne die Seite in Safari oder Chrome, oder lege sie über Teilen → „Zum Home-Bildschirm“ ab.
+        </p>
+        <p class="text-[11px] text-slate-500 max-w-xs md:text-right">
+          Illustrative Beispieldaten, keine Echtzeitkurse. Keine Anlageberatung.
+        </p>
+      </div>
     </header>
 
     <!-- Search -->
@@ -475,7 +490,36 @@ function init() {
     },
   });
 
+  initFullscreen();
   selectStock('Microsoft');
+}
+
+/* ---------------------------------------------------------------
+   Vollbild (inkl. webkit-Präfix für Safari auf dem iPad)
+---------------------------------------------------------------- */
+function initFullscreen() {
+  const root = document.documentElement;
+  const btn = document.getElementById('fullscreenBtn');
+  const hint = document.getElementById('fullscreenHint');
+  const current = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const enter = root.requestFullscreen?.bind(root) || root.webkitRequestFullscreen?.bind(root);
+  const exit = (document.exitFullscreen || document.webkitExitFullscreen)?.bind(document);
+
+  const sync = () => { document.getElementById('fullscreenLabel').textContent = current() ? 'Vollbild beenden' : 'Vollbild'; };
+  document.addEventListener('fullscreenchange', sync);
+  document.addEventListener('webkitfullscreenchange', sync);
+
+  btn.addEventListener('click', async () => {
+    try {
+      if (current()) await exit();
+      else if (enter) await enter();
+      else throw new Error('unsupported');
+      hint.hidden = true;
+    } catch {
+      hint.hidden = false;
+    }
+    sync();
+  });
 }
 init();
 </script>
