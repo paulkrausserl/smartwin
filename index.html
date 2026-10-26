@@ -83,6 +83,7 @@
         <span class="text-xs text-slate-500 mr-1">Schnellauswahl:</span>
         <div id="quickPicks" class="flex flex-wrap gap-2"></div>
       </div>
+      <div id="altHits" hidden class="flex flex-wrap items-center gap-2 mt-3"></div>
       <p id="loadError" hidden class="text-sm text-rose-300 mt-3"></p>
 
       <!-- Datenquelle -->
@@ -336,16 +337,25 @@ const first = v => Array.isArray(v) ? v[0] : v;
 const finite = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const pct = v => (finite(v) == null ? null : v * 100);
 
+// Suchtreffer sortieren: exakter Ticker > Hauptbörse > Name beginnt mit Suchbegriff > Heimatlisting
+const MAJOR_EXCHANGES = ['NASDAQ', 'NYSE', 'AMEX', 'XETRA'];
+function rankHit(h, q) {
+  const name = (h.name || '').toLowerCase(), sym = (h.symbol || '').toLowerCase();
+  return (sym === q ? 100 : 0)
+    + (MAJOR_EXCHANGES.includes(h.exchange) ? 40 : 0)
+    + (name.startsWith(q) ? 20 : 0)
+    + (sym.includes('.') ? 0 : 10)
+    - name.length / 10;
+}
+
 async function resolveSymbol(query) {
   const known = findKnown(query);
-  if (known) return known.live || known.ticker;
+  if (known) return { symbol: known.live || known.ticker, hits: [] };
   const q = query.trim();
-  const res = await fmp('search-name', { query: q, limit: 10 }).catch(() => []);
-  const hits = Array.isArray(res) ? res : [];
-  const exact = hits.find(h => h.symbol?.toLowerCase() === q.toLowerCase());
-  if (exact) return exact.symbol;
-  if (hits.length) return hits[0].symbol;
-  return q.toUpperCase(); // vielleicht direkt ein Ticker
+  const res = await fmp('search-name', { query: q, limit: 20 }).catch(() => []);
+  const hits = (Array.isArray(res) ? res : []).filter(h => h.symbol)
+    .sort((a, b) => rankHit(b, q.toLowerCase()) - rankHit(a, q.toLowerCase()));
+  return { symbol: hits[0]?.symbol || q.toUpperCase(), hits }; // ohne Treffer: vielleicht direkt ein Ticker
 }
 
 // RSI nach Wilder aus Schlusskursen (älteste zuerst)
@@ -365,10 +375,11 @@ function rsi(closes, period = 14) {
   return loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
 }
 
-async function loadLive(query) {
-  const symbol = await resolveSymbol(query);
+// Liefert [stock, hits]; hits = null, wenn der Ticker direkt vorgegeben war
+async function loadLive(query, forcedSymbol) {
+  const { symbol, hits } = forcedSymbol ? { symbol: forcedSymbol, hits: null } : await resolveSymbol(query);
   const cached = store.get(`rr:data:${symbol}`);
-  if (cached && Date.now() - cached.t < CACHE_MS) return cached.stock;
+  if (cached && Date.now() - cached.t < CACHE_MS) return [cached.stock, hits];
 
   const from = new Date(Date.now() - 150 * 86400000).toISOString().slice(0, 10);
   const [quote, profile, ratios, scores, growth, hist] = await Promise.all([
@@ -412,7 +423,7 @@ async function loadLive(query) {
     beta: finite(p.beta),
   };
   store.set(`rr:data:${symbol}`, { t: Date.now(), stock });
-  return stock;
+  return [stock, hits];
 }
 
 /* ---------------------------------------------------------------
@@ -615,15 +626,36 @@ function renderSource() {
 }
 
 let loadSeq = 0; // nur die zuletzt gestartete Suche darf das Ergebnis setzen
-async function selectStock(query) {
+// Weitere Suchtreffer als Buttons, damit man bei Namensgleichheit umschalten kann
+function renderHits(hits, currentSymbol) {
+  const box = document.getElementById('altHits');
+  const others = (hits || []).filter(h => h.symbol !== currentSymbol).slice(0, 6);
+  box.replaceChildren();
+  box.hidden = !others.length;
+  if (!others.length) return;
+  const label = document.createElement('span');
+  label.className = 'text-xs text-slate-500 mr-1';
+  label.textContent = 'Nicht die gesuchte Firma? Andere Treffer:';
+  box.append(label);
+  for (const h of others) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'text-xs px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700 transition';
+    b.textContent = `${h.name} · ${h.symbol}${h.exchange ? ` · ${h.exchange}` : ''}`;
+    b.addEventListener('click', () => selectStock(h.name || h.symbol, h.symbol));
+    box.append(b);
+  }
+}
+
+async function selectStock(query, symbol) {
   if (!query.trim()) return;
   const seq = ++loadSeq;
   setError('');
-  let stock;
+  let stock, hits = [];
   if (state.apiKey) {
     setLoading(true);
     try {
-      stock = await loadLive(query);
+      [stock, hits] = await loadLive(query, symbol);
     } catch (e) {
       stock = findStock(query);
       if (seq === loadSeq) setError(`${e.message} Angezeigt werden ${stock.simulated ? 'simulierte Daten' : 'Demo-Daten'}.`);
@@ -633,6 +665,8 @@ async function selectStock(query) {
     stock = findStock(query);
   }
   if (seq !== loadSeq || !stock) return;
+  if (hits !== null) state.hits = hits;
+  renderHits(state.hits, stock.ticker);
 
   const moat = store.get(`rr:moat:${stock.ticker}`);
   if (Number.isInteger(moat)) stock.moat = moat;
@@ -713,7 +747,7 @@ function init() {
   });
 
   // Datenquelle
-  const reloadCurrent = () => state.stock && selectStock(state.stock.simulated ? state.stock.name : state.stock.ticker);
+  const reloadCurrent = () => state.stock && selectStock(state.stock.simulated ? state.stock.name : state.stock.ticker, state.stock.live ? state.stock.ticker : undefined);
   document.getElementById('saveKey').addEventListener('click', () => {
     state.apiKey = document.getElementById('apiKey').value.trim();
     if (state.apiKey) store.set('rr:apiKey', state.apiKey); else store.del('rr:apiKey');
