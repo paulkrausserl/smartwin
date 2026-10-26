@@ -190,6 +190,10 @@
       </section>
     </main>
 
+    <!-- Versionsnummer: bei jedem Update erhöhen, damit man sieht, ob GitHub Pages schon aktualisiert hat -->
+    <div id="appVersion" class="fixed z-20 font-mono text-[11px] px-2 py-1 rounded-md bg-slate-900/80 border border-slate-700 text-slate-400 pointer-events-none"
+         style="right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px));"></div>
+
     <footer class="text-center text-[11px] text-slate-600 mt-10">
       Methodik: Jede Kennzahl wird linear auf 0–100 Punkte abgebildet, je Kategorie gemittelt und gewichtet summiert.
     </footer>
@@ -214,6 +218,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
+const APP_VERSION = '1.5';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -724,6 +729,7 @@ async function selectStock(query, symbol) {
    Init
 ---------------------------------------------------------------- */
 function init() {
+  document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
   document.getElementById('stockList').innerHTML = STOCKS.map(s => `<option value="${s.name}">${s.ticker}</option>`).join('');
   document.getElementById('quickPicks').innerHTML = QUICK.map(n => `<button type="button" data-quick="${n}">${n}</button>`).join('');
   document.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => selectStock(b.dataset.quick)));
