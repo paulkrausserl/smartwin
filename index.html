@@ -171,6 +171,7 @@
       <details id="sourcePanel" class="mt-4 pt-4" style="border-top:1px solid var(--line)">
         <summary class="cursor-pointer text-sm muted select-none">
           Datenquelle: <span id="sourceStatus" class="font-semibold"></span>
+          <span id="usage" class="num text-xs ml-2"></span>
         </summary>
         <div class="mt-3 flex flex-col sm:flex-row gap-3 sm:items-end">
           <div class="flex-1 min-w-0">
@@ -397,7 +398,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '2.1';
+const APP_VERSION = '2.2';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -595,6 +596,7 @@ async function fmp(path, params = {}) {
   let res;
   try {
     res = await fetch(url);
+    countCall(); // jede Antwort von FMP zählt, auch Fehlermeldungen
   } catch {
     throw fmpError('network', 'Financial Modeling Prep ist nicht erreichbar. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.');
   }
@@ -1210,12 +1212,37 @@ function setLoading(on) {
   btn.textContent = on ? 'Lade …' : 'Analysieren';
 }
 
+// Abrufzähler: nur Abrufe aus diesem Browser, Tageswechsel um 0 Uhr UTC (FMPs eigene Zählung kann abweichen)
+const DAILY_LIMIT = 250;
+const usageKey = () => `rr:calls:${new Date().toISOString().slice(0, 10)}`;
+const callsToday = () => store.get(usageKey()) || 0;
+function countCall() {
+  store.set(usageKey(), callsToday() + 1);
+  renderUsage();
+}
+function renderUsage() {
+  const el = document.getElementById('usage');
+  if (!state.apiKey) { el.textContent = ''; return; }
+  const n = callsToday();
+  el.textContent = `· ${n} / ${DAILY_LIMIT} Abrufe heute`;
+  el.title = 'Gezählt in diesem Browser seit 0 Uhr UTC. Andere Geräte und FMPs eigene Zählung sind nicht enthalten.';
+  el.style.color = n >= DAILY_LIMIT ? (state.mode === 'clean' ? '#fff' : 'var(--down)')
+    : n >= DAILY_LIMIT * 0.8 ? (state.mode === 'clean' ? 'var(--text)' : '#f2c46d') : 'var(--muted)';
+}
+// Zähler vergangener Tage aufräumen
+function pruneUsage() {
+  try {
+    Object.keys(localStorage).filter(k => k.startsWith('rr:calls:') && k !== usageKey()).forEach(k => localStorage.removeItem(k));
+  } catch { /* Speicher gesperrt: egal */ }
+}
+
 function renderSource() {
   const el = document.getElementById('sourceStatus');
   el.textContent = state.apiKey ? 'Live (Financial Modeling Prep)' : 'Demo-Daten';
   el.className = 'font-semibold';
   el.style.color = state.apiKey ? 'var(--up)' : 'var(--muted)';
   document.getElementById('apiKey').value = state.apiKey;
+  renderUsage();
 }
 
 let loadSeq = 0; // nur die zuletzt gestartete Suche darf das Ergebnis setzen
@@ -1365,6 +1392,7 @@ function init() {
     reloadCurrent();
   });
   if (!state.apiKey) document.getElementById('sourcePanel').open = true;
+  pruneUsage();
   renderSource();
 
   // Eigene Moat-Einschätzung je Aktie merken
