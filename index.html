@@ -8,214 +8,285 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Risk-Reward" />
-  <meta name="theme-color" content="#0b0f19" />
+  <meta name="theme-color" content="#0a0d13" />
   <title>SmartWin Risk-Reward</title>
   <script src="https://cdn.tailwindcss.com/3.4.5"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+          fontFamily: {
+            sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+          },
         },
       },
     };
   </script>
   <style>
-    body { background: radial-gradient(1200px 600px at 10% -10%, #1e1b4b 0%, transparent 60%),
-                        radial-gradient(900px 500px at 110% 10%, #064e3b 0%, transparent 55%), #0b0f19; }
-    .card { background: rgba(17, 24, 39, 0.72); border: 1px solid rgba(255,255,255,0.07); backdrop-filter: blur(8px); }
-    dialog::backdrop { background: rgba(2, 6, 23, 0.7); backdrop-filter: blur(2px); }
-    .score-scale { background: linear-gradient(90deg, #ef4444 0%, #f97316 25%, #eab308 50%, #84cc16 75%, #22c55e 100%); }
+    /* Layout: Kopfzeile, Suche, Aktienkopf mit Kennzahlenleiste, dann Score | Teilbereiche, Kennzahlen | Gewichtung */
+    :root {
+      --bg: #0a0d13; --panel: #10151e; --panel-2: #151b26; --line: #1e2633; --line-2: #2a3443;
+      --text: #e6ebf2; --muted: #8e9aab; --faint: #5f6b7c;
+      --accent: #3ecf8e; --accent-ink: #03140c; --up: #3ecf8e; --down: #f06363;
+      color-scheme: dark;
+    }
+    html, body { background: var(--bg); color: var(--text); }
+    body { background: linear-gradient(180deg, #0e1420 0, var(--bg) 420px) no-repeat, var(--bg); }
+    .app { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+    .inset { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .faint { color: var(--faint); }
 
-    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 9999px;
-                        background: linear-gradient(90deg, var(--c) var(--p), #1f2937 var(--p)); outline: none; }
+    .btn { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; line-height: 1.25rem; padding: .5rem .85rem;
+           border-radius: .6rem; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); transition: background .15s, border-color .15s; }
+    .btn:hover { background: #1a2230; border-color: #3a4657; }
+    .btn-sm { font-size: .8125rem; padding: .35rem .7rem; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+    .btn-primary:hover { background: #55dba0; border-color: #55dba0; }
+    .btn:disabled { opacity: .6; cursor: wait; }
+    .field { width: 100%; background: var(--bg); border: 1px solid var(--line-2); border-radius: .7rem; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s; }
+    .field::placeholder { color: var(--faint); }
+    .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(62, 207, 142, .18); }
+    .chip { font-size: .8125rem; padding: .35rem .75rem; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); background: transparent; transition: all .15s; }
+    .chip:hover { color: var(--text); border-color: #3a4657; }
+    .chip[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .metric > summary { list-style: none; cursor: pointer; }
+    .metric > summary::-webkit-details-marker { display: none; }
+    .metric > summary:hover { background: rgba(255, 255, 255, .02); }
+    .metric .chev { transition: transform .2s; }
+    .metric[open] .chev { transform: rotate(90deg); }
+    .raw > summary { list-style: none; cursor: pointer; }
+    .raw > summary::-webkit-details-marker { display: none; }
+    .raw[open] .chev { transform: rotate(90deg); }
+
+    dialog { color: var(--text); }
+    dialog::backdrop { background: rgba(3, 6, 12, .72); backdrop-filter: blur(2px); }
+    .score-scale { background: linear-gradient(90deg, hsl(0 70% 52%) 0%, hsl(30 70% 52%) 25%, hsl(55 70% 50%) 50%, hsl(90 60% 48%) 75%, hsl(140 55% 48%) 100%); }
+
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 9999px;
+                        background: linear-gradient(90deg, var(--c) var(--p), var(--line-2) var(--p)); outline: none; }
     input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
-                        background: #fff; border: 3px solid var(--c); cursor: pointer; box-shadow: 0 0 0 4px rgba(255,255,255,0.06); }
-    input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff;
-                        border: 3px solid var(--c); cursor: pointer; }
+                        background: var(--text); border: 4px solid var(--c); cursor: pointer; }
+    input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 4px solid var(--c); cursor: pointer; }
 
-    .gauge-arc { transition: stroke-dashoffset 0.8s cubic-bezier(.2,.8,.2,1), stroke 0.5s; }
-    .bar-fill  { transition: width 0.7s cubic-bezier(.2,.8,.2,1), background-color 0.5s; }
-    .fade-in   { animation: fade 0.4s ease-out; }
-    @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .gauge-arc { transition: stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1), stroke .5s; }
+    .bar-fill  { transition: width .6s cubic-bezier(.2,.8,.2,1), background-color .4s; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
   </style>
 </head>
-<body class="min-h-screen text-slate-200 font-sans antialiased">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+<body class="min-h-screen font-sans antialiased">
+  <div class="app max-w-7xl mx-auto py-6 sm:py-8">
 
-    <!-- Header -->
-    <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-      <div>
-        <div class="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-emerald-400">
-          <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> SmartWin · Vibecoder Edition
+    <!-- Kopfzeile -->
+    <header class="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg grid place-items-center" style="background:var(--accent);color:var(--accent-ink)" aria-hidden="true">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M4 19V11M10 19V5M16 19v-6M22 19H2"/></svg>
         </div>
-        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mt-1">Risk-Reward Scanner</h1>
-        <p class="text-slate-400 mt-1 text-sm">Fundamentaldaten, Bilanz, Momentum &amp; Burggraben – verdichtet zu einem Score von 0 bis 100.</p>
+        <div>
+          <div class="text-[15px] font-semibold text-white leading-tight">SmartWin</div>
+          <div class="text-xs muted leading-tight">Risk-Reward-Analyse für Aktien</div>
+        </div>
       </div>
-      <div class="flex flex-col md:items-end gap-2">
-        <div class="flex gap-2 self-start md:self-end">
-        <button type="button" data-open-criteria class="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition">
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" data-open-criteria class="btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
           Bewertungskriterien
         </button>
-        <button id="fullscreenBtn" type="button" class="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition">
+        <button id="fullscreenBtn" type="button" class="btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
           <span id="fullscreenLabel">Vollbild</span>
         </button>
-        </div>
-        <p id="fullscreenHint" hidden class="text-[11px] text-amber-300 max-w-xs md:text-right">
-          Vollbild ist in dieser Ansicht gesperrt. Öffne die Seite in Safari oder Chrome, oder lege sie über Teilen → „Zum Home-Bildschirm“ ab.
-        </p>
-        <p class="text-[11px] text-slate-500 max-w-xs md:text-right">
-          Live-Daten von Financial Modeling Prep oder Demo-Daten. Keine Anlageberatung.
-        </p>
       </div>
+      <p id="fullscreenHint" hidden class="w-full text-xs text-amber-300 sm:text-right">
+        Vollbild ist in dieser Ansicht gesperrt. Öffne die Seite in Safari oder Chrome, oder lege sie über Teilen → „Zum Home-Bildschirm“ ab.
+      </p>
     </header>
 
-    <!-- Search -->
-    <section class="card rounded-2xl p-4 sm:p-5 mb-6">
+    <!-- Suche -->
+    <section class="card p-4 sm:p-5 mb-6">
       <form id="searchForm" class="flex flex-col sm:flex-row gap-3" autocomplete="off">
-        <div class="relative flex-1">
-          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <input id="searchInput" list="stockList" type="text" placeholder="Unternehmen oder Ticker eingeben, z. B. „Microsoft“ oder „NET“"
-                 class="w-full bg-slate-900/80 border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 rounded-xl pl-10 pr-4 py-3 text-white placeholder-slate-500 outline-none transition" />
+        <div class="relative flex-1 min-w-0">
+          <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 faint" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <label for="searchInput" class="sr-only">Unternehmen oder Ticker</label>
+          <input id="searchInput" list="stockList" type="text" placeholder="Unternehmen oder Ticker, z. B. „Amazon“ oder „MSFT“"
+                 class="field pl-11 pr-4 py-3 text-[15px]" />
           <datalist id="stockList"></datalist>
         </div>
-        <button id="analyseBtn" type="submit" class="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-wait text-slate-950 font-semibold transition">Analysieren</button>
+        <button id="analyseBtn" type="submit" class="btn btn-primary justify-center px-6 py-3 text-[15px]">Analysieren</button>
       </form>
       <div class="flex flex-wrap items-center gap-2 mt-4">
-        <span class="text-xs text-slate-500 mr-1">Schnellauswahl:</span>
+        <span class="eyebrow mr-1">Schnellauswahl</span>
         <div id="quickPicks" class="flex flex-wrap gap-2"></div>
       </div>
       <div id="altHits" hidden class="flex flex-wrap items-center gap-2 mt-3"></div>
-      <p id="loadError" hidden class="text-sm text-rose-300 mt-3"></p>
+      <p id="loadError" hidden class="text-sm mt-3 px-3 py-2 rounded-lg" style="color:#ffb4b4;background:rgba(240,99,99,.08);border:1px solid rgba(240,99,99,.25)"></p>
 
       <!-- Datenquelle -->
-      <details id="sourcePanel" class="mt-4 border-t border-slate-800 pt-4">
-        <summary class="cursor-pointer text-sm text-slate-300 select-none">
+      <details id="sourcePanel" class="mt-4 pt-4" style="border-top:1px solid var(--line)">
+        <summary class="cursor-pointer text-sm muted select-none">
           Datenquelle: <span id="sourceStatus" class="font-semibold"></span>
         </summary>
         <div class="mt-3 flex flex-col sm:flex-row gap-3 sm:items-end">
-          <div class="flex-1">
-            <label for="apiKey" class="text-xs text-slate-400">API-Key von Financial Modeling Prep</label>
+          <div class="flex-1 min-w-0">
+            <label for="apiKey" class="text-xs muted">API-Key von Financial Modeling Prep</label>
             <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Key einfügen"
-                   class="mt-1 w-full bg-slate-900/80 border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 outline-none font-mono text-sm transition" />
+                   class="field mt-1 px-4 py-2.5 num text-sm" />
           </div>
-          <button id="saveKey" type="button" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-white text-slate-900 font-semibold text-sm transition">Live-Daten aktivieren</button>
-          <button id="clearKey" type="button" class="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 text-sm transition">Key entfernen</button>
+          <button id="saveKey" type="button" class="btn btn-primary justify-center py-2.5">Live-Daten aktivieren</button>
+          <button id="clearKey" type="button" class="btn justify-center py-2.5">Key entfernen</button>
         </div>
-        <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
+        <p class="text-xs faint mt-2 leading-relaxed">
           Einen kostenlosen Key bekommst du auf financialmodelingprep.com (250 Abrufe pro Tag, eine Analyse braucht etwa 7).
           Der Key wird nur in diesem Browser gespeichert. Ergebnisse werden 12 Stunden zwischengespeichert.
         </p>
       </details>
     </section>
 
-    <!-- Main grid -->
+    <!-- Aktienkopf mit Kennzahlenleiste -->
+    <section class="card p-5 sm:p-6 mb-6">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 id="stockName" class="text-2xl sm:text-[28px] font-semibold text-white tracking-tight" style="text-wrap:balance">–</h1>
+            <span id="stockTicker" class="num text-xs px-2 py-0.5 rounded-md muted" style="border:1px solid var(--line-2)"></span>
+            <span id="dataBadge"></span>
+          </div>
+          <p id="stockMeta" class="text-sm muted mt-1"></p>
+        </div>
+        <div id="priceBox" class="text-right">
+          <div id="stockPrice" class="num text-2xl sm:text-[28px] text-white leading-tight"></div>
+          <div id="stockChange" class="num text-sm mt-0.5"></div>
+        </div>
+      </div>
+      <dl id="keyStats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px mt-5 rounded-xl overflow-hidden"
+          style="background:var(--line);border:1px solid var(--line)"></dl>
+    </section>
+
     <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-      <!-- Overall score -->
-      <section class="card rounded-2xl p-6 lg:col-span-5 flex flex-col">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <h2 id="stockName" class="text-2xl font-bold text-white truncate">–</h2>
-              <span id="stockTicker" class="font-mono text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300"></span>
-            </div>
-            <p id="stockMeta" class="text-sm text-slate-400 mt-0.5"></p>
-          </div>
-          <span id="dataBadge" class="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded border"></span>
+      <!-- Gesamtscore -->
+      <section class="card p-5 sm:p-6 lg:col-span-4 flex flex-col">
+        <div class="flex items-center justify-between">
+          <h2 class="eyebrow">Gesamtscore</h2>
+          <span class="text-xs faint">0–100</span>
         </div>
-
-        <div class="relative mx-auto my-6 w-64 h-64">
-          <svg viewBox="0 0 200 200" class="w-full h-full -rotate-90">
-            <defs>
-              <linearGradient id="ringTrack" x1="0" x2="1">
-                <stop offset="0%" stop-color="#1f2937" /><stop offset="100%" stop-color="#111827" />
-              </linearGradient>
-            </defs>
-            <circle cx="100" cy="100" r="84" fill="none" stroke="url(#ringTrack)" stroke-width="16" />
-            <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="84" fill="none" stroke="#22c55e"
-                    stroke-width="16" stroke-linecap="round" stroke-dasharray="527.79" stroke-dashoffset="527.79" />
+        <div class="relative mx-auto my-5 w-52 h-52">
+          <svg viewBox="0 0 200 200" class="w-full h-full -rotate-90" aria-hidden="true">
+            <circle cx="100" cy="100" r="84" fill="none" stroke="var(--line)" stroke-width="12" />
+            <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="84" fill="none" stroke="#3ecf8e"
+                    stroke-width="12" stroke-linecap="round" stroke-dasharray="527.79" stroke-dashoffset="527.79" />
           </svg>
           <div class="absolute inset-0 flex flex-col items-center justify-center">
-            <span id="totalScore" class="text-6xl font-extrabold font-mono text-white tabular-nums">0</span>
-            <span class="text-xs text-slate-500 -mt-1">von 100</span>
-            <span id="verdict" class="mt-3 text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full">–</span>
+            <span id="totalScore" class="num text-[56px] font-semibold text-white leading-none">0</span>
+            <span id="verdict" class="mt-3 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">–</span>
           </div>
         </div>
-
-        <!-- Scale -->
-        <div class="mt-auto">
-          <div class="relative h-2.5 rounded-full score-scale">
-            <div id="scaleMarker" class="absolute -top-1.5 w-1.5 h-5 rounded bg-white shadow-lg ring-2 ring-slate-900 transition-all duration-700" style="left:0%"></div>
+        <div>
+          <div class="relative h-1.5 rounded-full score-scale">
+            <div id="scaleMarker" class="absolute -top-1.5 w-1 h-4 rounded-sm transition-all duration-700" style="left:0%;background:var(--text);box-shadow:0 0 0 2px var(--panel)"></div>
           </div>
-          <div class="flex justify-between text-[10px] uppercase tracking-wide text-slate-500 mt-2">
-            <span>Hohes Risiko</span><span>Neutral</span><span>Exzellentes CRV</span>
+          <div class="flex justify-between text-[10px] uppercase tracking-wide faint mt-2">
+            <span>Hohes Risiko</span><span>Neutral</span><span>Exzellent</span>
           </div>
-          <p id="summary" class="text-sm text-slate-300 mt-4 leading-relaxed"></p>
+        </div>
+        <p id="summary" class="text-sm muted mt-4 leading-relaxed"></p>
+        <div class="grid grid-cols-2 gap-3 mt-5">
+          <div>
+            <h3 class="eyebrow mb-2" style="color:var(--up)">Stärken</h3>
+            <ul id="strengths" class="space-y-1.5 text-sm"></ul>
+          </div>
+          <div>
+            <h3 class="eyebrow mb-2" style="color:var(--down)">Schwächen</h3>
+            <ul id="weaknesses" class="space-y-1.5 text-sm"></ul>
+          </div>
         </div>
       </section>
 
-      <!-- Radar + sub-scores -->
-      <section class="card rounded-2xl p-6 lg:col-span-7">
+      <!-- Teilbereiche -->
+      <section class="card p-5 sm:p-6 lg:col-span-8">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-white">Teilbereiche</h3>
-          <div class="text-xs text-slate-500">Score · Gewichtung · Beitrag</div>
+          <h2 class="eyebrow">Teilbereiche</h2>
+          <span class="text-xs faint">Score · Gewicht · Beitrag zum Gesamtscore</span>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-          <div class="relative h-72"><canvas id="radarChart"></canvas></div>
+          <div class="relative h-72"><canvas id="radarChart" aria-label="Radar-Diagramm der vier Teilbereiche" role="img"></canvas></div>
           <div id="subScores" class="space-y-4"></div>
         </div>
       </section>
 
-      <!-- Weights -->
-      <section class="card rounded-2xl p-6 lg:col-span-5">
-        <div class="flex items-center justify-between mb-1">
-          <h3 class="font-semibold text-white">Gewichtung anpassen</h3>
-          <button id="resetWeights" class="text-xs text-slate-400 hover:text-white transition">Zurücksetzen</button>
+      <!-- Kennzahlen im Detail -->
+      <section class="card p-5 sm:p-6 lg:col-span-8">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="eyebrow">Kennzahlen im Detail</h2>
+            <p class="text-xs faint mt-1">Zeile antippen für genaue Werte und Berechnung.</p>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" id="toggleAll" class="btn btn-sm">Alle aufklappen</button>
+            <button type="button" data-open-criteria class="btn btn-sm">Kriterien</button>
+          </div>
         </div>
-        <p class="text-xs text-slate-500 mb-4">Die Regler werden automatisch auf 100 % normiert.</p>
+        <div id="metrics" class="space-y-5"></div>
+        <details id="rawData" class="raw mt-6 inset">
+          <summary class="flex items-center justify-between gap-3 px-4 py-3">
+            <span class="text-sm font-medium text-white">Rohdaten</span>
+            <span class="flex items-center gap-2 text-xs faint">alle abgerufenen Werte
+              <svg class="chev w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+            </span>
+          </summary>
+          <div class="overflow-x-auto px-4 pb-4">
+            <table class="w-full text-sm">
+              <tbody id="rawBody"></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <!-- Gewichtung -->
+      <section class="card p-5 sm:p-6 lg:col-span-4 self-start">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="eyebrow">Gewichtung</h2>
+          <button id="resetWeights" type="button" class="text-xs muted hover:text-white transition">Zurücksetzen</button>
+        </div>
+        <p class="text-xs faint mb-4">Die Regler werden automatisch auf 100 % normiert.</p>
         <div class="flex flex-wrap gap-2 mb-5" id="presets"></div>
         <div id="weightSliders" class="space-y-5"></div>
         <div class="mt-6">
-          <div class="flex h-3 rounded-full overflow-hidden" id="weightBar"></div>
-          <div class="flex justify-between text-[10px] text-slate-500 mt-1.5"><span>Verteilung</span><span>Σ 100 %</span></div>
+          <div class="flex h-2 rounded-full overflow-hidden" id="weightBar"></div>
+          <div class="flex justify-between text-[10px] faint mt-1.5"><span>Verteilung</span><span>Σ 100 %</span></div>
         </div>
-      </section>
-
-      <!-- Metrics detail -->
-      <section class="card rounded-2xl p-6 lg:col-span-7">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold text-white">Kennzahlen im Detail</h3>
-          <button type="button" data-open-criteria class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition">Bewertungskriterien</button>
-        </div>
-        <div id="metrics" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
       </section>
     </main>
 
     <!-- Bewertungskriterien -->
     <dialog id="criteriaDialog" aria-labelledby="criteriaTitle"
-            class="bg-slate-900 text-slate-200 rounded-2xl border border-slate-700 p-0 w-[min(760px,calc(100vw-32px))] max-h-[85vh]">
-      <div class="sticky top-0 flex items-center justify-between gap-4 px-6 py-4 bg-slate-900 border-b border-slate-800">
-        <h2 id="criteriaTitle" class="text-lg font-bold text-white">Bewertungskriterien</h2>
-        <button type="button" id="closeCriteria" class="text-sm px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition">Schließen</button>
+            class="rounded-2xl p-0 w-[min(760px,calc(100vw-32px))] max-h-[85vh]" style="background:var(--panel);border:1px solid var(--line-2)">
+      <div class="sticky top-0 flex items-center justify-between gap-4 px-6 py-4" style="background:var(--panel);border-bottom:1px solid var(--line)">
+        <h2 id="criteriaTitle" class="text-lg font-semibold text-white">Bewertungskriterien</h2>
+        <button type="button" id="closeCriteria" class="btn btn-sm">Schließen</button>
       </div>
       <div id="criteriaBody" class="px-6 py-5 space-y-6 text-sm leading-relaxed"></div>
     </dialog>
 
     <!-- Versionsnummer: bei jedem Update erhöhen, damit man sieht, ob GitHub Pages schon aktualisiert hat -->
-    <div id="appVersion" class="fixed z-20 font-mono text-[11px] px-2 py-1 rounded-md bg-slate-900/80 border border-slate-700 text-slate-400 pointer-events-none"
-         style="right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px));"></div>
+    <div id="appVersion" class="fixed z-20 num text-[11px] px-2 py-1 rounded-md muted pointer-events-none"
+         style="background:rgba(16,21,30,.9);border:1px solid var(--line-2);right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px))"></div>
 
-    <footer class="text-center text-[11px] text-slate-600 mt-10">
-      Methodik: Jede Kennzahl wird linear auf 0–100 Punkte abgebildet, je Kategorie gemittelt und gewichtet summiert.
+    <footer class="text-center text-[11px] faint mt-10 pb-8 leading-relaxed">
+      Daten: Financial Modeling Prep (live) oder Demo-Datensatz. Kennzahlen werden in 0–100 Punkte umgerechnet, je Bereich gemittelt und gewichtet summiert.<br />
+      Keine Anlageberatung.
     </footer>
   </div>
-
 <script>
 /* ---------------------------------------------------------------
    Daten (illustrative Beispielwerte, keine Echtzeitdaten)
@@ -235,7 +306,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '1.7';
+const APP_VERSION = '1.8';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -246,55 +317,129 @@ const lin = (v, bad, good) => clamp(((v - bad) / (good - bad)) * 100);
 
 // Zahlen im deutschen Format, ohne überflüssige Nachkommastellen
 const num = (v, d = 1) => v.toLocaleString('de-DE', { maximumFractionDigits: d });
+const f2 = v => v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const signed = v => `${v > 0 ? '+' : ''}${num(v)} %`;
 
-// `fields`: fehlt eines davon (z. B. bei Live-Daten), zählt die Kennzahl nicht in den Kategorie-Score
+// Zeile für die aufgeklappte Ansicht; fehlt der Wert (z. B. bei Demo-Daten), entfällt die Zeile
+const row = (label, value) => (has(value) && !String(value).includes('undefined') ? [label, value] : null);
+// Rechenweg einer linearen Abbildung, z. B. „(12,40 − (−5,00)) ÷ 30,00 × 100 = 58,0“
+const linCalc = (v, bad, good) => {
+  const raw = ((v - bad) / (good - bad)) * 100;
+  const capped = clamp(raw);
+  return `(${f2(v)} − ${bad < 0 ? `(${f2(bad)})` : f2(bad)}) ÷ (${f2(good)} − ${bad < 0 ? `(${f2(bad)})` : f2(bad)}) × 100 = ${num(raw, 1)}`
+    + (capped !== raw ? ` → begrenzt auf ${num(capped, 0)}` : '');
+};
+
+// `fields`: fehlt eines davon (z. B. bei Live-Daten), zählt die Kennzahl nicht in den Kategorie-Score.
+// `detail`: genaue Werte und Rechenweg für die aufgeklappte Zeile.
 const CATEGORIES = [
   {
-    key: 'value', label: 'Bewertung & Profitabilität', short: 'Bewertung', color: '#38bdf8',
+    key: 'value', label: 'Bewertung & Profitabilität', short: 'Bewertung', color: '#5ab0f0',
     metrics: [
       { label: 'Umsatzwachstum', fields: ['growth'], fmt: s => signed(s.growth), score: s => lin(s.growth, -5, 25),
-        rule: '−5 % oder weniger = 0 Punkte, +25 % oder mehr = 100, dazwischen linear.' },
+        rule: '−5 % oder weniger = 0 Punkte, +25 % oder mehr = 100, dazwischen linear.',
+        detail: s => [
+          row('Umsatzwachstum', `${f2(s.growth)} %`),
+          row('Zeitraum', s.live ? `Geschäftsjahr${s.growthPeriod ? ` bis ${s.growthPeriod}` : ''} ggü. Vorjahr` : null),
+          row('Berechnung', linCalc(s.growth, -5, 25)),
+        ] },
       // KGV und Marge relativ zur Branche: Software hat naturgemäß ein höheres KGV als Versicherungen
       { label: 'KGV vs. Branche', fields: ['pe'], fmt: s => s.pe > 0 ? `${num(s.pe, 0)} · Ø ${num(s.bench.pe, 0)}` : 'negativ',
         score: s => s.pe <= 0 ? 0 : clamp(50 - 50 * Math.log2(s.pe / s.bench.pe)),
-        rule: 'Verglichen mit dem Durchschnitts-KGV der Branche: halb so hoch = 100, genau im Schnitt = 50, doppelt so hoch = 0. Negatives KGV (Verlust) = 0.' },
+        rule: 'Verglichen mit dem Durchschnitts-KGV der Branche: halb so hoch = 100, genau im Schnitt = 50, doppelt so hoch = 0. Negatives KGV (Verlust) = 0.',
+        detail: s => {
+          const ratio = s.pe / s.bench.pe;
+          return [
+            row('KGV (letzte 12 Monate)', f2(s.pe)),
+            row(`Ø KGV ${s.bench.label}`, `${f2(s.bench.pe)} (${s.bench.peLive ? 'live, FMP' : 'Richtwert'})`),
+            s.pe > 0 ? row('Verhältnis zur Branche', `${f2(ratio)} → ${ratio < 1 ? `${num((1 - ratio) * 100, 0)} % günstiger` : `${num((ratio - 1) * 100, 0)} % teurer`}`) : null,
+            row('Berechnung', s.pe > 0
+              ? `50 − 50 × log₂(${f2(ratio)}) = ${num(50 - 50 * Math.log2(ratio), 1)}${clamp(50 - 50 * Math.log2(ratio)) !== 50 - 50 * Math.log2(ratio) ? ` → begrenzt auf ${num(clamp(50 - 50 * Math.log2(ratio)), 0)}` : ''}`
+              : 'Negatives KGV (Verlust) → 0 Punkte'),
+          ];
+        } },
       { label: 'Nettomarge vs. Branche', fields: ['margin'], fmt: s => `${num(s.margin)} % · Ø ${num(s.bench.margin, 0)} %`,
         score: s => lin(s.margin, 0, 2 * s.bench.margin),
-        rule: 'Verglichen mit der typischen Marge der Branche: 0 % oder Verlust = 0, Branchenschnitt = 50, doppelter Schnitt = 100.' },
+        rule: 'Verglichen mit der typischen Marge der Branche: 0 % oder Verlust = 0, Branchenschnitt = 50, doppelter Schnitt = 100.',
+        detail: s => [
+          row('Nettomarge (letzte 12 Monate)', `${f2(s.margin)} %`),
+          row(`Typische Marge ${s.bench.label}`, `${f2(s.bench.margin)} % (Richtwert)`),
+          row('Berechnung', linCalc(s.margin, 0, 2 * s.bench.margin)),
+        ] },
     ],
   },
   {
-    key: 'health', label: 'Finanzielle Gesundheit', short: 'Gesundheit', color: '#a78bfa',
+    key: 'health', label: 'Finanzielle Gesundheit', short: 'Gesundheit', color: '#a38cf5',
     metrics: [
-      { label: 'Debt / Equity',  fields: ['de'], fmt: s => num(s.de, 2), score: s => lin(s.de, 2.5, 0.1),
-        rule: 'Schulden im Verhältnis zum Eigenkapital: 2,5 oder mehr = 0, 0,1 oder weniger = 100.' },
-      { label: 'Current Ratio',  fields: ['cr'], fmt: s => num(s.cr), score: s => lin(s.cr, 0.5, 2.0),
-        rule: 'Kurzfristiges Vermögen geteilt durch kurzfristige Schulden: 0,5 oder weniger = 0, 2,0 oder mehr = 100.' },
-      { label: 'Altman-Z (Insolvenzrisiko)', fields: ['z'], fmt: s => num(s.z), score: s => lin(s.z, 1.1, 3.0),
-        rule: 'Formel für das Pleiterisiko: 1,1 oder weniger = 0 (Gefahrenzone), 3,0 oder mehr = 100 (sicher).' },
+      { label: 'Debt / Equity', fields: ['de'], fmt: s => num(s.de, 2), score: s => lin(s.de, 2.5, 0.1),
+        rule: 'Schulden im Verhältnis zum Eigenkapital: 2,5 oder mehr = 0, 0,1 oder weniger = 100.',
+        detail: s => [
+          row('Verschuldungsgrad', `${f2(s.de)} (${num(s.de * 100, 0)} € Schulden je 100 € Eigenkapital)`),
+          row('Berechnung', linCalc(s.de, 2.5, 0.1)),
+        ] },
+      { label: 'Current Ratio', fields: ['cr'], fmt: s => num(s.cr), score: s => lin(s.cr, 0.5, 2.0),
+        rule: 'Kurzfristiges Vermögen geteilt durch kurzfristige Schulden: 0,5 oder weniger = 0, 2,0 oder mehr = 100.',
+        detail: s => [
+          row('Current Ratio', `${f2(s.cr)} (kurzfristige Schulden ${s.cr >= 1 ? 'gedeckt' : 'nicht vollständig gedeckt'})`),
+          row('Berechnung', linCalc(s.cr, 0.5, 2.0)),
+        ] },
+      { label: 'Altman-Z', fields: ['z'], fmt: s => num(s.z), score: s => lin(s.z, 1.1, 3.0),
+        rule: 'Formel für das Pleiterisiko: 1,1 oder weniger = 0 (Gefahrenzone), 3,0 oder mehr = 100 (sicher).',
+        detail: s => [
+          row('Altman-Z-Score', f2(s.z)),
+          row('Zone', s.z < 1.8 ? 'Gefahrenzone (unter 1,8)' : s.z < 3 ? 'Graubereich (1,8–3,0)' : 'Sicher (über 3,0)'),
+          row('Piotroski-Score', has(s.piotroski) ? `${s.piotroski} von 9 (fließt nicht in den Score ein)` : null),
+          row('Berechnung', linCalc(s.z, 1.1, 3.0)),
+        ] },
     ],
   },
   {
-    key: 'tech', label: 'Technische Analyse & Momentum', short: 'Momentum', color: '#f472b6',
+    key: 'tech', label: 'Technische Analyse & Momentum', short: 'Momentum', color: '#e97fb4',
     metrics: [
       // Sweet-Spot 45–60; überkauft (>70) und überverkauft (<30) werden abgestraft
       { label: 'RSI (14)', fields: ['rsi'], fmt: s => num(s.rsi, 0), score: s => s.rsi < 45 ? lin(s.rsi, 20, 45) : s.rsi <= 60 ? 100 : lin(s.rsi, 85, 60),
-        rule: '45–60 = 100. Darunter sinkend bis 20 = 0 (überverkauft), darüber sinkend bis 85 = 0 (überkauft). Berechnet aus 150 Handelstagen.' },
+        rule: '45–60 = 100. Darunter sinkend bis 20 = 0 (überverkauft), darüber sinkend bis 85 = 0 (überkauft). Berechnet aus 150 Kalendertagen.',
+        detail: s => [
+          row('RSI (14 Tage, Wilder)', f2(s.rsi)),
+          row('Einordnung', s.rsi < 30 ? 'überverkauft' : s.rsi > 70 ? 'überkauft' : 'neutral'),
+          row('Datenbasis', s.rsiDays ? `${s.rsiDays} Schlusskurse` : null),
+          row('Berechnung', s.rsi < 45 ? linCalc(s.rsi, 20, 45) : s.rsi <= 60 ? 'Im Idealbereich 45–60 → 100' : linCalc(s.rsi, 85, 60)),
+        ] },
       { label: 'Abstand 52W-Hoch', fields: ['fromHigh'], fmt: s => `${num(s.fromHigh)} %`, score: s => lin(s.fromHigh, -45, -2),
-        rule: 'Bis 2 % unter dem Jahreshoch = 100, 45 % oder mehr darunter = 0.' },
-      { label: 'Trend', fields: ['sma50', 'sma200'], fmt: s => `${s.sma50 ? '▲' : '▼'} GD50 · ${s.sma200 ? '▲' : '▼'} GD200`,
+        rule: 'Bis 2 % unter dem Jahreshoch = 100, 45 % oder mehr darunter = 0.',
+        detail: s => [
+          row('Kurs', has(s.price) ? `${f2(s.price)} ${s.currency || ''}`.trim() : null),
+          row('52-Wochen-Hoch', has(s.yearHigh) ? `${f2(s.yearHigh)} ${s.currency || ''}`.trim() : null),
+          row('Abstand', `${f2(s.fromHigh)} %`),
+          row('Berechnung', linCalc(s.fromHigh, -45, -2)),
+        ] },
+      { label: 'Trend (GD50 / GD200)', fields: ['sma50', 'sma200'], fmt: s => `${s.sma50 ? '▲' : '▼'} 50 · ${s.sma200 ? '▲' : '▼'} 200`,
         score: s => (s.sma50 && s.sma200) ? 100 : s.sma200 ? 60 : s.sma50 ? 35 : 5,
-        rule: 'Kurs über GD50 und GD200 = 100, nur über GD200 = 60, nur über GD50 = 35, unter beiden = 5.' },
+        rule: 'Kurs über GD50 und GD200 = 100, nur über GD200 = 60, nur über GD50 = 35, unter beiden = 5.',
+        detail: s => [
+          row('Kurs', has(s.price) ? f2(s.price) : null),
+          row('Gleitender Durchschnitt 50 Tage', has(s.avg50) ? `${f2(s.avg50)} → Kurs ${s.sma50 ? 'darüber' : 'darunter'} (${signed((s.price / s.avg50 - 1) * 100)})` : null),
+          row('Gleitender Durchschnitt 200 Tage', has(s.avg200) ? `${f2(s.avg200)} → Kurs ${s.sma200 ? 'darüber' : 'darunter'} (${signed((s.price / s.avg200 - 1) * 100)})` : null),
+          row('Ergebnis', s.sma50 && s.sma200 ? 'Über beiden → 100' : s.sma200 ? 'Nur über GD200 → 60' : s.sma50 ? 'Nur über GD50 → 35' : 'Unter beiden → 5'),
+        ] },
     ],
   },
   {
-    key: 'quality', label: 'Qualitativ & Marktstellung', short: 'Qualität', color: '#fbbf24',
+    key: 'quality', label: 'Qualitativ & Marktstellung', short: 'Qualität', color: '#e7b34a',
     metrics: [
-      { label: 'Burggraben (Moat)', fields: ['moat'], fmt: s => `${s.moatOverride == null && s.moatInfo ? '≈ ' : ''}${s.moat} / 10`, score: s => s.moat * 10,
-        rule: 'Wert × 10. Bei Live-Daten geschätzt aus Kapitalrendite (45 %, ROIC 0–20 %), Bruttomarge (35 %, 15–60 %) und Börsenwert (20 %, 1 Mrd. bis 1 Bio.). Lässt sich manuell überschreiben.' },
+      { label: 'Burggraben (Moat)', fields: ['moat'], fmt: s => `${s.moatOverride == null && s.moatParts ? '≈ ' : ''}${s.moat} / 10`, score: s => s.moat * 10,
+        rule: 'Wert × 10. Bei Live-Daten geschätzt aus Kapitalrendite (45 %, ROIC 0–20 %), Bruttomarge (35 %, 15–60 %) und Börsenwert (20 %, 1 Mrd. bis 1 Bio.). Lässt sich manuell überschreiben.',
+        detail: s => [
+          ...(s.moatOverride != null ? [row('Quelle', 'Eigene Einschätzung')] : s.live ? [] : [row('Quelle', 'Wert aus dem Demo-Datensatz')]),
+          ...(s.moatOverride == null && s.moatParts ? s.moatParts.map(p => row(p.label, `${p.value} → ${num(p.pts, 0)} Pkt. × ${num(p.w * 100, 0)} %`)) : []),
+          row('Ergebnis', `${s.moat} / 10 → ${s.moat * 10} Punkte`),
+        ] },
       { label: 'Beta', fields: ['beta'], fmt: s => num(s.beta, 2), score: s => s.beta <= 1 ? lin(s.beta, 0.2, 0.9) : lin(s.beta, 2.3, 0.9),
-        rule: 'Schwankung im Vergleich zum Markt. Ideal 0,9–1,0 (≈ 100). Weniger bis 0,2 oder mehr bis 2,3 senkt auf 0.' },
+        rule: 'Schwankung im Vergleich zum Markt. Ideal 0,9–1,0 (≈ 100). Weniger bis 0,2 oder mehr bis 2,3 senkt auf 0.',
+        detail: s => [
+          row('Beta', `${f2(s.beta)} (bewegt sich ${s.beta > 1 ? 'stärker' : 'schwächer'} als der Markt: 1 % Markt ≈ ${num(s.beta, 2)} % Aktie)`),
+          row('Berechnung', s.beta <= 1 ? linCalc(s.beta, 0.2, 0.9) : linCalc(s.beta, 2.3, 0.9)),
+        ] },
     ],
   },
 ];
@@ -401,18 +546,19 @@ async function resolveSymbol(query) {
 // dauerhaft hohe Kapitalrendite (ROIC), Preissetzungsmacht (Bruttomarge) und Skalenvorteile (Börsenwert).
 function estimateMoat({ roic, grossMargin, marketCap, currency }) {
   const parts = [
-    { w: 0.45, pts: roic == null ? null : lin(roic, 0, 20), text: roic == null ? null : `ROIC ${num(roic)} %` },
+    { w: 0.45, label: 'Kapitalrendite (ROIC)', pts: roic == null ? null : lin(roic, 0, 20), value: roic == null ? null : `${f2(roic)} %` },
     // Bei Banken und Versicherungen gibt es keine sinnvolle Bruttomarge
-    { w: 0.35, pts: grossMargin == null || grossMargin <= 0 ? null : lin(grossMargin, 15, 60),
-      text: grossMargin == null || grossMargin <= 0 ? null : `Bruttomarge ${num(grossMargin)} %` },
-    { w: 0.2, pts: marketCap == null || marketCap <= 0 ? null : lin(Math.log10(marketCap), 9, 12),
-      text: marketCap == null || marketCap <= 0 ? null : `Börsenwert ${formatCap(marketCap)}${currency ? ` ${currency}` : ''}` },
+    { w: 0.35, label: 'Bruttomarge', pts: grossMargin == null || grossMargin <= 0 ? null : lin(grossMargin, 15, 60),
+      value: grossMargin == null || grossMargin <= 0 ? null : `${f2(grossMargin)} %` },
+    { w: 0.2, label: 'Börsenwert', pts: marketCap == null || marketCap <= 0 ? null : lin(Math.log10(marketCap), 9, 12),
+      value: marketCap == null || marketCap <= 0 ? null : `${formatCap(marketCap)}${currency ? ` ${currency}` : ''}` },
   ].filter(x => x.pts !== null);
-  if (!parts.length) return { moat: null, moatInfo: null };
+  if (!parts.length) return { moat: null, moatParts: null };
   const w = parts.reduce((a, x) => a + x.w, 0);
+  // Fehlt ein Bestandteil, werden die übrigen Gewichte hochskaliert
   return {
     moat: Math.round(parts.reduce((a, x) => a + x.pts * x.w, 0) / w / 10),
-    moatInfo: parts.map(x => x.text).join(' · '),
+    moatParts: parts.map(x => ({ ...x, w: x.w / w })),
   };
 }
 function formatCap(v) {
@@ -449,7 +595,7 @@ async function loadLive(query, forcedSymbol) {
   const blocked = [];
   let symbol = null, q = null;
   for (const cand of candidates) {
-    const cached = store.get(`rr:data3:${cand}`);
+    const cached = store.get(`rr:data4:${cand}`);
     if (cached && Date.now() - cached.t < CACHE_MS) return [cached.stock, hits];
     try {
       q = first(await fmp('quote', { symbol: cand }));
@@ -491,9 +637,25 @@ async function loadLive(query, forcedSymbol) {
     ticker: symbol,
     sector: p.sector || p.industry || 'Branche unbekannt',
     sectorKey: p.sector || null,
-    country: p.country || q.exchange || '–',
+    industry: p.industry || null,
+    country: p.country || '–',
+    exchange: q.exchange || p.exchange || null,
+    currency: p.currency || null,
     live: true,
     asOf: q.timestamp ? new Date(q.timestamp * 1000).toISOString() : new Date().toISOString(),
+    price: q.price,
+    change: finite(q.change),
+    changePct: finite(q.changePercentage ?? q.changesPercentage),
+    yearLow: finite(q.yearLow),
+    yearHigh: finite(q.yearHigh),
+    avg50: finite(q.priceAvg50),
+    avg200: finite(q.priceAvg200),
+    marketCap: finite(p.marketCap ?? q.marketCap),
+    roic: pct(km.returnOnInvestedCapitalTTM ?? r.returnOnInvestedCapitalTTM),
+    grossMargin: pct(r.grossProfitMarginTTM),
+    piotroski: finite(sc.piotroskiScore),
+    rsiDays: closes.length,
+    growthPeriod: g.date ? new Date(g.date).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' }) : null,
     growth: pct(g.revenueGrowth ?? g.growthRevenue),
     pe: finite(r.priceToEarningsRatioTTM ?? q.pe),
     margin: pct(r.netProfitMarginTTM),
@@ -512,7 +674,7 @@ async function loadLive(query, forcedSymbol) {
     }),
     beta: finite(p.beta),
   };
-  store.set(`rr:data3:${symbol}`, { t: Date.now(), stock });
+  store.set(`rr:data4:${symbol}`, { t: Date.now(), stock });
   return [stock, hits];
 }
 
@@ -576,7 +738,7 @@ async function getBench(sectorKey) {
 /* ---------------------------------------------------------------
    Farblogik: 0 = Rot → 50 = Gelb → 100 = Grün
 ---------------------------------------------------------------- */
-const scoreColor = s => `hsl(${clamp(s) * 1.25}, 85%, 52%)`;
+const scoreColor = s => `hsl(${clamp(s) * 1.3}, 62%, 52%)`;
 function verdictFor(s) {
   if (s >= 80) return ['Exzellent', 'Starkes Chancen-Risiko-Verhältnis über fast alle Dimensionen.'];
   if (s >= 65) return ['Attraktiv', 'Überwiegend positives Profil mit einzelnen Schwachstellen.'];
@@ -598,13 +760,20 @@ function normWeights() {
 
 const has = v => v !== null && v !== undefined && !(typeof v === 'number' && Number.isNaN(v));
 const tint = (color, alpha) => color.replace('hsl', 'hsla').replace(')', `, ${alpha})`);
+const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const CHEVRON = '<svg class="chev w-4 h-4 faint shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 
 function analyse(stock) {
   const subs = {};
   for (const cat of CATEGORIES) {
-    const items = cat.metrics.map(m => m.fields.every(f => has(stock[f]))
-      ? { label: m.label, raw: m.fmt(stock), pts: Math.round(m.score(stock)) }
-      : { label: m.label, raw: 'n. a.', pts: null });
+    const items = cat.metrics.map((m, idx) => {
+      const ok = m.fields.every(f => has(stock[f]));
+      return {
+        id: `${cat.key}-${idx}`, cat, metric: m, label: m.label,
+        raw: ok ? m.fmt(stock) : 'n. a.',
+        pts: ok ? Math.round(m.score(stock)) : null,
+      };
+    });
     const scored = items.filter(i => i.pts !== null);
     subs[cat.key] = { items, score: scored.length ? Math.round(scored.reduce((a, i) => a + i.pts, 0) / scored.length) : null };
   }
@@ -613,13 +782,169 @@ function analyse(stock) {
 
 function renderBadge(s) {
   const el = document.getElementById('dataBadge');
-  const [text, cls] = s.live
-    ? [`Live · ${new Date(s.asOf).toLocaleDateString('de-DE')}`, 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30']
+  const [text, fg, bg] = s.live
+    ? [`Live · ${new Date(s.asOf).toLocaleDateString('de-DE')}`, 'var(--up)', 'rgba(62,207,142,.1)']
     : s.simulated
-      ? ['Simuliert', 'bg-amber-500/15 text-amber-300 border-amber-500/30']
-      : ['Demo-Daten', 'bg-slate-700/40 text-slate-300 border-slate-600'];
+      ? ['Simuliert', '#f2c46d', 'rgba(242,196,109,.1)']
+      : ['Demo-Daten', 'var(--muted)', 'rgba(142,154,171,.1)'];
   el.textContent = text;
-  el.className = `shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded border ${cls}`;
+  el.className = 'text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md';
+  el.style.color = fg;
+  el.style.background = bg;
+}
+
+// Kopfbereich: Kurs und die wichtigsten Rohwerte auf einen Blick
+function renderHead(s) {
+  document.getElementById('stockName').textContent = s.name;
+  document.getElementById('stockTicker').textContent = s.ticker;
+  const benchLabel = s.bench?.label;
+  document.getElementById('stockMeta').textContent = [s.industry || benchLabel || s.sector, s.exchange, s.country]
+    .filter(x => x && x !== '–').join(' · ');
+  renderBadge(s);
+
+  const priceEl = document.getElementById('stockPrice');
+  const changeEl = document.getElementById('stockChange');
+  if (has(s.price)) {
+    priceEl.textContent = `${f2(s.price)} ${s.currency || ''}`.trim();
+    if (has(s.changePct)) {
+      const up = s.changePct >= 0;
+      changeEl.textContent = `${up ? '+' : ''}${has(s.change) ? f2(s.change) : ''} (${up ? '+' : ''}${f2(s.changePct)} %) · Vortag`;
+      changeEl.style.color = up ? 'var(--up)' : 'var(--down)';
+    } else {
+      changeEl.textContent = '';
+    }
+  } else {
+    priceEl.textContent = '';
+    changeEl.textContent = s.live ? '' : 'Kein Kurs in Demo-Daten';
+    changeEl.style.color = 'var(--faint)';
+  }
+
+  const cell = (label, value, extra = '') => `
+    <div class="px-4 py-3" style="background:var(--panel)">
+      <dt class="eyebrow">${label}</dt>
+      <dd class="num text-[15px] text-white mt-1">${value}</dd>${extra}
+    </div>`;
+  const dash = '<span class="faint">–</span>';
+  let range = '';
+  if (has(s.yearLow) && has(s.yearHigh) && has(s.price) && s.yearHigh > s.yearLow) {
+    const pos = clamp(((s.price - s.yearLow) / (s.yearHigh - s.yearLow)) * 100);
+    range = `<div class="relative h-1 rounded-full mt-2" style="background:var(--line-2)">
+      <div class="absolute -top-1 w-1 h-3 rounded-sm" style="left:calc(${pos}% - 2px);background:var(--text)"></div></div>`;
+  }
+  document.getElementById('keyStats').innerHTML = [
+    cell('Börsenwert', has(s.marketCap) ? `${formatCap(s.marketCap)}${s.currency ? ` ${esc(s.currency)}` : ''}` : dash),
+    cell('KGV', has(s.pe) ? (s.pe > 0 ? num(s.pe, 1) : 'negativ') : dash),
+    cell(`Ø KGV Branche`, s.bench ? `${num(s.bench.pe, 1)}<span class="text-[11px] faint ml-1.5">${s.bench.peLive ? 'live' : 'Richtwert'}</span>` : dash),
+    cell('Nettomarge', has(s.margin) ? `${num(s.margin)} %` : dash),
+    cell('Beta', has(s.beta) ? num(s.beta, 2) : dash),
+    cell('52 Wochen', has(s.yearLow) && has(s.yearHigh) ? `${num(s.yearLow, 0)} – ${num(s.yearHigh, 0)}` : has(s.fromHigh) ? `${num(s.fromHigh)} % v. Hoch` : dash, range),
+  ].join('');
+}
+
+const ptsStyle = pts => pts === null
+  ? 'color:var(--faint);background:rgba(95,107,124,.12)'
+  : `color:${scoreColor(pts)};background:${tint(scoreColor(pts), 0.12)}`;
+
+function renderStrengths(subs) {
+  const all = CATEGORIES.flatMap(c => subs[c.key].items).filter(i => i.pts !== null);
+  const item = i => `<li class="flex items-center justify-between gap-2">
+      <span class="truncate muted">${i.label}</span>
+      <span class="num text-[11px] px-1.5 py-0.5 rounded shrink-0" style="${ptsStyle(i.pts)}">${i.pts}</span></li>`;
+  const strong = [...all].sort((a, b) => b.pts - a.pts).filter(i => i.pts >= 60).slice(0, 3);
+  const weak = [...all].sort((a, b) => a.pts - b.pts).filter(i => i.pts <= 40).slice(0, 3);
+  document.getElementById('strengths').innerHTML = strong.map(item).join('') || '<li class="faint">keine ausgeprägten</li>';
+  document.getElementById('weaknesses').innerHTML = weak.map(item).join('') || '<li class="faint">keine ausgeprägten</li>';
+}
+
+function renderMetrics(s, subs, eff) {
+  const box = document.getElementById('metrics');
+  // Aufgeklappte Zeilen bleiben beim Neuzeichnen (z. B. Regler bewegen) offen
+  const open = new Set([...box.querySelectorAll('details.metric[open]')].map(d => d.dataset.id));
+  const moatOptions = ['<option value="">Auto</option>']
+    .concat(Array.from({ length: 11 }, (_, i) => `<option value="${i}"${s.moatOverride === i ? ' selected' : ''}>${i}</option>`)).join('');
+
+  box.innerHTML = CATEGORIES.map(c => {
+    const sub = subs[c.key];
+    return `
+    <div>
+      <div class="flex items-center justify-between gap-3 pb-2 mb-1" style="border-bottom:1px solid var(--line)">
+        <h3 class="flex items-center gap-2 text-sm font-semibold text-white">
+          <span class="w-2 h-2 rounded-full" style="background:${c.color}"></span>${c.label}
+        </h3>
+        <span class="flex items-center gap-3">
+          <span class="text-xs faint num">${Math.round(eff[c.key] * 100)} %</span>
+          <span class="num text-sm font-semibold w-8 text-right" style="color:${sub.score === null ? 'var(--faint)' : scoreColor(sub.score)}">${sub.score ?? '–'}</span>
+        </span>
+      </div>
+      ${sub.items.map(i => {
+        const lines = i.pts === null ? [] : i.metric.detail(s).filter(Boolean);
+        return `
+        <details class="metric rounded-lg" data-id="${i.id}"${open.has(i.id) ? ' open' : ''}>
+          <summary class="grid items-center gap-3 px-2 py-2.5 rounded-lg" style="grid-template-columns:minmax(0,1fr) auto auto auto">
+            <span class="text-sm truncate" style="color:var(--text)">${i.label}</span>
+            <span class="num text-sm text-right ${i.pts === null ? 'faint' : ''}">${i.raw}</span>
+            <span class="hidden sm:flex items-center gap-2">
+              <span class="w-20 h-1 rounded-full overflow-hidden" style="background:var(--line-2)">
+                <span class="bar-fill block h-full rounded-full" style="width:${i.pts ?? 0}%;background:${i.pts === null ? 'transparent' : scoreColor(i.pts)}"></span>
+              </span>
+              <span class="num text-[11px] w-9 text-center rounded py-0.5" style="${ptsStyle(i.pts)}">${i.pts ?? '–'}</span>
+            </span>
+            ${CHEVRON}
+          </summary>
+          <div class="mx-2 mb-2 mt-1 p-3 rounded-lg text-[13px] leading-relaxed" style="background:var(--panel-2);border:1px solid var(--line)">
+            ${lines.length ? `<dl class="grid gap-x-4 gap-y-1.5" style="grid-template-columns:minmax(0,auto) minmax(0,1fr)">
+              ${lines.map(([k, v]) => `<dt class="faint">${k}</dt><dd class="num text-white break-words">${esc(v)}</dd>`).join('')}
+              <dt class="faint sm:hidden">Punkte</dt><dd class="num sm:hidden" style="color:${i.pts === null ? 'var(--faint)' : scoreColor(i.pts)}">${i.pts ?? '–'}</dd>
+            </dl>` : `<p class="faint">Für diese Kennzahl liefert die Datenquelle keinen Wert. Sie zählt deshalb nicht in den Score.</p>`}
+            <p class="muted mt-2.5 pt-2.5" style="border-top:1px solid var(--line)"><span class="faint">Regel:</span> ${i.metric.rule}</p>
+          </div>
+        </details>`;
+      }).join('')}
+      ${c.key === 'quality' ? `
+      <label class="flex items-center justify-between gap-2 text-xs muted mt-2 px-2">
+        <span>Burggraben selbst festlegen (optional)</span>
+        <select id="moatSelect" class="field num px-2 py-1 text-xs shrink-0" style="width:auto">${moatOptions}</select>
+      </label>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// Alle Werte, die zur Aktie vorliegen, als Tabelle
+function renderRaw(s) {
+  const cur = s.currency ? ` ${s.currency}` : '';
+  const rows = [
+    ['Kurs', has(s.price) ? `${f2(s.price)}${cur}` : null],
+    ['Veränderung zum Vortag', has(s.changePct) ? `${has(s.change) ? `${f2(s.change)}${cur} / ` : ''}${f2(s.changePct)} %` : null],
+    ['52-Wochen-Tief', has(s.yearLow) ? `${f2(s.yearLow)}${cur}` : null],
+    ['52-Wochen-Hoch', has(s.yearHigh) ? `${f2(s.yearHigh)}${cur}` : null],
+    ['Abstand zum 52-Wochen-Hoch', has(s.fromHigh) ? `${f2(s.fromHigh)} %` : null],
+    ['Gleitender Durchschnitt 50 Tage', has(s.avg50) ? `${f2(s.avg50)}${cur}` : null],
+    ['Gleitender Durchschnitt 200 Tage', has(s.avg200) ? `${f2(s.avg200)}${cur}` : null],
+    ['RSI (14)', has(s.rsi) ? f2(s.rsi) : null],
+    ['Börsenwert', has(s.marketCap) ? `${formatCap(s.marketCap)}${cur} (${s.marketCap.toLocaleString('de-DE')})` : null],
+    ['KGV (TTM)', has(s.pe) ? f2(s.pe) : null],
+    ['Umsatzwachstum', has(s.growth) ? `${f2(s.growth)} %` : null],
+    ['Nettomarge (TTM)', has(s.margin) ? `${f2(s.margin)} %` : null],
+    ['Bruttomarge (TTM)', has(s.grossMargin) ? `${f2(s.grossMargin)} %` : null],
+    ['Kapitalrendite ROIC (TTM)', has(s.roic) ? `${f2(s.roic)} %` : null],
+    ['Debt / Equity', has(s.de) ? f2(s.de) : null],
+    ['Current Ratio', has(s.cr) ? f2(s.cr) : null],
+    ['Altman-Z-Score', has(s.z) ? f2(s.z) : null],
+    ['Piotroski-Score', has(s.piotroski) ? `${s.piotroski} / 9` : null],
+    ['Beta', has(s.beta) ? f2(s.beta) : null],
+    ['Burggraben', has(s.moat) ? `${s.moat} / 10${s.moatOverride != null ? ' (eigene Einschätzung)' : s.moatParts ? ' (geschätzt)' : ''}` : null],
+    ['Branche (FMP)', s.sectorKey || null],
+    ['Industrie (FMP)', s.industry || null],
+    ['Ø KGV Branche', s.bench ? `${f2(s.bench.pe)} (${s.bench.peLive ? 'live' : 'Richtwert'})` : null],
+    ['Typische Nettomarge Branche', s.bench ? `${f2(s.bench.margin)} % (Richtwert)` : null],
+    ['Börse', s.exchange || null],
+    ['Datenstand', s.live && s.asOf ? new Date(s.asOf).toLocaleString('de-DE') : s.simulated ? 'Simulierte Werte' : 'Demo-Datensatz'],
+  ].filter(([, v]) => v !== null);
+  document.getElementById('rawBody').innerHTML = rows.map(([k, v]) => `
+    <tr style="border-top:1px solid var(--line)">
+      <th scope="row" class="text-left font-normal faint py-2 pr-4 align-top">${k}</th>
+      <td class="num text-right text-white py-2">${esc(v)}</td>
+    </tr>`).join('');
 }
 
 function render() {
@@ -635,24 +960,19 @@ function render() {
   const col = scoreColor(total);
   const [verdict, text] = verdictFor(total);
 
-  // Kopf
-  document.getElementById('stockName').textContent = s.name;
-  document.getElementById('stockTicker').textContent = s.ticker;
-  document.getElementById('stockMeta').textContent = `${s.sector} · ${s.country}`;
-  renderBadge(s);
+  renderHead(s);
 
   // Gauge
   const C = 2 * Math.PI * 84;
   const arc = document.getElementById('gaugeArc');
   arc.style.strokeDashoffset = C * (1 - total / 100);
   arc.style.stroke = col;
-  arc.style.filter = `drop-shadow(0 0 10px ${col})`;
   animateNumber(document.getElementById('totalScore'), total);
   const vEl = document.getElementById('verdict');
   vEl.textContent = verdict;
   vEl.style.color = col;
-  vEl.style.background = tint(col, 0.14);
-  document.getElementById('scaleMarker').style.left = `calc(${total}% - 3px)`;
+  vEl.style.background = tint(col, 0.12);
+  document.getElementById('scaleMarker').style.left = `calc(${total}% - 2px)`;
 
   const summary = document.getElementById('summary');
   if (avail.length) {
@@ -660,26 +980,27 @@ function render() {
     const worst = avail.reduce((a, c) => subs[c.key].score < subs[a.key].score ? c : a);
     const missing = CATEGORIES.length - avail.length;
     summary.innerHTML =
-      `${text} Stärkster Bereich: <b class="text-white">${best.short}</b> (${subs[best.key].score}), ` +
-      `schwächster: <b class="text-white">${worst.short}</b> (${subs[worst.key].score}).` +
+      `${text} Stärkster Bereich: <b class="text-white font-medium">${best.short}</b> (${subs[best.key].score}), ` +
+      `schwächster: <b class="text-white font-medium">${worst.short}</b> (${subs[worst.key].score}).` +
       (missing ? ` <span class="text-amber-300">${missing} Bereich(e) ohne Daten, nicht gewertet.</span>` : '');
   } else {
     summary.textContent = 'Für diese Aktie liegen keine auswertbaren Kennzahlen vor.';
   }
+  renderStrengths(subs);
 
   // Teilbereiche
   document.getElementById('subScores').innerHTML = CATEGORIES.map(c => {
     const sc = subs[c.key].score, pct = Math.round(eff[c.key] * 100);
-    return `<div class="fade-in">
+    return `<div>
       <div class="flex items-baseline justify-between text-sm">
-        <span class="flex items-center gap-2 text-slate-300"><span class="w-2 h-2 rounded-full" style="background:${c.color}"></span>${c.label}</span>
-        <span class="font-mono font-bold text-white">${sc ?? '–'}</span>
+        <span class="flex items-center gap-2" style="color:var(--text)"><span class="w-2 h-2 rounded-full" style="background:${c.color}"></span>${c.label}</span>
+        <span class="num font-semibold text-white">${sc ?? '–'}</span>
       </div>
-      <div class="h-2 rounded-full bg-slate-800 mt-1.5 overflow-hidden">
+      <div class="h-1.5 rounded-full mt-1.5 overflow-hidden" style="background:var(--line-2)">
         <div class="bar-fill h-full rounded-full" style="width:${sc ?? 0}%;background:${scoreColor(sc ?? 0)}"></div>
       </div>
-      <div class="flex justify-between text-[11px] text-slate-500 mt-1">
-        <span>Gewicht ${pct} %</span><span>${sc === null ? 'keine Daten' : `+${(sc * eff[c.key]).toFixed(1)} Pkt.`}</span>
+      <div class="flex justify-between text-[11px] faint mt-1 num">
+        <span>Gewicht ${pct} %</span><span>${sc === null ? 'keine Daten' : `+${num(sc * eff[c.key], 1)} Pkt.`}</span>
       </div>
     </div>`;
   }).join('');
@@ -688,43 +1009,12 @@ function render() {
   radar.data.datasets[0].data = CATEGORIES.map(c => subs[c.key].score ?? 0);
   radar.data.datasets[0].borderColor = col;
   radar.data.datasets[0].pointBackgroundColor = CATEGORIES.map(c => c.color);
-  radar.data.datasets[0].backgroundColor = tint(col, 0.18);
+  radar.data.datasets[0].backgroundColor = tint(col, 0.14);
   radar.data.datasets[1].data = CATEGORIES.map(c => Math.round(eff[c.key] * 100));
   radar.update();
 
-  // Kennzahlen
-  const moatOptions = ['<option value="">Auto</option>']
-    .concat(Array.from({ length: 11 }, (_, i) => `<option value="${i}"${s.moatOverride === i ? ' selected' : ''}>${i}</option>`)).join('');
-  const moatNote = s.moatOverride != null
-    ? 'Eigene Einschätzung aktiv.'
-    : s.moatInfo ? `Burggraben geschätzt aus ${s.moatInfo}.` : '';
-  document.getElementById('metrics').innerHTML = CATEGORIES.map(c => `
-    <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-4 fade-in">
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-xs font-semibold uppercase tracking-wide" style="color:${c.color}">${c.short}</span>
-        <span class="font-mono text-sm font-bold" style="color:${subs[c.key].score === null ? '#64748b' : scoreColor(subs[c.key].score)}">${subs[c.key].score ?? '–'}</span>
-      </div>
-      <ul class="space-y-2">${subs[c.key].items.map(i => `
-        <li class="flex items-center justify-between gap-2 text-sm">
-          <span class="text-slate-400 truncate">${i.label}</span>
-          <span class="flex items-center gap-2 shrink-0">
-            <span class="font-mono ${i.pts === null ? 'text-slate-500' : 'text-slate-200'}">${i.raw}</span>
-            <span class="font-mono text-[11px] w-9 text-center rounded py-0.5" style="${i.pts === null
-              ? 'color:#64748b;background:rgba(100,116,139,0.12)'
-              : `color:${scoreColor(i.pts)};background:${tint(scoreColor(i.pts), 0.12)}`}">${i.pts ?? '–'}</span>
-          </span>
-        </li>`).join('')}
-      </ul>
-      ${c.key === 'quality' ? `
-      ${moatNote ? `<p id="moatNote" class="text-[11px] text-slate-500 mt-3 leading-relaxed"></p>` : ''}
-      <label class="flex items-center justify-between gap-2 text-xs text-slate-500 mt-3 pt-3 border-t border-slate-800">
-        <span>Moat anpassen (optional)</span>
-        <select id="moatSelect" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 font-mono">${moatOptions}</select>
-      </label>` : ''}
-    </div>`).join('');
-  const noteEl = document.getElementById('moatNote');
-  if (noteEl) noteEl.textContent = moatNote; // Firmendaten nie als HTML einsetzen
-
+  renderMetrics(s, subs, eff);
+  renderRaw(s);
   renderWeights();
 }
 
@@ -741,10 +1031,7 @@ function renderWeights() {
     .map(c => `<div class="transition-all duration-500" title="${c.short}" style="width:${w[c.key] * 100}%;background:${c.color}"></div>`).join('');
   document.querySelectorAll('[data-preset]').forEach(b => {
     const p = PRESETS[b.dataset.preset];
-    const active = CATEGORIES.every(c => p[c.key] === state.weights[c.key]);
-    b.className = `text-xs px-3 py-1.5 rounded-lg border transition ${active
-      ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
-      : 'border-slate-700 text-slate-400 hover:text-white hover:border-slate-500'}`;
+    b.setAttribute('aria-pressed', String(CATEGORIES.every(c => p[c.key] === state.weights[c.key])));
   });
 }
 
@@ -774,7 +1061,8 @@ function setLoading(on) {
 function renderSource() {
   const el = document.getElementById('sourceStatus');
   el.textContent = state.apiKey ? 'Live (Financial Modeling Prep)' : 'Demo-Daten';
-  el.className = `font-semibold ${state.apiKey ? 'text-emerald-300' : 'text-slate-400'}`;
+  el.className = 'font-semibold';
+  el.style.color = state.apiKey ? 'var(--up)' : 'var(--muted)';
   document.getElementById('apiKey').value = state.apiKey;
 }
 
@@ -787,13 +1075,13 @@ function renderHits(hits, currentSymbol) {
   box.hidden = !others.length;
   if (!others.length) return;
   const label = document.createElement('span');
-  label.className = 'text-xs text-slate-500 mr-1';
+  label.className = 'text-xs faint mr-1';
   label.textContent = 'Nicht die gesuchte Firma? Andere Treffer:';
   box.append(label);
   for (const h of others) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'text-xs px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700 transition';
+    b.className = 'chip';
     b.textContent = `${h.name} · ${h.symbol}${h.exchange ? ` · ${h.exchange}` : ''}`;
     b.addEventListener('click', () => selectStock(h.name || h.symbol, h.symbol));
     box.append(b);
@@ -830,12 +1118,7 @@ async function selectStock(query, symbol) {
   state.stock = stock;
   document.getElementById('searchInput').value = stock.name;
   const known = STOCKS.find(k => k.name === stock.name || (k.live || k.ticker) === stock.ticker);
-  document.querySelectorAll('[data-quick]').forEach(b => {
-    const active = b.dataset.quick === known?.name;
-    b.className = `text-sm px-3 py-1.5 rounded-lg border transition ${active
-      ? 'bg-white text-slate-900 border-white font-semibold'
-      : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-700'}`;
-  });
+  document.querySelectorAll('[data-quick]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.quick === known?.name)));
   render();
 }
 
@@ -845,7 +1128,7 @@ async function selectStock(query, symbol) {
 function init() {
   document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
   document.getElementById('stockList').innerHTML = STOCKS.map(s => `<option value="${s.name}">${s.ticker}</option>`).join('');
-  document.getElementById('quickPicks').innerHTML = QUICK.map(n => `<button type="button" data-quick="${n}">${n}</button>`).join('');
+  document.getElementById('quickPicks').innerHTML = QUICK.map(n => `<button type="button" class="chip" data-quick="${n}" aria-pressed="false">${n}</button>`).join('');
   document.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => selectStock(b.dataset.quick)));
 
   document.getElementById('searchForm').addEventListener('submit', e => {
@@ -853,7 +1136,7 @@ function init() {
     selectStock(document.getElementById('searchInput').value);
   });
 
-  document.getElementById('presets').innerHTML = Object.keys(PRESETS).map(p => `<button data-preset="${p}">${p}</button>`).join('');
+  document.getElementById('presets').innerHTML = Object.keys(PRESETS).map(p => `<button type="button" class="chip" data-preset="${p}">${p}</button>`).join('');
   document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
     state.weights = { ...PRESETS[b.dataset.preset] };
     render();
@@ -863,8 +1146,8 @@ function init() {
   document.getElementById('weightSliders').innerHTML = CATEGORIES.map(c => `
     <div>
       <div class="flex justify-between text-sm mb-2">
-        <label for="w-${c.key}" class="text-slate-300">${c.label}</label>
-        <span id="w-val-${c.key}" class="font-mono font-bold" style="color:${c.color}"></span>
+        <label for="w-${c.key}" style="color:var(--text)">${c.label}</label>
+        <span id="w-val-${c.key}" class="num font-semibold" style="color:${c.color}"></span>
       </div>
       <input id="w-${c.key}" type="range" min="0" max="100" step="1" style="--c:${c.color};--p:25%" />
     </div>`).join('');
@@ -875,15 +1158,15 @@ function init() {
     render();
   }));
 
-  Chart.defaults.color = '#94a3b8';
-  Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
+  Chart.defaults.color = '#8e9aab';
+  Chart.defaults.font.family = '"IBM Plex Sans", system-ui, sans-serif';
   radar = new Chart(document.getElementById('radarChart'), {
     type: 'radar',
     data: {
       labels: CATEGORIES.map(c => c.short),
       datasets: [
-        { label: 'Score', data: [0, 0, 0, 0], borderWidth: 2, pointRadius: 5, pointBorderWidth: 0, fill: true },
-        { label: 'Gewichtung %', data: [25, 25, 25, 25], borderColor: 'rgba(148,163,184,0.55)', borderDash: [4, 4],
+        { label: 'Score', data: [0, 0, 0, 0], borderWidth: 2, pointRadius: 4, pointBorderWidth: 0, fill: true },
+        { label: 'Gewichtung %', data: [25, 25, 25, 25], borderColor: 'rgba(142,154,171,0.5)', borderDash: [4, 4],
           borderWidth: 1.5, pointRadius: 0, fill: false },
       ],
     },
@@ -893,8 +1176,8 @@ function init() {
       scales: {
         r: {
           min: 0, max: 100, ticks: { stepSize: 25, display: false },
-          grid: { color: 'rgba(148,163,184,0.12)' }, angleLines: { color: 'rgba(148,163,184,0.12)' },
-          pointLabels: { color: '#cbd5e1', font: { size: 12, weight: '600' } },
+          grid: { color: '#1e2633' }, angleLines: { color: '#1e2633' },
+          pointLabels: { color: '#e6ebf2', font: { size: 12, weight: '500' } },
         },
       },
       plugins: {
@@ -931,6 +1214,13 @@ function init() {
     render();
   });
 
+  document.getElementById('toggleAll').addEventListener('click', e => {
+    const rows = [...document.querySelectorAll('#metrics details.metric')];
+    const openAll = rows.some(d => !d.open);
+    rows.forEach(d => { d.open = openAll; });
+    e.currentTarget.textContent = openAll ? 'Alle zuklappen' : 'Alle aufklappen';
+  });
+
   initFullscreen();
   initCriteria();
   selectStock('Microsoft');
@@ -939,25 +1229,23 @@ function init() {
 /* ---------------------------------------------------------------
    Bewertungskriterien-Dialog (aus CATEGORIES erzeugt, bleibt also synchron)
 ---------------------------------------------------------------- */
-const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
 function renderCriteria() {
   const w = normWeights();
   const s = state.stock;
   const b = s?.bench;
   const benchHtml = b ? `
-    <section class="rounded-xl bg-slate-800/50 border border-slate-700 p-4">
+    <section class="inset p-4">
       <h3 class="font-semibold text-white mb-1">Branchenvergleich für ${esc(s.name)}</h3>
-      <p class="text-slate-400">Branche: <b class="text-slate-200">${esc(b.label)}</b>${b.sector && !SECTOR_BENCH[b.sector] ? ` (${esc(b.sector)}, ohne eigenen Richtwert)` : ''}</p>
-      <p class="text-slate-400">Ø KGV der Branche: <b class="text-slate-200">${num(b.pe, 1)}</b>
+      <p class="muted">Branche: <b class="text-white">${esc(b.label)}</b>${b.sector && !SECTOR_BENCH[b.sector] ? ` (${esc(b.sector)}, ohne eigenen Richtwert)` : ''}</p>
+      <p class="muted">Ø KGV der Branche: <b class="text-white">${num(b.pe, 1)}</b>
         <span class="text-xs">${b.peLive ? '(live von Financial Modeling Prep)' : '(Richtwert, nicht tagesaktuell)'}</span></p>
-      <p class="text-slate-400">Typische Nettomarge: <b class="text-slate-200">${num(b.margin, 0)} %</b> <span class="text-xs">(Richtwert)</span></p>
+      <p class="muted">Typische Nettomarge: <b class="text-white">${num(b.margin, 0)} %</b> <span class="text-xs">(Richtwert)</span></p>
     </section>` : '';
 
   document.getElementById('criteriaBody').innerHTML = `
     <section>
       <h3 class="font-semibold text-white mb-1">So entsteht der Score</h3>
-      <p class="text-slate-400">Jede Kennzahl wird in 0–100 Punkte umgerechnet. Pro Bereich zählt der Durchschnitt der Kennzahlen, die Daten haben.
+      <p class="muted">Jede Kennzahl wird in 0–100 Punkte umgerechnet. Pro Bereich zählt der Durchschnitt der Kennzahlen, die Daten haben.
         Der Gesamtscore ist die gewichtete Summe der vier Bereiche. Bereiche ganz ohne Daten fallen raus, ihr Gewicht wird auf die anderen verteilt.</p>
     </section>
     ${benchHtml}
@@ -965,12 +1253,12 @@ function renderCriteria() {
       <section>
         <div class="flex items-baseline justify-between gap-3 mb-2">
           <h3 class="font-semibold" style="color:${c.color}">${c.label}</h3>
-          <span class="font-mono text-xs text-slate-400">Gewicht ${Math.round(w[c.key] * 100)} %</span>
+          <span class="num text-xs muted">Gewicht ${Math.round(w[c.key] * 100)} %</span>
         </div>
         <ul class="space-y-2">${c.metrics.map(m => `
-          <li class="rounded-lg bg-slate-800/40 border border-slate-800 px-3 py-2">
-            <div class="font-medium text-slate-200">${m.label}</div>
-            <div class="text-slate-400">${m.rule}</div>
+          <li class="inset px-3 py-2">
+            <div class="font-medium text-white">${m.label}</div>
+            <div class="muted">${m.rule}</div>
           </li>`).join('')}
         </ul>
       </section>`).join('')}
@@ -978,10 +1266,10 @@ function renderCriteria() {
       <h3 class="font-semibold text-white mb-2">Einstufung des Gesamtscores</h3>
       <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2">${[[80, 'Exzellent'], [65, 'Attraktiv'], [50, 'Neutral'], [35, 'Erhöhtes Risiko'], [0, 'Hohes Risiko']]
         .map(([min, name], i, arr) => `<li class="flex items-center gap-2"><span class="w-3 h-3 rounded-full" style="background:${scoreColor(min + 7)}"></span>
-          <span class="font-mono text-slate-400 w-14">${min}${i ? `–${arr[i - 1][0] - 1}` : '+'}</span><span class="text-slate-200">${name}</span></li>`).join('')}
+          <span class="num muted w-14">${min}${i ? `–${arr[i - 1][0] - 1}` : '+'}</span><span class="text-white">${name}</span></li>`).join('')}
       </ul>
     </section>
-    <p class="text-xs text-slate-500">Keine Anlageberatung. Die Schwellen sind Faustregeln und lassen sich im Code in CATEGORIES anpassen.</p>`;
+    <p class="text-xs faint">Keine Anlageberatung. Die Schwellen sind Faustregeln und lassen sich im Code in CATEGORIES anpassen.</p>`;
 }
 
 function initCriteria() {
