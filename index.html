@@ -63,7 +63,7 @@
           Vollbild ist in dieser Ansicht gesperrt. Öffne die Seite in Safari oder Chrome, oder lege sie über Teilen → „Zum Home-Bildschirm“ ab.
         </p>
         <p class="text-[11px] text-slate-500 max-w-xs md:text-right">
-          Illustrative Beispieldaten, keine Echtzeitkurse. Keine Anlageberatung.
+          Live-Daten von Financial Modeling Prep oder Demo-Daten. Keine Anlageberatung.
         </p>
       </div>
     </header>
@@ -77,12 +77,33 @@
                  class="w-full bg-slate-900/80 border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 rounded-xl pl-10 pr-4 py-3 text-white placeholder-slate-500 outline-none transition" />
           <datalist id="stockList"></datalist>
         </div>
-        <button type="submit" class="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition">Analysieren</button>
+        <button id="analyseBtn" type="submit" class="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-wait text-slate-950 font-semibold transition">Analysieren</button>
       </form>
       <div class="flex flex-wrap items-center gap-2 mt-4">
         <span class="text-xs text-slate-500 mr-1">Schnellauswahl:</span>
         <div id="quickPicks" class="flex flex-wrap gap-2"></div>
       </div>
+      <p id="loadError" hidden class="text-sm text-rose-300 mt-3"></p>
+
+      <!-- Datenquelle -->
+      <details id="sourcePanel" class="mt-4 border-t border-slate-800 pt-4">
+        <summary class="cursor-pointer text-sm text-slate-300 select-none">
+          Datenquelle: <span id="sourceStatus" class="font-semibold"></span>
+        </summary>
+        <div class="mt-3 flex flex-col sm:flex-row gap-3 sm:items-end">
+          <div class="flex-1">
+            <label for="apiKey" class="text-xs text-slate-400">API-Key von Financial Modeling Prep</label>
+            <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Key einfügen"
+                   class="mt-1 w-full bg-slate-900/80 border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 outline-none font-mono text-sm transition" />
+          </div>
+          <button id="saveKey" type="button" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-white text-slate-900 font-semibold text-sm transition">Live-Daten aktivieren</button>
+          <button id="clearKey" type="button" class="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 text-sm transition">Key entfernen</button>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
+          Einen kostenlosen Key bekommst du auf financialmodelingprep.com (250 Abrufe pro Tag, eine Analyse braucht etwa 6).
+          Der Key wird nur in diesem Browser gespeichert. Ergebnisse werden 12 Stunden zwischengespeichert.
+        </p>
+      </details>
     </section>
 
     <!-- Main grid -->
@@ -98,7 +119,7 @@
             </div>
             <p id="stockMeta" class="text-sm text-slate-400 mt-0.5"></p>
           </div>
-          <span id="dataBadge" class="hidden shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">Simuliert</span>
+          <span id="dataBadge" class="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded border"></span>
         </div>
 
         <div class="relative mx-auto my-6 w-64 h-64">
@@ -183,7 +204,7 @@
 ---------------------------------------------------------------- */
 const STOCKS = [
   { name: 'Microsoft',  ticker: 'MSFT', sector: 'Software',          country: 'USA', growth: 15, pe: 34, margin: 36, de: 0.35, cr: 1.3, z: 8.5, rsi: 58, fromHigh: -4,  sma50: true,  sma200: true,  moat: 9, beta: 0.9 },
-  { name: 'Allianz',    ticker: 'ALV',  sector: 'Versicherung',      country: 'DE',  growth: 6,  pe: 12, margin: 9,  de: 0.9,  cr: 1.1, z: 2.6, rsi: 55, fromHigh: -3,  sma50: true,  sma200: true,  moat: 7, beta: 0.95 },
+  { name: 'Allianz',    ticker: 'ALV',  live: 'ALV.DE', sector: 'Versicherung',      country: 'DE',  growth: 6,  pe: 12, margin: 9,  de: 0.9,  cr: 1.1, z: 2.6, rsi: 55, fromHigh: -3,  sma50: true,  sma200: true,  moat: 7, beta: 0.95 },
   { name: 'Cloudflare', ticker: 'NET',  sector: 'Cloud / Security',  country: 'USA', growth: 28, pe: 180, margin: -4, de: 1.4, cr: 2.8, z: 4.2, rsi: 66, fromHigh: -9,  sma50: true,  sma200: true,  moat: 7, beta: 1.6 },
   { name: 'Tesla',      ticker: 'TSLA', sector: 'Automobil / EV',    country: 'USA', growth: 1,  pe: 140, margin: 6,  de: 0.18, cr: 2.0, z: 9.0, rsi: 71, fromHigh: -12, sma50: true,  sma200: true,  moat: 6, beta: 2.2 },
   { name: 'Apple',      ticker: 'AAPL', sector: 'Hardware / Ökosystem', country: 'USA', growth: 5, pe: 32, margin: 24, de: 1.5, cr: 0.9, z: 7.5, rsi: 52, fromHigh: -6, sma50: true, sma200: true, moat: 9, beta: 1.15 },
@@ -200,38 +221,43 @@ const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 // lineare Abbildung: Wert `bad` → 0 Punkte, Wert `good` → 100 Punkte (funktioniert in beide Richtungen)
 const lin = (v, bad, good) => clamp(((v - bad) / (good - bad)) * 100);
 
+// Zahlen im deutschen Format, ohne überflüssige Nachkommastellen
+const num = (v, d = 1) => v.toLocaleString('de-DE', { maximumFractionDigits: d });
+const signed = v => `${v > 0 ? '+' : ''}${num(v)} %`;
+
+// `fields`: fehlt eines davon (z. B. bei Live-Daten), zählt die Kennzahl nicht in den Kategorie-Score
 const CATEGORIES = [
   {
     key: 'value', label: 'Bewertung & Profitabilität', short: 'Bewertung', color: '#38bdf8',
     metrics: [
-      { label: 'Umsatzwachstum', fmt: s => `${s.growth > 0 ? '+' : ''}${s.growth} %`, score: s => lin(s.growth, -5, 25) },
-      { label: 'KGV',            fmt: s => s.pe > 0 ? s.pe.toFixed(0) : 'n. a.', score: s => s.pe <= 0 ? 0 : lin(s.pe, 70, 10) },
-      { label: 'Nettomarge',     fmt: s => `${s.margin} %`, score: s => lin(s.margin, -5, 30) },
+      { label: 'Umsatzwachstum', fields: ['growth'], fmt: s => signed(s.growth), score: s => lin(s.growth, -5, 25) },
+      { label: 'KGV',            fields: ['pe'], fmt: s => s.pe > 0 ? num(s.pe, 0) : 'negativ', score: s => s.pe <= 0 ? 0 : lin(s.pe, 70, 10) },
+      { label: 'Nettomarge',     fields: ['margin'], fmt: s => `${num(s.margin)} %`, score: s => lin(s.margin, -5, 30) },
     ],
   },
   {
     key: 'health', label: 'Finanzielle Gesundheit', short: 'Gesundheit', color: '#a78bfa',
     metrics: [
-      { label: 'Debt / Equity',  fmt: s => s.de.toFixed(2), score: s => lin(s.de, 2.5, 0.1) },
-      { label: 'Current Ratio',  fmt: s => s.cr.toFixed(1), score: s => lin(s.cr, 0.5, 2.0) },
-      { label: 'Altman-Z (Insolvenzrisiko)', fmt: s => s.z.toFixed(1), score: s => lin(s.z, 1.1, 3.0) },
+      { label: 'Debt / Equity',  fields: ['de'], fmt: s => num(s.de, 2), score: s => lin(s.de, 2.5, 0.1) },
+      { label: 'Current Ratio',  fields: ['cr'], fmt: s => num(s.cr), score: s => lin(s.cr, 0.5, 2.0) },
+      { label: 'Altman-Z (Insolvenzrisiko)', fields: ['z'], fmt: s => num(s.z), score: s => lin(s.z, 1.1, 3.0) },
     ],
   },
   {
     key: 'tech', label: 'Technische Analyse & Momentum', short: 'Momentum', color: '#f472b6',
     metrics: [
       // Sweet-Spot 45–60; überkauft (>70) und überverkauft (<30) werden abgestraft
-      { label: 'RSI (14)', fmt: s => s.rsi, score: s => s.rsi < 45 ? lin(s.rsi, 20, 45) : s.rsi <= 60 ? 100 : lin(s.rsi, 85, 60) },
-      { label: 'Abstand 52W-Hoch', fmt: s => `${s.fromHigh} %`, score: s => lin(s.fromHigh, -45, -2) },
-      { label: 'Trend', fmt: s => `${s.sma50 ? '▲' : '▼'} GD50 · ${s.sma200 ? '▲' : '▼'} GD200`,
+      { label: 'RSI (14)', fields: ['rsi'], fmt: s => num(s.rsi, 0), score: s => s.rsi < 45 ? lin(s.rsi, 20, 45) : s.rsi <= 60 ? 100 : lin(s.rsi, 85, 60) },
+      { label: 'Abstand 52W-Hoch', fields: ['fromHigh'], fmt: s => `${num(s.fromHigh)} %`, score: s => lin(s.fromHigh, -45, -2) },
+      { label: 'Trend', fields: ['sma50', 'sma200'], fmt: s => `${s.sma50 ? '▲' : '▼'} GD50 · ${s.sma200 ? '▲' : '▼'} GD200`,
         score: s => (s.sma50 && s.sma200) ? 100 : s.sma200 ? 60 : s.sma50 ? 35 : 5 },
     ],
   },
   {
     key: 'quality', label: 'Qualitativ & Marktstellung', short: 'Qualität', color: '#fbbf24',
     metrics: [
-      { label: 'Burggraben (Moat)', fmt: s => `${s.moat} / 10`, score: s => s.moat * 10 },
-      { label: 'Beta', fmt: s => s.beta.toFixed(2), score: s => s.beta <= 1 ? lin(s.beta, 0.2, 0.9) : lin(s.beta, 2.3, 0.9) },
+      { label: 'Burggraben (Moat)', fields: ['moat'], fmt: s => `${s.moat} / 10`, score: s => s.moat * 10 },
+      { label: 'Beta', fields: ['beta'], fmt: s => num(s.beta, 2), score: s => s.beta <= 1 ? lin(s.beta, 0.2, 0.9) : lin(s.beta, 2.3, 0.9) },
     ],
   },
 ];
@@ -263,12 +289,130 @@ function simulateStock(query) {
     sma50: r() > 0.45, sma200: r() > 0.4, moat: between(2, 10), beta: between(0.5, 2.3, 2),
   };
 }
-function findStock(query) {
+function findKnown(query) {
   const q = query.trim().toLowerCase();
   if (!q) return null;
-  return STOCKS.find(s => s.name.toLowerCase() === q || s.ticker.toLowerCase() === q)
-      || STOCKS.find(s => s.name.toLowerCase().startsWith(q) || s.ticker.toLowerCase().startsWith(q))
-      || simulateStock(query);
+  return STOCKS.find(s => s.name.toLowerCase() === q || s.ticker.toLowerCase() === q || s.live?.toLowerCase() === q)
+      || STOCKS.find(s => s.name.toLowerCase().startsWith(q) || s.ticker.toLowerCase().startsWith(q));
+}
+function findStock(query) {
+  if (!query.trim()) return null;
+  const known = findKnown(query);
+  return known ? { ...known } : simulateStock(query);
+}
+
+/* ---------------------------------------------------------------
+   Live-Daten: Financial Modeling Prep (stable API)
+   Der Key bleibt im localStorage dieses Browsers.
+---------------------------------------------------------------- */
+const FMP_BASE = 'https://financialmodelingprep.com/stable/';
+const CACHE_MS = 12 * 60 * 60 * 1000;
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* Speicher gesperrt: ohne Cache weiter */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* egal */ } },
+};
+
+async function fmp(path, params = {}) {
+  const url = new URL(FMP_BASE + path);
+  for (const [k, v] of Object.entries({ ...params, apikey: state.apiKey })) url.searchParams.set(k, v);
+  let res;
+  try {
+    res = await fetch(url);
+  } catch {
+    throw new Error('Financial Modeling Prep ist nicht erreichbar. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.');
+  }
+  const body = await res.json().catch(() => null);
+  const apiMsg = body && !Array.isArray(body) ? body['Error Message'] || body.message : null;
+  if (res.status === 401) throw new Error('Der API-Key ist ungültig. Prüfe ihn unter „Datenquelle“.');
+  if (res.status === 402) throw new Error('Diese Aktie oder Kennzahl ist im Gratis-Tarif von FMP nicht enthalten.');
+  if (res.status === 429) throw new Error('Das Tageslimit des Gratis-Tarifs (250 Abrufe) ist erreicht.');
+  if (!res.ok || apiMsg) throw new Error(apiMsg || `Financial Modeling Prep antwortet mit Fehler ${res.status}.`);
+  return body;
+}
+// Optionale Abrufe: ein Fehler lässt nur die betroffenen Kennzahlen leer
+const optional = p => p.catch(() => null);
+const first = v => Array.isArray(v) ? v[0] : v;
+const finite = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const pct = v => (finite(v) == null ? null : v * 100);
+
+async function resolveSymbol(query) {
+  const known = findKnown(query);
+  if (known) return known.live || known.ticker;
+  const q = query.trim();
+  const res = await fmp('search-name', { query: q, limit: 10 }).catch(() => []);
+  const hits = Array.isArray(res) ? res : [];
+  const exact = hits.find(h => h.symbol?.toLowerCase() === q.toLowerCase());
+  if (exact) return exact.symbol;
+  if (hits.length) return hits[0].symbol;
+  return q.toUpperCase(); // vielleicht direkt ein Ticker
+}
+
+// RSI nach Wilder aus Schlusskursen (älteste zuerst)
+function rsi(closes, period = 14) {
+  if (closes.length <= period) return null;
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gain += d; else loss -= d;
+  }
+  gain /= period; loss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    gain = (gain * (period - 1) + Math.max(d, 0)) / period;
+    loss = (loss * (period - 1) + Math.max(-d, 0)) / period;
+  }
+  return loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+}
+
+async function loadLive(query) {
+  const symbol = await resolveSymbol(query);
+  const cached = store.get(`rr:data:${symbol}`);
+  if (cached && Date.now() - cached.t < CACHE_MS) return cached.stock;
+
+  const from = new Date(Date.now() - 150 * 86400000).toISOString().slice(0, 10);
+  const [quote, profile, ratios, scores, growth, hist] = await Promise.all([
+    fmp('quote', { symbol }),
+    optional(fmp('profile', { symbol })),
+    optional(fmp('ratios-ttm', { symbol })),
+    optional(fmp('financial-scores', { symbol })),
+    optional(fmp('financial-growth', { symbol, limit: 1 })),
+    optional(fmp('historical-price-eod/light', { symbol, from })),
+  ]);
+  const q = first(quote);
+  if (!q || finite(q.price) == null) throw new Error(`Für „${query.trim()}“ wurde kein Kurs gefunden.`);
+  const p = first(profile) || {}, r = first(ratios) || {}, sc = first(scores) || {}, g = first(growth) || {};
+
+  const closes = (Array.isArray(hist) ? hist : [])
+    .map(h => ({ date: h.date, close: finite(h.price ?? h.close) }))
+    .filter(h => h.close != null)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(h => h.close);
+  const above = (price, avg) => (finite(avg) == null ? null : price > avg);
+  const known = STOCKS.find(s => (s.live || s.ticker) === symbol);
+
+  const stock = {
+    name: p.companyName || q.name || symbol,
+    ticker: symbol,
+    sector: p.sector || p.industry || 'Branche unbekannt',
+    country: p.country || q.exchange || '–',
+    live: true,
+    asOf: q.timestamp ? new Date(q.timestamp * 1000).toISOString() : new Date().toISOString(),
+    growth: pct(g.revenueGrowth ?? g.growthRevenue),
+    pe: finite(r.priceToEarningsRatioTTM ?? q.pe),
+    margin: pct(r.netProfitMarginTTM),
+    de: finite(r.debtToEquityRatioTTM),
+    cr: finite(r.currentRatioTTM),
+    z: finite(sc.altmanZScore),
+    rsi: rsi(closes),
+    fromHigh: finite(q.yearHigh) ? (q.price / q.yearHigh - 1) * 100 : null,
+    sma50: above(q.price, q.priceAvg50),
+    sma200: above(q.price, q.priceAvg200),
+    moat: known ? known.moat : null, // gibt es nicht als API-Kennzahl
+    beta: finite(p.beta),
+  };
+  store.set(`rr:data:${symbol}`, { t: Date.now(), stock });
+  return stock;
 }
 
 /* ---------------------------------------------------------------
@@ -286,7 +430,7 @@ function verdictFor(s) {
 /* ---------------------------------------------------------------
    State & Rendering
 ---------------------------------------------------------------- */
-const state = { stock: null, weights: { ...PRESETS['Ausgewogen'] } };
+const state = { stock: null, weights: { ...PRESETS['Ausgewogen'] }, apiKey: store.get('rr:apiKey') || '' };
 let radar;
 
 function normWeights() {
@@ -294,13 +438,30 @@ function normWeights() {
   return Object.fromEntries(Object.entries(state.weights).map(([k, v]) => [k, v / sum]));
 }
 
+const has = v => v !== null && v !== undefined && !(typeof v === 'number' && Number.isNaN(v));
+const tint = (color, alpha) => color.replace('hsl', 'hsla').replace(')', `, ${alpha})`);
+
 function analyse(stock) {
   const subs = {};
   for (const cat of CATEGORIES) {
-    const items = cat.metrics.map(m => ({ label: m.label, raw: m.fmt(stock), pts: Math.round(m.score(stock)) }));
-    subs[cat.key] = { items, score: Math.round(items.reduce((a, i) => a + i.pts, 0) / items.length) };
+    const items = cat.metrics.map(m => m.fields.every(f => has(stock[f]))
+      ? { label: m.label, raw: m.fmt(stock), pts: Math.round(m.score(stock)) }
+      : { label: m.label, raw: 'n. a.', pts: null });
+    const scored = items.filter(i => i.pts !== null);
+    subs[cat.key] = { items, score: scored.length ? Math.round(scored.reduce((a, i) => a + i.pts, 0) / scored.length) : null };
   }
   return subs;
+}
+
+function renderBadge(s) {
+  const el = document.getElementById('dataBadge');
+  const [text, cls] = s.live
+    ? [`Live · ${new Date(s.asOf).toLocaleDateString('de-DE')}`, 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30']
+    : s.simulated
+      ? ['Simuliert', 'bg-amber-500/15 text-amber-300 border-amber-500/30']
+      : ['Demo-Daten', 'bg-slate-700/40 text-slate-300 border-slate-600'];
+  el.textContent = text;
+  el.className = `shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded border ${cls}`;
 }
 
 function render() {
@@ -308,7 +469,11 @@ function render() {
   if (!s) return;
   const subs = analyse(s);
   const w = normWeights();
-  const total = Math.round(CATEGORIES.reduce((a, c) => a + subs[c.key].score * w[c.key], 0));
+  // Kategorien ohne Daten fallen raus, die übrigen Gewichte werden neu verteilt
+  const avail = CATEGORIES.filter(c => subs[c.key].score !== null);
+  const wAvail = avail.reduce((a, c) => a + w[c.key], 0) || 1;
+  const eff = Object.fromEntries(CATEGORIES.map(c => [c.key, subs[c.key].score === null ? 0 : w[c.key] / wAvail]));
+  const total = Math.round(avail.reduce((a, c) => a + subs[c.key].score * eff[c.key], 0));
   const col = scoreColor(total);
   const [verdict, text] = verdictFor(total);
 
@@ -316,7 +481,7 @@ function render() {
   document.getElementById('stockName').textContent = s.name;
   document.getElementById('stockTicker').textContent = s.ticker;
   document.getElementById('stockMeta').textContent = `${s.sector} · ${s.country}`;
-  document.getElementById('dataBadge').classList.toggle('hidden', !s.simulated);
+  renderBadge(s);
 
   // Gauge
   const C = 2 * Math.PI * 84;
@@ -328,54 +493,72 @@ function render() {
   const vEl = document.getElementById('verdict');
   vEl.textContent = verdict;
   vEl.style.color = col;
-  vEl.style.background = col.replace('hsl', 'hsla').replace(')', ', 0.14)');
+  vEl.style.background = tint(col, 0.14);
   document.getElementById('scaleMarker').style.left = `calc(${total}% - 3px)`;
 
-  const best = CATEGORIES.reduce((a, c) => subs[c.key].score > subs[a.key].score ? c : a);
-  const worst = CATEGORIES.reduce((a, c) => subs[c.key].score < subs[a.key].score ? c : a);
-  document.getElementById('summary').innerHTML =
-    `${text} Stärkster Bereich: <b class="text-white">${best.short}</b> (${subs[best.key].score}), ` +
-    `schwächster: <b class="text-white">${worst.short}</b> (${subs[worst.key].score}).`;
+  const summary = document.getElementById('summary');
+  if (avail.length) {
+    const best = avail.reduce((a, c) => subs[c.key].score > subs[a.key].score ? c : a);
+    const worst = avail.reduce((a, c) => subs[c.key].score < subs[a.key].score ? c : a);
+    const missing = CATEGORIES.length - avail.length;
+    summary.innerHTML =
+      `${text} Stärkster Bereich: <b class="text-white">${best.short}</b> (${subs[best.key].score}), ` +
+      `schwächster: <b class="text-white">${worst.short}</b> (${subs[worst.key].score}).` +
+      (missing ? ` <span class="text-amber-300">${missing} Bereich(e) ohne Daten, nicht gewertet.</span>` : '');
+  } else {
+    summary.textContent = 'Für diese Aktie liegen keine auswertbaren Kennzahlen vor.';
+  }
 
   // Teilbereiche
   document.getElementById('subScores').innerHTML = CATEGORIES.map(c => {
-    const sc = subs[c.key].score, pct = Math.round(w[c.key] * 100), contrib = (sc * w[c.key]).toFixed(1);
+    const sc = subs[c.key].score, pct = Math.round(eff[c.key] * 100);
     return `<div class="fade-in">
       <div class="flex items-baseline justify-between text-sm">
         <span class="flex items-center gap-2 text-slate-300"><span class="w-2 h-2 rounded-full" style="background:${c.color}"></span>${c.label}</span>
-        <span class="font-mono font-bold text-white">${sc}</span>
+        <span class="font-mono font-bold text-white">${sc ?? '–'}</span>
       </div>
       <div class="h-2 rounded-full bg-slate-800 mt-1.5 overflow-hidden">
-        <div class="bar-fill h-full rounded-full" style="width:${sc}%;background:${scoreColor(sc)}"></div>
+        <div class="bar-fill h-full rounded-full" style="width:${sc ?? 0}%;background:${scoreColor(sc ?? 0)}"></div>
       </div>
-      <div class="flex justify-between text-[11px] text-slate-500 mt-1"><span>Gewicht ${pct} %</span><span>+${contrib} Pkt.</span></div>
+      <div class="flex justify-between text-[11px] text-slate-500 mt-1">
+        <span>Gewicht ${pct} %</span><span>${sc === null ? 'keine Daten' : `+${(sc * eff[c.key]).toFixed(1)} Pkt.`}</span>
+      </div>
     </div>`;
   }).join('');
 
   // Radar
-  radar.data.datasets[0].data = CATEGORIES.map(c => subs[c.key].score);
+  radar.data.datasets[0].data = CATEGORIES.map(c => subs[c.key].score ?? 0);
   radar.data.datasets[0].borderColor = col;
   radar.data.datasets[0].pointBackgroundColor = CATEGORIES.map(c => c.color);
-  radar.data.datasets[0].backgroundColor = col.replace('hsl', 'hsla').replace(')', ', 0.18)');
-  radar.data.datasets[1].data = CATEGORIES.map(c => Math.round(w[c.key] * 100));
+  radar.data.datasets[0].backgroundColor = tint(col, 0.18);
+  radar.data.datasets[1].data = CATEGORIES.map(c => Math.round(eff[c.key] * 100));
   radar.update();
 
   // Kennzahlen
+  const moatOptions = ['<option value="">–</option>']
+    .concat(Array.from({ length: 11 }, (_, i) => `<option value="${i}"${s.moat === i ? ' selected' : ''}>${i}</option>`)).join('');
   document.getElementById('metrics').innerHTML = CATEGORIES.map(c => `
     <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-4 fade-in">
       <div class="flex items-center justify-between mb-3">
         <span class="text-xs font-semibold uppercase tracking-wide" style="color:${c.color}">${c.short}</span>
-        <span class="font-mono text-sm font-bold" style="color:${scoreColor(subs[c.key].score)}">${subs[c.key].score}</span>
+        <span class="font-mono text-sm font-bold" style="color:${subs[c.key].score === null ? '#64748b' : scoreColor(subs[c.key].score)}">${subs[c.key].score ?? '–'}</span>
       </div>
       <ul class="space-y-2">${subs[c.key].items.map(i => `
         <li class="flex items-center justify-between gap-2 text-sm">
           <span class="text-slate-400 truncate">${i.label}</span>
           <span class="flex items-center gap-2 shrink-0">
-            <span class="font-mono text-slate-200">${i.raw}</span>
-            <span class="font-mono text-[11px] w-9 text-center rounded py-0.5" style="color:${scoreColor(i.pts)};background:${scoreColor(i.pts).replace('hsl','hsla').replace(')',',0.12)')}">${i.pts}</span>
+            <span class="font-mono ${i.pts === null ? 'text-slate-500' : 'text-slate-200'}">${i.raw}</span>
+            <span class="font-mono text-[11px] w-9 text-center rounded py-0.5" style="${i.pts === null
+              ? 'color:#64748b;background:rgba(100,116,139,0.12)'
+              : `color:${scoreColor(i.pts)};background:${tint(scoreColor(i.pts), 0.12)}`}">${i.pts ?? '–'}</span>
           </span>
         </li>`).join('')}
       </ul>
+      ${c.key === 'quality' ? `
+      <label class="flex items-center justify-between gap-2 text-xs text-slate-500 mt-3 pt-3 border-t border-slate-800">
+        <span>Moat selbst einschätzen (0–10)</span>
+        <select id="moatSelect" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 font-mono">${moatOptions}</select>
+      </label>` : ''}
     </div>`).join('');
 
   renderWeights();
@@ -412,13 +595,52 @@ function animateNumber(el, to) {
   el._raf = requestAnimationFrame(step);
 }
 
-function selectStock(query) {
-  const stock = findStock(query);
-  if (!stock) return;
+function setError(msg) {
+  const el = document.getElementById('loadError');
+  el.textContent = msg;
+  el.hidden = !msg;
+}
+
+function setLoading(on) {
+  const btn = document.getElementById('analyseBtn');
+  btn.disabled = on;
+  btn.textContent = on ? 'Lade …' : 'Analysieren';
+}
+
+function renderSource() {
+  const el = document.getElementById('sourceStatus');
+  el.textContent = state.apiKey ? 'Live (Financial Modeling Prep)' : 'Demo-Daten';
+  el.className = `font-semibold ${state.apiKey ? 'text-emerald-300' : 'text-slate-400'}`;
+  document.getElementById('apiKey').value = state.apiKey;
+}
+
+let loadSeq = 0; // nur die zuletzt gestartete Suche darf das Ergebnis setzen
+async function selectStock(query) {
+  if (!query.trim()) return;
+  const seq = ++loadSeq;
+  setError('');
+  let stock;
+  if (state.apiKey) {
+    setLoading(true);
+    try {
+      stock = await loadLive(query);
+    } catch (e) {
+      stock = findStock(query);
+      if (seq === loadSeq) setError(`${e.message} Angezeigt werden ${stock.simulated ? 'simulierte Daten' : 'Demo-Daten'}.`);
+    }
+    if (seq === loadSeq) setLoading(false);
+  } else {
+    stock = findStock(query);
+  }
+  if (seq !== loadSeq || !stock) return;
+
+  const moat = store.get(`rr:moat:${stock.ticker}`);
+  if (Number.isInteger(moat)) stock.moat = moat;
   state.stock = stock;
   document.getElementById('searchInput').value = stock.name;
+  const known = STOCKS.find(k => k.name === stock.name || (k.live || k.ticker) === stock.ticker);
   document.querySelectorAll('[data-quick]').forEach(b => {
-    const active = b.dataset.quick === stock.name;
+    const active = b.dataset.quick === known?.name;
     b.className = `text-sm px-3 py-1.5 rounded-lg border transition ${active
       ? 'bg-white text-slate-900 border-white font-semibold'
       : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-700'}`;
@@ -488,6 +710,33 @@ function init() {
         tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.formattedValue}` } },
       },
     },
+  });
+
+  // Datenquelle
+  const reloadCurrent = () => state.stock && selectStock(state.stock.simulated ? state.stock.name : state.stock.ticker);
+  document.getElementById('saveKey').addEventListener('click', () => {
+    state.apiKey = document.getElementById('apiKey').value.trim();
+    if (state.apiKey) store.set('rr:apiKey', state.apiKey); else store.del('rr:apiKey');
+    renderSource();
+    reloadCurrent();
+  });
+  document.getElementById('clearKey').addEventListener('click', () => {
+    state.apiKey = '';
+    store.del('rr:apiKey');
+    renderSource();
+    reloadCurrent();
+  });
+  if (!state.apiKey) document.getElementById('sourcePanel').open = true;
+  renderSource();
+
+  // Eigene Moat-Einschätzung je Aktie merken
+  document.getElementById('metrics').addEventListener('change', e => {
+    if (e.target.id !== 'moatSelect' || !state.stock) return;
+    const v = e.target.value === '' ? null : +e.target.value;
+    if (v === null) store.del(`rr:moat:${state.stock.ticker}`); else store.set(`rr:moat:${state.stock.ticker}`, v);
+    const known = STOCKS.find(k => (k.live || k.ticker) === state.stock.ticker || k.name === state.stock.name);
+    state.stock.moat = v ?? (state.stock.simulated ? simulateStock(state.stock.name).moat : known?.moat ?? null);
+    render();
   });
 
   initFullscreen();
