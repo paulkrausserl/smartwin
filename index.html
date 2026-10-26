@@ -101,7 +101,7 @@
           <button id="clearKey" type="button" class="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 text-sm transition">Key entfernen</button>
         </div>
         <p class="text-[11px] text-slate-500 mt-2 leading-relaxed">
-          Einen kostenlosen Key bekommst du auf financialmodelingprep.com (250 Abrufe pro Tag, eine Analyse braucht etwa 6).
+          Einen kostenlosen Key bekommst du auf financialmodelingprep.com (250 Abrufe pro Tag, eine Analyse braucht etwa 7).
           Der Key wird nur in diesem Browser gespeichert. Ergebnisse werden 12 Stunden zwischengespeichert.
         </p>
       </details>
@@ -257,7 +257,7 @@ const CATEGORIES = [
   {
     key: 'quality', label: 'Qualitativ & Marktstellung', short: 'Qualität', color: '#fbbf24',
     metrics: [
-      { label: 'Burggraben (Moat)', fields: ['moat'], fmt: s => `${s.moat} / 10`, score: s => s.moat * 10 },
+      { label: 'Burggraben (Moat)', fields: ['moat'], fmt: s => `${s.moatOverride == null && s.moatInfo ? '≈ ' : ''}${s.moat} / 10`, score: s => s.moat * 10 },
       { label: 'Beta', fields: ['beta'], fmt: s => num(s.beta, 2), score: s => s.beta <= 1 ? lin(s.beta, 0.2, 0.9) : lin(s.beta, 2.3, 0.9) },
     ],
   },
@@ -358,6 +358,30 @@ async function resolveSymbol(query) {
   return { symbol: hits[0]?.symbol || q.toUpperCase(), hits }; // ohne Treffer: vielleicht direkt ein Ticker
 }
 
+// Burggraben gibt es nicht als API-Kennzahl. Näherung aus dem, was ein Moat bewirkt:
+// dauerhaft hohe Kapitalrendite (ROIC), Preissetzungsmacht (Bruttomarge) und Skalenvorteile (Börsenwert).
+function estimateMoat({ roic, grossMargin, marketCap, currency }) {
+  const parts = [
+    { w: 0.45, pts: roic == null ? null : lin(roic, 0, 20), text: roic == null ? null : `ROIC ${num(roic)} %` },
+    // Bei Banken und Versicherungen gibt es keine sinnvolle Bruttomarge
+    { w: 0.35, pts: grossMargin == null || grossMargin <= 0 ? null : lin(grossMargin, 15, 60),
+      text: grossMargin == null || grossMargin <= 0 ? null : `Bruttomarge ${num(grossMargin)} %` },
+    { w: 0.2, pts: marketCap == null || marketCap <= 0 ? null : lin(Math.log10(marketCap), 9, 12),
+      text: marketCap == null || marketCap <= 0 ? null : `Börsenwert ${formatCap(marketCap)}${currency ? ` ${currency}` : ''}` },
+  ].filter(x => x.pts !== null);
+  if (!parts.length) return { moat: null, moatInfo: null };
+  const w = parts.reduce((a, x) => a + x.w, 0);
+  return {
+    moat: Math.round(parts.reduce((a, x) => a + x.pts * x.w, 0) / w / 10),
+    moatInfo: parts.map(x => x.text).join(' · '),
+  };
+}
+function formatCap(v) {
+  if (v >= 1e12) return `${num(v / 1e12)} Bio.`;
+  if (v >= 1e9) return `${num(v / 1e9, 0)} Mrd.`;
+  return `${num(v / 1e6, 0)} Mio.`;
+}
+
 // RSI nach Wilder aus Schlusskursen (älteste zuerst)
 function rsi(closes, period = 14) {
   if (closes.length <= period) return null;
@@ -378,21 +402,22 @@ function rsi(closes, period = 14) {
 // Liefert [stock, hits]; hits = null, wenn der Ticker direkt vorgegeben war
 async function loadLive(query, forcedSymbol) {
   const { symbol, hits } = forcedSymbol ? { symbol: forcedSymbol, hits: null } : await resolveSymbol(query);
-  const cached = store.get(`rr:data:${symbol}`);
+  const cached = store.get(`rr:data2:${symbol}`);
   if (cached && Date.now() - cached.t < CACHE_MS) return [cached.stock, hits];
 
   const from = new Date(Date.now() - 150 * 86400000).toISOString().slice(0, 10);
-  const [quote, profile, ratios, scores, growth, hist] = await Promise.all([
+  const [quote, profile, ratios, keyMetrics, scores, growth, hist] = await Promise.all([
     fmp('quote', { symbol }),
     optional(fmp('profile', { symbol })),
     optional(fmp('ratios-ttm', { symbol })),
+    optional(fmp('key-metrics-ttm', { symbol })),
     optional(fmp('financial-scores', { symbol })),
     optional(fmp('financial-growth', { symbol, limit: 1 })),
     optional(fmp('historical-price-eod/light', { symbol, from })),
   ]);
   const q = first(quote);
   if (!q || finite(q.price) == null) throw new Error(`Für „${query.trim()}“ wurde kein Kurs gefunden.`);
-  const p = first(profile) || {}, r = first(ratios) || {}, sc = first(scores) || {}, g = first(growth) || {};
+  const p = first(profile) || {}, r = first(ratios) || {}, km = first(keyMetrics) || {}, sc = first(scores) || {}, g = first(growth) || {};
 
   const closes = (Array.isArray(hist) ? hist : [])
     .map(h => ({ date: h.date, close: finite(h.price ?? h.close) }))
@@ -419,10 +444,15 @@ async function loadLive(query, forcedSymbol) {
     fromHigh: finite(q.yearHigh) ? (q.price / q.yearHigh - 1) * 100 : null,
     sma50: above(q.price, q.priceAvg50),
     sma200: above(q.price, q.priceAvg200),
-    moat: known ? known.moat : null, // gibt es nicht als API-Kennzahl
+    ...estimateMoat({
+      roic: pct(km.returnOnInvestedCapitalTTM ?? r.returnOnInvestedCapitalTTM),
+      grossMargin: pct(r.grossProfitMarginTTM),
+      marketCap: finite(p.marketCap ?? q.marketCap),
+      currency: p.currency,
+    }),
     beta: finite(p.beta),
   };
-  store.set(`rr:data:${symbol}`, { t: Date.now(), stock });
+  store.set(`rr:data2:${symbol}`, { t: Date.now(), stock });
   return [stock, hits];
 }
 
@@ -546,8 +576,11 @@ function render() {
   radar.update();
 
   // Kennzahlen
-  const moatOptions = ['<option value="">–</option>']
-    .concat(Array.from({ length: 11 }, (_, i) => `<option value="${i}"${s.moat === i ? ' selected' : ''}>${i}</option>`)).join('');
+  const moatOptions = ['<option value="">Auto</option>']
+    .concat(Array.from({ length: 11 }, (_, i) => `<option value="${i}"${s.moatOverride === i ? ' selected' : ''}>${i}</option>`)).join('');
+  const moatNote = s.moatOverride != null
+    ? 'Eigene Einschätzung aktiv.'
+    : s.moatInfo ? `Burggraben geschätzt aus ${s.moatInfo}.` : '';
   document.getElementById('metrics').innerHTML = CATEGORIES.map(c => `
     <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-4 fade-in">
       <div class="flex items-center justify-between mb-3">
@@ -566,11 +599,14 @@ function render() {
         </li>`).join('')}
       </ul>
       ${c.key === 'quality' ? `
+      ${moatNote ? `<p id="moatNote" class="text-[11px] text-slate-500 mt-3 leading-relaxed"></p>` : ''}
       <label class="flex items-center justify-between gap-2 text-xs text-slate-500 mt-3 pt-3 border-t border-slate-800">
-        <span>Moat selbst einschätzen (0–10)</span>
+        <span>Moat anpassen (optional)</span>
         <select id="moatSelect" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-200 font-mono">${moatOptions}</select>
       </label>` : ''}
     </div>`).join('');
+  const noteEl = document.getElementById('moatNote');
+  if (noteEl) noteEl.textContent = moatNote; // Firmendaten nie als HTML einsetzen
 
   renderWeights();
 }
@@ -668,8 +704,10 @@ async function selectStock(query, symbol) {
   if (hits !== null) state.hits = hits;
   renderHits(state.hits, stock.ticker);
 
+  stock.moatBase = stock.moat;
   const moat = store.get(`rr:moat:${stock.ticker}`);
-  if (Number.isInteger(moat)) stock.moat = moat;
+  stock.moatOverride = Number.isInteger(moat) ? moat : null;
+  if (stock.moatOverride !== null) stock.moat = stock.moatOverride;
   state.stock = stock;
   document.getElementById('searchInput').value = stock.name;
   const known = STOCKS.find(k => k.name === stock.name || (k.live || k.ticker) === stock.ticker);
@@ -768,8 +806,8 @@ function init() {
     if (e.target.id !== 'moatSelect' || !state.stock) return;
     const v = e.target.value === '' ? null : +e.target.value;
     if (v === null) store.del(`rr:moat:${state.stock.ticker}`); else store.set(`rr:moat:${state.stock.ticker}`, v);
-    const known = STOCKS.find(k => (k.live || k.ticker) === state.stock.ticker || k.name === state.stock.name);
-    state.stock.moat = v ?? (state.stock.simulated ? simulateStock(state.stock.name).moat : known?.moat ?? null);
+    state.stock.moatOverride = v;
+    state.stock.moat = v ?? state.stock.moatBase;
     render();
   });
 
