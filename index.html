@@ -397,7 +397,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '2.0';
+const APP_VERSION = '2.1';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -699,7 +699,7 @@ async function loadLive(query, forcedSymbol) {
   }
   if (!symbol) {
     if (blocked.length) {
-      throw fmpError('plan', `„${query.trim()}“ ist im Gratis-Tarif von FMP nicht enthalten (geprüft: ${blocked.join(', ')}). Meist betrifft das Börsen außerhalb der USA.`);
+      throw fmpError('plan', `„${query.trim()}“ ist im Gratis-Tarif von FMP nicht verfügbar (geprüft: ${blocked.join(', ')}). Der Gratis-Tarif deckt nicht alle Aktien ab, vor allem nicht Börsen außerhalb der USA.`);
     }
     throw fmpError('api', `Für „${query.trim()}“ wurde kein Kurs gefunden.`);
   }
@@ -1250,6 +1250,16 @@ async function selectStock(query, symbol) {
     try {
       [stock, hits] = await loadLive(query, symbol);
     } catch (e) {
+      // Gesperrt oder nicht gefunden: keine Ersatzzahlen für eine echte Firma zeigen, die bisherige Ansicht bleibt.
+      // Nur bei Verbindungs- oder Key-Problemen (oder wenn noch nichts angezeigt wird) auf Demo-Daten ausweichen.
+      if ((e.code === 'plan' || e.code === 'api') && state.stock) {
+        if (seq === loadSeq) {
+          setLoading(false);
+          setError(`${e.message} Angezeigt wird weiter ${state.stock.name}.`);
+          document.getElementById('searchInput').value = query;
+        }
+        return;
+      }
       stock = findStock(query);
       if (seq === loadSeq) setError(`${e.message} Angezeigt werden ${stock.simulated ? 'simulierte Daten' : 'Demo-Daten'}.`);
     }
