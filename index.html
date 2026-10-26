@@ -61,6 +61,10 @@
     .chip { font-size: .8125rem; padding: .35rem .75rem; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); background: transparent; transition: all .15s; }
     .chip:hover { color: var(--text); border-color: #3a4657; }
     .chip[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+    .seg { display: inline-flex; padding: 2px; border-radius: .7rem; border: 1px solid var(--line-2); }
+    .seg-item { font-size: .8125rem; padding: .4rem .8rem; border-radius: .55rem; color: var(--muted); transition: color .15s, background .15s; }
+    .seg-item:hover { color: var(--text); }
+    .seg-item[aria-current="page"] { background: var(--text); color: var(--bg); font-weight: 600; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .metric > summary { list-style: none; cursor: pointer; }
@@ -130,6 +134,10 @@
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <nav class="seg" aria-label="Bereich">
+          <a href="./" class="seg-item" aria-current="page">Aktien</a>
+          <a href="crypto.html" class="seg-item">Krypto</a>
+        </nav>
         <button type="button" data-open-criteria class="btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
           Bewertungskriterien
@@ -398,7 +406,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '2.3';
+const APP_VERSION = '2.4';
 
 /* ---------------------------------------------------------------
    Scoring

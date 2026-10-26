@@ -1,0 +1,1682 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Vom Home-Bildschirm gestartet: ohne Browserleisten -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SmartWin Krypto" />
+  <meta name="theme-color" content="#0a0d13" />
+  <title>SmartWin Krypto</title>
+  <script>
+    // Gewählten Modus vor dem ersten Zeichnen setzen
+    try { if (localStorage.getItem('rr:mode') === '"clean"') document.documentElement.dataset.mode = 'clean'; } catch { /* egal */ }
+  </script>
+  <script src="https://cdn.tailwindcss.com/3.4.5"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    /* Layout: Kopfzeile, Suche, Coin-Kopf mit Kennzahlenleiste, dann Score | Teilbereiche, Kennzahlen | Gewichtung */
+    :root {
+      --bg: #0a0d13; --panel: #10151e; --panel-2: #151b26; --line: #1e2633; --line-2: #2a3443;
+      --text: #e6ebf2; --muted: #8e9aab; --faint: #5f6b7c;
+      --accent: #3ecf8e; --accent-ink: #03140c; --up: #3ecf8e; --down: #f06363;
+      color-scheme: dark;
+    }
+    html, body { background: var(--bg); color: var(--text); }
+    body { background: linear-gradient(180deg, #0e1420 0, var(--bg) 420px) no-repeat, var(--bg); }
+    .app { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+    .inset { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .faint { color: var(--faint); }
+
+    .btn { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; line-height: 1.25rem; padding: .5rem .85rem;
+           border-radius: .6rem; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); transition: background .15s, border-color .15s; }
+    .btn:hover { background: #1a2230; border-color: #3a4657; }
+    .btn-sm { font-size: .8125rem; padding: .35rem .7rem; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+    .btn-primary:hover { background: #55dba0; border-color: #55dba0; }
+    .btn:disabled { opacity: .6; cursor: wait; }
+    .field { width: 100%; background: var(--bg); border: 1px solid var(--line-2); border-radius: .7rem; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s; }
+    .field::placeholder { color: var(--faint); }
+    .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(62, 207, 142, .18); }
+    .chip { font-size: .8125rem; padding: .35rem .75rem; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); background: transparent; transition: all .15s; }
+    .chip:hover { color: var(--text); border-color: #3a4657; }
+    .chip[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+    .seg { display: inline-flex; padding: 2px; border-radius: .7rem; border: 1px solid var(--line-2); }
+    .seg-item { font-size: .8125rem; padding: .4rem .8rem; border-radius: .55rem; color: var(--muted); transition: color .15s, background .15s; }
+    .seg-item:hover { color: var(--text); }
+    .seg-item[aria-current="page"] { background: var(--text); color: var(--bg); font-weight: 600; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .metric > summary { list-style: none; cursor: pointer; }
+    .metric > summary::-webkit-details-marker { display: none; }
+    .metric > summary:hover { background: rgba(255, 255, 255, .02); }
+    .metric .chev { transition: transform .2s; }
+    .metric[open] .chev { transform: rotate(90deg); }
+    .raw > summary { list-style: none; cursor: pointer; }
+    .raw > summary::-webkit-details-marker { display: none; }
+    .raw[open] .chev { transform: rotate(90deg); }
+
+    dialog { color: var(--text); }
+    dialog::backdrop { background: rgba(3, 6, 12, .72); backdrop-filter: blur(2px); }
+    .score-scale { background: linear-gradient(90deg, hsl(0 70% 52%) 0%, hsl(30 70% 52%) 25%, hsl(55 70% 50%) 50%, hsl(90 60% 48%) 75%, hsl(140 55% 48%) 100%); }
+
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 9999px;
+                        background: linear-gradient(90deg, var(--c) var(--p), var(--line-2) var(--p)); outline: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+                        background: var(--text); border: 4px solid var(--c); cursor: pointer; }
+    input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 4px solid var(--c); cursor: pointer; }
+
+    /* Clean-Modus: reines Schwarz, keine Flächen, nur Haarlinien und Graustufen */
+    :root[data-mode="clean"] {
+      --bg: #000; --panel: #000; --panel-2: #0b0b0b; --line: #1c1c1c; --line-2: #2a2a2a;
+      --text: #fff; --muted: #8a8a8a; --faint: #5c5c5c; --accent: #fff; --accent-ink: #000; --up: #fff; --down: #8a8a8a;
+    }
+    [data-mode="clean"] body { background: #000; font-family: Inter, system-ui, sans-serif; font-feature-settings: 'tnum' 1, 'cv11' 1; }
+    [data-mode="clean"] .num { font-family: Inter, system-ui, sans-serif; font-feature-settings: 'tnum' 1; }
+    [data-mode="clean"] .card { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding-left: 0; padding-right: 0; }
+    [data-mode="clean"] .inset { background: transparent; }
+    [data-mode="clean"] .btn { background: transparent; border-color: transparent; color: var(--muted); }
+    [data-mode="clean"] .btn:hover { color: var(--text); background: transparent; }
+    [data-mode="clean"] .btn-primary { background: #fff; border-color: #fff; color: #000; }
+    [data-mode="clean"] .btn-primary:hover { background: #e6e6e6; color: #000; }
+    [data-mode="clean"] .field { background: transparent; border-width: 0 0 1px; border-radius: 0; }
+    [data-mode="clean"] .field:focus { box-shadow: none; border-color: #fff; }
+    [data-mode="clean"] #searchInput { padding-left: 2.25rem; }
+    [data-mode="clean"] .gauge-box { width: auto; height: auto; margin: 1.25rem 0 .5rem; }
+    [data-mode="clean"] .gauge-box svg { display: none; }
+    [data-mode="clean"] .gauge-center { position: static; align-items: flex-start; }
+    [data-mode="clean"] #totalScore { font-size: 112px; font-weight: 300; letter-spacing: -.05em; }
+    [data-mode="clean"] #verdict { background: transparent !important; color: var(--muted) !important; padding: 0; text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 400; }
+    [data-mode="clean"] .score-scale { background: linear-gradient(90deg, #262626, #fff); height: 2px; }
+    [data-mode="clean"] .logo { background: #fff !important; color: #000 !important; }
+    [data-mode="clean"] input[type=range] { --c: #fff !important; }
+    [data-mode="clean"] #keyStats { border-radius: 0; border-width: 1px 0 0 !important; }
+    [data-mode="clean"] #loadError { background: transparent !important; border-color: var(--line-2) !important; color: var(--text) !important; }
+    [data-mode="clean"] .metric > summary:hover { background: transparent; }
+
+    .gauge-arc { transition: stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1), stroke .5s; }
+    .bar-fill  { transition: width .6s cubic-bezier(.2,.8,.2,1), background-color .4s; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+  <div class="app max-w-7xl mx-auto py-6 sm:py-8">
+
+    <!-- Kopfzeile -->
+    <header class="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div class="flex items-center gap-3">
+        <div class="logo w-9 h-9 rounded-lg grid place-items-center" style="background:var(--accent);color:var(--accent-ink)" aria-hidden="true">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M4 19V11M10 19V5M16 19v-6M22 19H2"/></svg>
+        </div>
+        <div>
+          <div class="text-[15px] font-semibold text-white leading-tight">SmartWin</div>
+          <div class="text-xs muted leading-tight">Risk-Reward-Analyse für Krypto</div>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <nav class="seg" aria-label="Bereich">
+          <a href="./" class="seg-item">Aktien</a>
+          <a href="crypto.html" class="seg-item" aria-current="page">Krypto</a>
+        </nav>
+        <button type="button" data-open-criteria class="btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+          Bewertungskriterien
+        </button>
+        <button id="modeBtn" type="button" class="btn" aria-pressed="false">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
+          <span id="modeLabel">Clean</span>
+        </button>
+        <button id="fullscreenBtn" type="button" class="btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <span id="fullscreenLabel">Vollbild</span>
+        </button>
+      </div>
+      <p id="fullscreenHint" hidden class="w-full text-xs text-amber-300 sm:text-right">
+        Vollbild ist in dieser Ansicht gesperrt. Öffne die Seite in Safari oder Chrome, oder lege sie über Teilen → „Zum Home-Bildschirm“ ab.
+      </p>
+    </header>
+
+    <!-- Suche -->
+    <section class="card p-4 sm:p-5 mb-6">
+      <form id="searchForm" class="flex flex-col sm:flex-row gap-3" autocomplete="off">
+        <div class="relative flex-1 min-w-0">
+          <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 faint" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <label for="searchInput" class="sr-only">Kryptowährung oder Kürzel</label>
+          <input id="searchInput" list="stockList" type="text" placeholder="Coin oder Kürzel, z. B. „Bitcoin“ oder „SOL“"
+                 class="field pl-11 pr-4 py-3 text-[15px]" />
+          <datalist id="stockList"></datalist>
+        </div>
+        <button id="analyseBtn" type="submit" class="btn btn-primary justify-center px-6 py-3 text-[15px]">Analysieren</button>
+      </form>
+      <div class="flex flex-wrap items-center gap-2 mt-4">
+        <span class="eyebrow mr-1">Schnellauswahl</span>
+        <div id="quickPicks" class="flex flex-wrap gap-2"></div>
+      </div>
+      <div id="altHits" hidden class="flex flex-wrap items-center gap-2 mt-3"></div>
+      <p id="loadError" hidden class="text-sm mt-3 px-3 py-2 rounded-lg" style="color:#ffb4b4;background:rgba(240,99,99,.08);border:1px solid rgba(240,99,99,.25)"></p>
+
+      <!-- Datenquelle -->
+      <p class="text-xs faint mt-4 pt-4 leading-relaxed" style="border-top:1px solid var(--line)">
+        Datenquelle: <span id="sourceStatus" class="font-semibold"></span>. Kein Key nötig: CoinGecko erlaubt ohne Konto etwa 10–30 Abrufe pro Minute,
+        eine Analyse braucht 2–3. Ergebnisse werden 6 Stunden zwischengespeichert. Alle Beträge in Euro.
+      </p>
+    </section>
+
+    <!-- Watchlist mit Ranking -->
+    <section id="watchCard" class="card p-4 sm:p-5 mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-baseline gap-2">
+          <h2 class="eyebrow">Watchlist</h2>
+          <span id="watchCount" class="text-xs faint num"></span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs faint">Sortieren</span>
+          <div id="watchSort" class="flex gap-1.5"></div>
+          <button id="compareBtn" type="button" class="btn btn-sm" disabled>Vergleichen</button>
+        </div>
+      </div>
+      <div id="watchBody" class="mt-3"></div>
+    </section>
+
+    <!-- Coin-Kopf mit Kennzahlenleiste -->
+    <section class="card p-5 sm:p-6 mb-6">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 id="stockName" class="text-2xl sm:text-[28px] font-semibold text-white tracking-tight" style="text-wrap:balance">–</h1>
+            <span id="stockTicker" class="num text-xs px-2 py-0.5 rounded-md muted" style="border:1px solid var(--line-2)"></span>
+            <span id="dataBadge"></span>
+            <button id="watchBtn" type="button" class="btn btn-sm" aria-pressed="false">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path id="watchStar" d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
+              <span id="watchLabel">Merken</span>
+            </button>
+          </div>
+          <p id="stockMeta" class="text-sm muted mt-1"></p>
+        </div>
+        <div id="priceBox" class="text-right">
+          <div id="stockPrice" class="num text-2xl sm:text-[28px] text-white leading-tight"></div>
+          <div id="stockChange" class="num text-sm mt-0.5"></div>
+        </div>
+      </div>
+      <div class="mt-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div id="rangeBtns" class="flex gap-1.5"></div>
+          <span id="rangeChange" class="num text-xs muted"></span>
+        </div>
+        <div id="priceChart" class="relative"></div>
+      </div>
+      <dl id="keyStats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px mt-5 rounded-xl overflow-hidden"
+          style="background:var(--line);border:1px solid var(--line)"></dl>
+      <div id="warnings" class="mt-4"></div>
+    </section>
+
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Gesamtscore -->
+      <section class="card p-5 sm:p-6 lg:col-span-4 flex flex-col">
+        <div class="flex items-center justify-between">
+          <h2 class="eyebrow">Gesamtscore</h2>
+          <span class="text-xs faint">0–100</span>
+        </div>
+        <div class="gauge-box relative mx-auto my-5 w-52 h-52">
+          <svg viewBox="0 0 200 200" class="w-full h-full -rotate-90" aria-hidden="true">
+            <circle cx="100" cy="100" r="84" fill="none" stroke="var(--line)" stroke-width="12" />
+            <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="84" fill="none" stroke="#3ecf8e"
+                    stroke-width="12" stroke-linecap="round" stroke-dasharray="527.79" stroke-dashoffset="527.79" />
+          </svg>
+          <div class="gauge-center absolute inset-0 flex flex-col items-center justify-center">
+            <span id="totalScore" class="num text-[56px] font-semibold text-white leading-none">0</span>
+            <span id="verdict" class="mt-3 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">–</span>
+          </div>
+        </div>
+        <div>
+          <div class="relative h-1.5 rounded-full score-scale">
+            <div id="scaleMarker" class="absolute -top-1.5 w-1 h-4 rounded-sm transition-all duration-700" style="left:0%;background:var(--text);box-shadow:0 0 0 2px var(--panel)"></div>
+          </div>
+          <div class="flex justify-between text-[10px] uppercase tracking-wide faint mt-2">
+            <span>Hohes Risiko</span><span>Neutral</span><span>Exzellent</span>
+          </div>
+        </div>
+        <p id="summary" class="text-sm muted mt-4 leading-relaxed"></p>
+        <div class="grid grid-cols-2 gap-3 mt-5">
+          <div>
+            <h3 class="eyebrow mb-2" style="color:var(--up)">Stärken</h3>
+            <ul id="strengths" class="space-y-1.5 text-sm"></ul>
+          </div>
+          <div>
+            <h3 class="eyebrow mb-2" style="color:var(--down)">Schwächen</h3>
+            <ul id="weaknesses" class="space-y-1.5 text-sm"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Teilbereiche -->
+      <section class="card p-5 sm:p-6 lg:col-span-8">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="eyebrow">Teilbereiche</h2>
+          <span class="text-xs faint">Score · Gewicht · Beitrag zum Gesamtscore</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          <div class="relative h-72"><canvas id="radarChart" aria-label="Radar-Diagramm der vier Teilbereiche" role="img"></canvas></div>
+          <div id="subScores" class="space-y-4"></div>
+        </div>
+      </section>
+
+      <!-- Kennzahlen im Detail -->
+      <section class="card p-5 sm:p-6 lg:col-span-8">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="eyebrow">Kennzahlen im Detail</h2>
+            <p class="text-xs faint mt-1">Zeile antippen für genaue Werte und Berechnung.</p>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" id="toggleAll" class="btn btn-sm">Alle aufklappen</button>
+            <button type="button" data-open-criteria class="btn btn-sm">Kriterien</button>
+          </div>
+        </div>
+        <div id="metrics" class="space-y-5"></div>
+        <details id="rawData" class="raw mt-6 inset">
+          <summary class="flex items-center justify-between gap-3 px-4 py-3">
+            <span class="text-sm font-medium text-white">Rohdaten</span>
+            <span class="flex items-center gap-2 text-xs faint">alle abgerufenen Werte
+              <svg class="chev w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+            </span>
+          </summary>
+          <div class="overflow-x-auto px-4 pb-4">
+            <table class="w-full text-sm">
+              <tbody id="rawBody"></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <!-- Gewichtung -->
+      <section class="card p-5 sm:p-6 lg:col-span-4 self-start">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="eyebrow">Gewichtung</h2>
+          <button id="resetWeights" type="button" class="text-xs muted hover:text-white transition">Zurücksetzen</button>
+        </div>
+        <p class="text-xs faint mb-4">Die Regler werden automatisch auf 100 % normiert.</p>
+        <div class="flex flex-wrap gap-2 mb-5" id="presets"></div>
+        <div id="weightSliders" class="space-y-5"></div>
+        <div class="mt-6">
+          <div class="flex h-2 rounded-full overflow-hidden" id="weightBar"></div>
+          <div class="flex justify-between text-[10px] faint mt-1.5"><span>Verteilung</span><span>Σ 100 %</span></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Vergleich -->
+    <dialog id="compareDialog" aria-labelledby="compareTitle"
+            class="rounded-2xl p-0 w-[min(1100px,calc(100vw-24px))] max-h-[90vh]" style="background:var(--panel);border:1px solid var(--line-2)">
+      <div class="sticky top-0 z-10 flex items-center justify-between gap-4 px-5 sm:px-6 py-4" style="background:var(--panel);border-bottom:1px solid var(--line)">
+        <h2 id="compareTitle" class="text-lg font-semibold text-white">Vergleich</h2>
+        <button type="button" id="closeCompare" class="btn btn-sm">Schließen</button>
+      </div>
+      <div class="px-5 sm:px-6 py-5 space-y-6">
+        <div id="compareLegend" class="flex flex-wrap gap-x-5 gap-y-2"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 class="eyebrow mb-2">Teilbereiche</h3>
+            <div class="relative h-72"><canvas id="compareRadar" role="img" aria-label="Radar-Vergleich der Teilbereiche"></canvas></div>
+          </div>
+          <div>
+            <h3 class="eyebrow mb-2">Kursentwicklung 6 Monate</h3>
+            <div id="compareChart"></div>
+          </div>
+        </div>
+        <div>
+          <h3 class="eyebrow mb-2">Kennzahlen</h3>
+          <div class="overflow-x-auto"><table class="w-full text-sm" id="compareTable"></table></div>
+          <p class="text-xs faint mt-2">Der beste Wert je Zeile ist hervorgehoben. Werte aus dem Stand, zu dem der Coin gemerkt bzw. zuletzt analysiert wurde.</p>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Bewertungskriterien -->
+    <dialog id="criteriaDialog" aria-labelledby="criteriaTitle"
+            class="rounded-2xl p-0 w-[min(760px,calc(100vw-32px))] max-h-[85vh]" style="background:var(--panel);border:1px solid var(--line-2)">
+      <div class="sticky top-0 flex items-center justify-between gap-4 px-6 py-4" style="background:var(--panel);border-bottom:1px solid var(--line)">
+        <h2 id="criteriaTitle" class="text-lg font-semibold text-white">Bewertungskriterien</h2>
+        <button type="button" id="closeCriteria" class="btn btn-sm">Schließen</button>
+      </div>
+      <div id="criteriaBody" class="px-6 py-5 space-y-6 text-sm leading-relaxed"></div>
+    </dialog>
+
+    <!-- Versionsnummer: bei jedem Update erhöhen, damit man sieht, ob GitHub Pages schon aktualisiert hat -->
+    <div id="appVersion" class="fixed z-20 num text-[11px] px-2 py-1 rounded-md muted pointer-events-none"
+         style="background:rgba(16,21,30,.9);border:1px solid var(--line-2);right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px))"></div>
+
+    <footer class="text-center text-[11px] faint mt-10 pb-8 leading-relaxed">
+      Daten: CoinGecko (live) oder Demo-Datensatz. Kennzahlen werden in 0–100 Punkte umgerechnet, je Bereich gemittelt und gewichtet summiert.<br />
+      Keine Anlageberatung. Kryptowährungen können ihren Wert vollständig verlieren.
+    </footer>
+  </div>
+<script>
+/* ---------------------------------------------------------------
+   Demo-Daten (illustrative Beispielwerte, keine Echtzeitdaten), nur ohne Verbindung zu CoinGecko
+   marketCap/volume in € | circ/maxSupply/totalSupply: Stückzahl | rsi: RSI(14)
+   fromHigh: Abstand zum 52W-Hoch % | vol: Volatilität p. a. % | maxDD: max. Rückgang 1 J. %
+   athChange: Abstand zum Allzeithoch % | age: Jahre seit Start
+---------------------------------------------------------------- */
+const STOCKS = [
+  { name: 'Bitcoin',  ticker: 'BTC',  cgId: 'bitcoin',  sector: 'Layer 1', rank: 1,  marketCap: 1.6e12, volume: 3.5e10, circ: 19.9e6, maxSupply: 21e6, totalSupply: 19.9e6, rsi: 55, fromHigh: -12, sma50: true,  sma200: true,  vol: 45, maxDD: -28, athChange: -12, age: 17.8 },
+  { name: 'Ethereum', ticker: 'ETH',  cgId: 'ethereum', sector: 'Smart Contracts', rank: 2, marketCap: 3.5e11, volume: 2e10, circ: 120.7e6, maxSupply: null, totalSupply: 120.7e6, rsi: 48, fromHigh: -25, sma50: false, sma200: true, vol: 65, maxDD: -45, athChange: -25, age: 11.2 },
+  { name: 'Solana',   ticker: 'SOL',  cgId: 'solana',   sector: 'Smart Contracts', rank: 6, marketCap: 7.5e10, volume: 4e9, circ: 540e6, maxSupply: null, totalSupply: 610e6, rsi: 44, fromHigh: -40, sma50: false, sma200: false, vol: 80, maxDD: -55, athChange: -45, age: 6.6 },
+  { name: 'XRP',      ticker: 'XRP',  cgId: 'ripple',   sector: 'Zahlungen', rank: 4, marketCap: 1.3e11, volume: 4e9, circ: 60e9, maxSupply: 100e9, totalSupply: 100e9, rsi: 52, fromHigh: -30, sma50: true, sma200: true, vol: 75, maxDD: -40, athChange: -35, age: 13.8 },
+  { name: 'BNB',      ticker: 'BNB',  cgId: 'binancecoin', sector: 'Börsen-Token', rank: 5, marketCap: 1e11, volume: 2e9, circ: 140e6, maxSupply: 200e6, totalSupply: 140e6, rsi: 58, fromHigh: -10, sma50: true, sma200: true, vol: 50, maxDD: -30, athChange: -10, age: 9.3 },
+  { name: 'Dogecoin', ticker: 'DOGE', cgId: 'dogecoin', sector: 'Meme', rank: 9, marketCap: 2.8e10, volume: 1.5e9, circ: 150e9, maxSupply: null, totalSupply: 150e9, rsi: 40, fromHigh: -50, sma50: false, sma200: false, vol: 90, maxDD: -60, athChange: -75, age: 12.9 },
+  { name: 'Cardano',  ticker: 'ADA',  cgId: 'cardano',  sector: 'Smart Contracts', rank: 11, marketCap: 2.2e10, volume: 7e8, circ: 36e9, maxSupply: 45e9, totalSupply: 45e9, rsi: 42, fromHigh: -45, sma50: false, sma200: false, vol: 85, maxDD: -60, athChange: -80, age: 9.1 },
+];
+for (const c of STOCKS) {
+  c.turnover = c.volume / c.marketCap * 100;
+  c.circRatio = c.circ / (c.maxSupply ?? c.totalSupply) * 100;
+  c.capped = c.maxSupply != null;
+}
+const QUICK = ['Bitcoin', 'Ethereum', 'Solana', 'XRP'];
+const APP_VERSION = '2.4';
+
+/* ---------------------------------------------------------------
+   Scoring-Logik
+---------------------------------------------------------------- */
+const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
+// linear: v auf `bad` → 0 Punkte, v auf `good` → 100 Punkte (funktioniert in beide Richtungen)
+const lin = (v, bad, good) => clamp(((v - bad) / (good - bad)) * 100);
+
+// Zahlen im deutschen Format, ohne überflüssige Nachkommastellen
+const num = (v, d = 1) => v.toLocaleString('de-DE', { maximumFractionDigits: d });
+const f2 = v => v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const signed = v => `${v > 0 ? '+' : ''}${num(v)} %`;
+// Kurse unter 1 € (z. B. Shiba Inu) brauchen mehr Stellen
+const price = v => (Math.abs(v) >= 1 ? f2(v) : v.toLocaleString('de-DE', { maximumSignificantDigits: 4 }));
+const units = v => (v >= 1e9 ? `${num(v / 1e9)} Mrd.` : v >= 1e6 ? `${num(v / 1e6)} Mio.` : num(v, 0));
+
+// Zeile für die aufgeklappte Ansicht; fehlt der Wert (z. B. bei Demo-Daten), entfällt die Zeile
+const row = (label, value) => (has(value) && !String(value).includes('undefined') ? [label, value] : null);
+// Rechenweg einer linearen Abbildung, z. B. „(12,40 − (−5,00)) ÷ 30,00 × 100 = 58,0“
+const linCalc = (v, bad, good) => {
+  const raw = ((v - bad) / (good - bad)) * 100;
+  const capped = clamp(raw);
+  return `(${f2(v)} − ${bad < 0 ? `(${f2(bad)})` : f2(bad)}) ÷ (${f2(good)} − ${bad < 0 ? `(${f2(bad)})` : f2(bad)}) × 100 = ${num(raw, 1)}`
+    + (capped !== raw ? ` → begrenzt auf ${num(capped, 0)}` : '');
+};
+
+// `fields`: fehlt eines davon, zählt die Kennzahl nicht in den Kategorie-Score.
+// `detail`: genaue Werte und Rechenweg für die aufgeklappte Zeile.
+const CATEGORIES = [
+  {
+    key: 'market', label: 'Größe & Liquidität', short: 'Größe', color: '#5ab0f0',
+    metrics: [
+      { label: 'Marktkapitalisierung', fields: ['marketCap'], fmt: s => `${formatCap(s.marketCap)} €`, score: s => lin(Math.log10(s.marketCap), 8, 11.5),
+        rule: 'Logarithmisch: 100 Mio. € oder weniger = 0 Punkte, ab etwa 316 Mrd. € = 100. Große Coins sind schwerer zu manipulieren.',
+        detail: s => [
+          row('Marktkapitalisierung', `${formatCap(s.marketCap)} € (${s.marketCap.toLocaleString('de-DE', { maximumFractionDigits: 0 })} €)`),
+          row('Berechnung', `log₁₀ = ${f2(Math.log10(s.marketCap))} → ${linCalc(Math.log10(s.marketCap), 8, 11.5)}`),
+        ] },
+      { label: 'Rang', fields: ['rank'], fmt: s => `#${s.rank}`, score: s => lin(Math.log10(s.rank), Math.log10(300), Math.log10(3)),
+        rule: 'Platz nach Marktkapitalisierung, logarithmisch: Top 3 = 100, Platz 30 = 50, ab Platz 300 = 0.',
+        detail: s => [
+          row('Rang bei CoinGecko', `#${s.rank}`),
+          row('Berechnung', `log₁₀(${s.rank}) = ${f2(Math.log10(s.rank))} → ${num(lin(Math.log10(s.rank), Math.log10(300), Math.log10(3)), 1)} Punkte`),
+        ] },
+      { label: 'Liquidität (Volumen / Marktkap.)', fields: ['turnover'], fmt: s => `${num(s.turnover, 2)} %`, score: s => lin(s.turnover, 0.2, 4),
+        rule: 'Handelsvolumen der letzten 24 h im Verhältnis zur Marktkapitalisierung: 0,2 % oder weniger = 0, 4 % oder mehr = 100.',
+        detail: s => [
+          row('Volumen 24 h', has(s.volume) ? `${formatCap(s.volume)} €` : null),
+          row('Umschlag', `${f2(s.turnover)} % der Marktkapitalisierung pro Tag`),
+          row('Berechnung', linCalc(s.turnover, 0.2, 4)),
+        ] },
+    ],
+  },
+  {
+    key: 'supply', label: 'Tokenomics', short: 'Tokenomics', color: '#a38cf5',
+    metrics: [
+      { label: 'Umlaufquote', fields: ['circRatio'], fmt: s => `${num(s.circRatio, 0)} %`, score: s => lin(s.circRatio, 30, 95),
+        rule: 'Anteil der Coins, die schon im Umlauf sind (an der Höchstmenge, sonst an der Gesamtmenge): 30 % oder weniger = 0, 95 % oder mehr = 100. Niedrige Quote = künftige Verwässerung.',
+        detail: s => [
+          row('Im Umlauf', has(s.circ) ? `${units(s.circ)} ${s.ticker}` : null),
+          row(s.maxSupply != null ? 'Höchstmenge' : 'Gesamtmenge (keine Höchstmenge)', has(s.maxSupply ?? s.totalSupply) ? `${units(s.maxSupply ?? s.totalSupply)} ${s.ticker}` : null),
+          row('Berechnung', linCalc(s.circRatio, 30, 95)),
+        ] },
+      { label: 'Begrenzte Menge', fields: ['capped'], fmt: s => (s.capped ? 'ja' : 'nein'), score: s => (s.capped ? 100 : 30),
+        rule: 'Feste Höchstmenge (wie 21 Mio. bei Bitcoin) = 100. Ohne Obergrenze können beliebig neue Coins entstehen = 30.',
+        detail: s => [
+          row('Höchstmenge', s.capped ? `${units(s.maxSupply)} ${s.ticker}` : 'keine festgelegt'),
+          row('Ergebnis', s.capped ? 'Begrenzt → 100' : 'Unbegrenzt → 30'),
+        ] },
+    ],
+  },
+  {
+    key: 'tech', label: 'Technische Analyse & Momentum', short: 'Momentum', color: '#e97fb4',
+    metrics: [
+      // Sweet-Spot 45–60; überkauft (>70) und überverkauft (<30) werden abgestraft
+      { label: 'RSI (14)', fields: ['rsi'], fmt: s => num(s.rsi, 0), score: s => s.rsi < 45 ? lin(s.rsi, 20, 45) : s.rsi <= 60 ? 100 : lin(s.rsi, 85, 60),
+        rule: '45–60 = 100. Darunter sinkend bis 20 = 0 (überverkauft), darüber sinkend bis 85 = 0 (überkauft). Berechnet aus Tagesschlusskursen eines Jahres.',
+        detail: s => [
+          row('RSI (14 Tage, Wilder)', f2(s.rsi)),
+          row('Einordnung', s.rsi < 30 ? 'überverkauft' : s.rsi > 70 ? 'überkauft' : 'neutral'),
+          row('Datenbasis', s.rsiDays ? `${s.rsiDays} Tageskurse` : null),
+          row('Berechnung', s.rsi < 45 ? linCalc(s.rsi, 20, 45) : s.rsi <= 60 ? 'Im Idealbereich 45–60 → 100' : linCalc(s.rsi, 85, 60)),
+        ] },
+      { label: 'Abstand 52W-Hoch', fields: ['fromHigh'], fmt: s => `${num(s.fromHigh)} %`, score: s => lin(s.fromHigh, -70, -5),
+        rule: 'Krypto schwankt stärker als Aktien: bis 5 % unter dem Jahreshoch = 100, 70 % oder mehr darunter = 0.',
+        detail: s => [
+          row('Kurs', has(s.price) ? `${price(s.price)} €` : null),
+          row('52-Wochen-Hoch', has(s.yearHigh) ? `${price(s.yearHigh)} €` : null),
+          row('Abstand', `${f2(s.fromHigh)} %`),
+          row('Berechnung', linCalc(s.fromHigh, -70, -5)),
+        ] },
+      { label: 'Trend (GD50 / GD200)', fields: ['sma50', 'sma200'], fmt: s => `${s.sma50 ? '▲' : '▼'} 50 · ${s.sma200 ? '▲' : '▼'} 200`,
+        score: s => (s.sma50 && s.sma200) ? 100 : s.sma200 ? 60 : s.sma50 ? 35 : 5,
+        rule: 'Kurs über GD50 und GD200 = 100, nur über GD200 = 60, nur über GD50 = 35, unter beiden = 5.',
+        detail: s => [
+          row('Kurs', has(s.price) ? `${price(s.price)} €` : null),
+          row('Gleitender Durchschnitt 50 Tage', has(s.avg50) ? `${price(s.avg50)} € → Kurs ${s.sma50 ? 'darüber' : 'darunter'} (${signed((s.price / s.avg50 - 1) * 100)})` : null),
+          row('Gleitender Durchschnitt 200 Tage', has(s.avg200) ? `${price(s.avg200)} € → Kurs ${s.sma200 ? 'darüber' : 'darunter'} (${signed((s.price / s.avg200 - 1) * 100)})` : null),
+          row('Ergebnis', s.sma50 && s.sma200 ? 'Über beiden → 100' : s.sma200 ? 'Nur über GD200 → 60' : s.sma50 ? 'Nur über GD50 → 35' : 'Unter beiden → 5'),
+        ] },
+    ],
+  },
+  {
+    key: 'risk', label: 'Risiko & Reife', short: 'Risiko', color: '#e7b34a',
+    metrics: [
+      { label: 'Volatilität (90 Tage, p. a.)', fields: ['vol'], fmt: s => `${num(s.vol, 0)} %`, score: s => lin(s.vol, 130, 35),
+        rule: 'Jährliche Schwankung aus den täglichen Kursänderungen der letzten 90 Tage: 35 % oder weniger = 100, 130 % oder mehr = 0.',
+        detail: s => [
+          row('Volatilität p. a.', `${f2(s.vol)} %`),
+          row('Zum Vergleich', 'Aktienindex ≈ 15–20 %, Bitcoin meist 40–70 %'),
+          row('Berechnung', linCalc(s.vol, 130, 35)),
+        ] },
+      { label: 'Max. Rückgang 1 Jahr', fields: ['maxDD'], fmt: s => `${num(s.maxDD, 0)} %`, score: s => lin(s.maxDD, -80, -20),
+        rule: 'Größter Verlust vom Hoch zum folgenden Tief innerhalb eines Jahres: −20 % oder weniger = 100, −80 % oder mehr = 0.',
+        detail: s => [
+          row('Max. Rückgang (Drawdown)', `${f2(s.maxDD)} %`),
+          row('Berechnung', linCalc(s.maxDD, -80, -20)),
+        ] },
+      { label: 'Abstand Allzeithoch', fields: ['athChange'], fmt: s => `${num(s.athChange, 0)} %`, score: s => lin(s.athChange, -95, -15),
+        rule: 'Wie weit der Kurs unter dem Rekordhoch liegt: bis −15 % = 100, −95 % oder mehr = 0. Coins, die nie zurückkommen, liegen oft über 90 % darunter.',
+        detail: s => [
+          row('Allzeithoch', has(s.ath) ? `${price(s.ath)} €${s.athDate ? ` am ${new Date(s.athDate).toLocaleDateString('de-DE')}` : ''}` : null),
+          row('Abstand', `${f2(s.athChange)} %`),
+          row('Berechnung', linCalc(s.athChange, -95, -15)),
+        ] },
+      { label: 'Alter', fields: ['age'], fmt: s => `${num(s.age, 1)} J.`, score: s => lin(s.age, 1, 10),
+        rule: 'Jahre seit dem Start: 1 Jahr oder weniger = 0, 10 Jahre oder mehr = 100. Ältere Projekte haben mehrere Krisen überstanden.',
+        detail: s => [
+          row('Start', s.genesis ? new Date(s.genesis).toLocaleDateString('de-DE') : null),
+          row('Alter', `${f2(s.age)} Jahre`),
+          row('Berechnung', linCalc(s.age, 1, 10)),
+        ] },
+    ],
+  },
+];
+
+const PRESETS = {
+  'Ausgewogen':   { market: 25, supply: 25, tech: 25, risk: 25 },
+  'Konservativ':  { market: 35, supply: 20, tech: 10, risk: 35 },
+  'Momentum':     { market: 15, supply: 10, tech: 50, risk: 25 },
+  'Fundamental':  { market: 35, supply: 35, tech: 10, risk: 20 },
+};
+
+/* ---------------------------------------------------------------
+   Unbekannte Coins ohne Verbindung: deterministische Demo-Werte aus dem Namen
+---------------------------------------------------------------- */
+function seededRandom(str) {
+  let h = 2166136261;
+  for (const c of str.toLowerCase()) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
+}
+function simulateStock(query) {
+  const r = seededRandom(query);
+  const between = (a, b, d = 0) => +(a + r() * (b - a)).toFixed(d);
+  const name = query.trim().replace(/\s+/g, ' ').replace(/^./, c => c.toUpperCase());
+  const capped = r() > 0.5;
+  return {
+    name, ticker: name.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'N/A',
+    sector: 'Unbekannt', simulated: true,
+    rank: between(20, 400), marketCap: 10 ** between(7.5, 11, 2), turnover: between(0.1, 8, 2), circRatio: between(15, 100),
+    capped, rsi: between(22, 82), fromHigh: -between(5, 80), sma50: r() > 0.5, sma200: r() > 0.5,
+    vol: between(40, 160), maxDD: -between(20, 90), athChange: -between(5, 97), age: between(0.5, 12, 1),
+  };
+}
+function findKnown(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  return STOCKS.find(s => s.name.toLowerCase() === q || s.ticker.toLowerCase() === q || s.cgId === q)
+      || STOCKS.find(s => s.name.toLowerCase().startsWith(q) || s.ticker.toLowerCase().startsWith(q));
+}
+function findStock(query) {
+  if (!query.trim()) return null;
+  const known = findKnown(query);
+  return known ? { ...known } : simulateStock(query);
+}
+
+/* ---------------------------------------------------------------
+   Live-Daten: CoinGecko (öffentliche API, kein Key nötig, ca. 10–30 Abrufe pro Minute)
+---------------------------------------------------------------- */
+const CG_BASE = 'https://api.coingecko.com/api/v3/';
+const CACHE_MS = 6 * 60 * 60 * 1000;
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* Speicher gesperrt: ohne Cache weiter */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* egal */ } },
+};
+
+// Fehler mit `code`, damit der Aufrufer unterscheiden kann: limit | network | api
+const fmpError = (code, message) => Object.assign(new Error(message), { code });
+
+async function cg(path, params = {}) {
+  const url = new URL(CG_BASE + path);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  let res;
+  try {
+    res = await fetch(url);
+  } catch {
+    throw fmpError('network', 'CoinGecko ist nicht erreichbar (oder das Minutenlimit ist erreicht). In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.');
+  }
+  if (res.status === 429) throw fmpError('limit', 'CoinGecko bremst gerade (zu viele Abrufe pro Minute). Eine Minute warten und erneut versuchen.');
+  if (res.status === 404) throw fmpError('api', 'Diese Kryptowährung kennt CoinGecko nicht.');
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body || body.error || body.status?.error_code) {
+    throw fmpError('api', body?.error || body?.status?.error_message || `CoinGecko antwortet mit Fehler ${res.status}.`);
+  }
+  return body;
+}
+const finite = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+async function resolveId(query) {
+  const known = findKnown(query);
+  if (known) return { id: known.cgId, hits: [] };
+  const q = query.trim().toLowerCase();
+  const res = await cg('search', { query: q });
+  // Exaktes Kürzel zuerst, dann nach Rang (Coins ohne Rang ans Ende)
+  const hits = (Array.isArray(res.coins) ? res.coins : []).filter(h => h.id)
+    .sort((a, b) => ((b.symbol || '').toLowerCase() === q) - ((a.symbol || '').toLowerCase() === q)
+      || (a.market_cap_rank ?? 1e9) - (b.market_cap_rank ?? 1e9))
+    .slice(0, 8);
+  if (!hits.length) throw fmpError('api', `Zu „${query.trim()}“ wurde keine Kryptowährung gefunden.`);
+  return { id: hits[0].id, hits };
+}
+
+function formatCap(v) {
+  if (v >= 1e12) return `${num(v / 1e12)} Bio.`;
+  if (v >= 1e9) return `${num(v / 1e9, v >= 1e10 ? 0 : 1)} Mrd.`;
+  return `${num(v / 1e6, 0)} Mio.`;
+}
+
+// RSI nach Wilder aus Schlusskursen (älteste zuerst)
+function rsi(closes, period = 14) {
+  if (closes.length <= period) return null;
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gain += d; else loss -= d;
+  }
+  gain /= period; loss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    gain = (gain * (period - 1) + Math.max(d, 0)) / period;
+    loss = (loss * (period - 1) + Math.max(-d, 0)) / period;
+  }
+  return loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+}
+const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+// Jährliche Volatilität aus täglichen Log-Renditen (Krypto handelt an 365 Tagen)
+function volatility(closes, days = 90) {
+  const c = closes.slice(-(days + 1));
+  if (c.length < 20) return null;
+  const r = c.slice(1).map((v, i) => Math.log(v / c[i]));
+  const m = mean(r);
+  return Math.sqrt(r.reduce((a, x) => a + (x - m) ** 2, 0) / (r.length - 1)) * Math.sqrt(365) * 100;
+}
+function maxDrawdown(closes) {
+  if (closes.length < 20) return null;
+  let peak = closes[0], dd = 0;
+  for (const c of closes) { peak = Math.max(peak, c); dd = Math.min(dd, c / peak - 1); }
+  return dd * 100;
+}
+
+// Liefert [coin, hits]; hits = null, wenn die CoinGecko-ID direkt vorgegeben war
+async function loadLive(query, forcedId) {
+  const { id, hits } = forcedId ? { id: forcedId, hits: null } : await resolveId(query);
+  const cached = store.get(`rr:cdata1:${id}`);
+  if (cached && Date.now() - cached.t < CACHE_MS) return [cached.stock, hits];
+
+  const [c, chart] = await Promise.all([
+    cg(`coins/${encodeURIComponent(id)}`, { localization: 'false', tickers: 'false', market_data: 'true', community_data: 'false', developer_data: 'false', sparkline: 'false' }),
+    cg(`coins/${encodeURIComponent(id)}/market_chart`, { vs_currency: 'eur', days: 365, interval: 'daily' }).catch(() => null),
+  ]);
+  const md = c.market_data || {};
+  const eur = o => finite(o?.eur);
+  const p = eur(md.current_price);
+  if (p == null) throw fmpError('api', `Für „${c.name || query.trim()}“ liefert CoinGecko keinen Euro-Kurs.`);
+
+  // Ein Kurs pro Tag (der letzte Punkt ist der aktuelle)
+  const byDay = new Map();
+  for (const [t, v] of Array.isArray(chart?.prices) ? chart.prices : []) {
+    if (finite(v) != null) byDay.set(new Date(t).toISOString().slice(0, 10), v);
+  }
+  const series = [...byDay].sort((a, b) => a[0].localeCompare(b[0]));
+  const closes = series.map(x => x[1]);
+  const avg = n => (closes.length >= n ? mean(closes.slice(-n)) : null);
+  const avg50 = avg(50), avg200 = avg(200);
+  const yearHigh = closes.length ? Math.max(...closes, p) : null;
+  const yearLow = closes.length ? Math.min(...closes, p) : null;
+
+  const marketCap = eur(md.market_cap) || null;
+  const volume = eur(md.total_volume);
+  const circ = finite(md.circulating_supply) || null;
+  const maxSupply = finite(md.max_supply) || null;
+  const totalSupply = finite(md.total_supply) || null;
+  const genesis = c.genesis_date || null;
+  const cats = (c.categories || []).filter(Boolean);
+  const stable = cats.some(x => /stablecoin/i.test(x));
+
+  const stock = {
+    name: c.name || id,
+    ticker: (c.symbol || id).toUpperCase(),
+    cgId: id,
+    sector: cats[0] || 'Kategorie unbekannt',
+    categories: cats.slice(0, 4),
+    stable,
+    live: true,
+    asOf: md.last_updated || new Date().toISOString(),
+    price: p,
+    change: eur(md.price_change_24h_in_currency),
+    changePct: eur(md.price_change_percentage_24h_in_currency) ?? finite(md.price_change_percentage_24h),
+    ch7: eur(md.price_change_percentage_7d_in_currency),
+    ch30: eur(md.price_change_percentage_30d_in_currency),
+    ch1y: eur(md.price_change_percentage_1y_in_currency),
+    rank: finite(c.market_cap_rank ?? md.market_cap_rank),
+    marketCap,
+    fdv: eur(md.fully_diluted_valuation),
+    volume,
+    turnover: marketCap && volume != null ? volume / marketCap * 100 : null,
+    circ, maxSupply, totalSupply,
+    circRatio: circ && (maxSupply || totalSupply) ? clamp(circ / (maxSupply || totalSupply) * 100) : null,
+    capped: stable ? null : maxSupply != null,
+    ath: eur(md.ath), athDate: md.ath_date?.eur || null, athChange: eur(md.ath_change_percentage),
+    genesis,
+    age: genesis ? (Date.now() - new Date(genesis)) / (365.25 * 86400000) : null,
+    yearLow, yearHigh,
+    fromHigh: yearHigh ? (p / yearHigh - 1) * 100 : null,
+    avg50, avg200,
+    sma50: avg50 == null ? null : p > avg50,
+    sma200: avg200 == null ? null : p > avg200,
+    rsi: rsi(closes),
+    rsiDays: closes.length,
+    vol: volatility(closes),
+    maxDD: maxDrawdown(closes),
+    history: series,
+  };
+  store.set(`rr:cdata1:${id}`, { t: Date.now(), stock });
+  return [stock, hits];
+}
+
+/* ---------------------------------------------------------------
+   Farblogik: 0 = Rot → 50 = Gelb → 100 = Grün
+---------------------------------------------------------------- */
+// Im Clean-Modus Graustufen statt Ampelfarben: schwache Werte dunkler, starke heller
+const scoreColor = s => state.mode === 'clean' ? `hsl(0, 0%, ${Math.round(38 + clamp(s) * 0.62)}%)` : `hsl(${clamp(s) * 1.3}, 62%, 52%)`;
+const CLEAN_GRAYS = ['#ffffff', '#b3b3b3', '#6e6e6e', '#3d3d3d'];
+const catColor = c => state.mode === 'clean' ? CLEAN_GRAYS[CATEGORIES.indexOf(c)] : c.color;
+function verdictFor(s) {
+  if (s >= 80) return ['Exzellent', 'Starkes Chancen-Risiko-Verhältnis über fast alle Dimensionen.'];
+  if (s >= 65) return ['Attraktiv', 'Überwiegend positives Profil mit einzelnen Schwachstellen.'];
+  if (s >= 50) return ['Neutral', 'Ausgeglichenes Bild – Chancen und Risiken halten sich die Waage.'];
+  if (s >= 35) return ['Erhöhtes Risiko', 'Mehrere Kennzahlen deuten auf ein ungünstiges Chance-Risiko-Profil.'];
+  return ['Hohes Risiko', 'Deutliche Warnsignale – hohe Bewertung, schwache Bilanz oder negatives Momentum.'];
+}
+
+/* ---------------------------------------------------------------
+   State & Rendering
+---------------------------------------------------------------- */
+const state = { stock: null, weights: { ...PRESETS['Ausgewogen'] }, mode: store.get('rr:mode') || 'standard', range: '6M',
+  watch: store.get('rr:cwatch') || [], compare: new Set(), watchWarn: new Set(), watchSort: store.get('rr:watchSort') || 'score' };
+let radar;
+
+function normWeights() {
+  const sum = Object.values(state.weights).reduce((a, b) => a + b, 0) || 1;
+  return Object.fromEntries(Object.entries(state.weights).map(([k, v]) => [k, v / sum]));
+}
+
+const has = v => v !== null && v !== undefined && !(typeof v === 'number' && Number.isNaN(v));
+const tint = (color, alpha) => color.replace('hsl', 'hsla').replace(')', `, ${alpha})`);
+const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const CHEVRON = '<svg class="chev w-4 h-4 faint shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+
+function analyse(stock) {
+  const subs = {};
+  for (const cat of CATEGORIES) {
+    const items = cat.metrics.map((m, idx) => {
+      const ok = m.fields.every(f => has(stock[f]));
+      return {
+        id: `${cat.key}-${idx}`, cat, metric: m, label: m.label,
+        raw: ok ? m.fmt(stock) : 'n. a.',
+        pts: ok ? Math.round(m.score(stock)) : null,
+      };
+    });
+    const scored = items.filter(i => i.pts !== null);
+    subs[cat.key] = { items, score: scored.length ? Math.round(scored.reduce((a, i) => a + i.pts, 0) / scored.length) : null };
+  }
+  return subs;
+}
+
+function renderBadge(s) {
+  const el = document.getElementById('dataBadge');
+  const [text, fg, bg] = s.live
+    ? [`Live · ${new Date(s.asOf).toLocaleDateString('de-DE')}`, 'var(--up)', 'rgba(62,207,142,.1)']
+    : s.simulated
+      ? ['Simuliert', '#f2c46d', 'rgba(242,196,109,.1)']
+      : ['Demo-Daten', 'var(--muted)', 'rgba(142,154,171,.1)'];
+  el.textContent = text;
+  el.className = 'text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md';
+  el.style.color = state.mode === 'clean' ? 'var(--muted)' : fg;
+  el.style.background = state.mode === 'clean' ? 'transparent' : bg;
+  el.style.border = state.mode === 'clean' ? '1px solid var(--line-2)' : '0';
+}
+
+// Kopfbereich: Kurs und die wichtigsten Rohwerte auf einen Blick
+function renderHead(s) {
+  document.getElementById('stockName').textContent = s.name;
+  document.getElementById('stockTicker').textContent = s.ticker;
+  document.getElementById('stockMeta').textContent = [s.categories?.length ? s.categories.slice(0, 2).join(', ') : s.sector, has(s.rank) ? `Rang #${s.rank}` : null]
+    .filter(Boolean).join(' · ');
+  renderBadge(s);
+
+  const priceEl = document.getElementById('stockPrice');
+  const changeEl = document.getElementById('stockChange');
+  if (has(s.price)) {
+    priceEl.textContent = `${price(s.price)} €`;
+    if (has(s.changePct)) {
+      const up = s.changePct >= 0;
+      changeEl.textContent = `${up ? '+' : ''}${has(s.change) ? price(s.change) : ''} (${up ? '+' : ''}${f2(s.changePct)} %) · 24 h`;
+      changeEl.style.color = up ? 'var(--up)' : 'var(--down)';
+    } else {
+      changeEl.textContent = '';
+    }
+  } else {
+    priceEl.textContent = '';
+    changeEl.textContent = s.live ? '' : 'Kein Kurs in Demo-Daten';
+    changeEl.style.color = 'var(--faint)';
+  }
+
+  const cell = (label, value, extra = '') => `
+    <div class="px-4 py-3" style="background:var(--panel)">
+      <dt class="eyebrow">${label}</dt>
+      <dd class="num text-[15px] text-white mt-1">${value}</dd>${extra}
+    </div>`;
+  const dash = '<span class="faint">–</span>';
+  let range = '';
+  if (has(s.yearLow) && has(s.yearHigh) && has(s.price) && s.yearHigh > s.yearLow) {
+    const pos = clamp(((s.price - s.yearLow) / (s.yearHigh - s.yearLow)) * 100);
+    range = `<div class="relative h-1 rounded-full mt-2" style="background:var(--line-2)">
+      <div class="absolute -top-1 w-1 h-3 rounded-sm" style="left:calc(${pos}% - 2px);background:var(--text)"></div></div>`;
+  }
+  document.getElementById('keyStats').innerHTML = [
+    cell('Marktkap.', has(s.marketCap) ? `${formatCap(s.marketCap)} €` : dash),
+    cell('Volumen 24 h', has(s.volume) ? `${formatCap(s.volume)} €` : has(s.turnover) ? `${num(s.turnover, 1)} % d. Marktkap.` : dash),
+    cell('Im Umlauf', has(s.circRatio) ? `${num(s.circRatio, 0)} %<span class="text-[11px] faint ml-1.5">${s.capped ? 'von max.' : 'von gesamt'}</span>` : dash),
+    cell('Volatilität', has(s.vol) ? `${num(s.vol, 0)} % p. a.` : dash),
+    cell('Allzeithoch', has(s.athChange) ? `${num(s.athChange, 0)} %` : dash),
+    cell('52 Wochen', has(s.yearLow) && has(s.yearHigh) ? `${price(s.yearLow)} – ${price(s.yearHigh)}` : has(s.fromHigh) ? `${num(s.fromHigh)} % v. Hoch` : dash, range),
+  ].join('');
+}
+
+const ptsStyle = pts => pts === null
+  ? 'color:var(--faint);background:rgba(95,107,124,.12)'
+  : `color:${scoreColor(pts)};background:${tint(scoreColor(pts), 0.12)}`;
+
+function renderStrengths(subs) {
+  const all = CATEGORIES.flatMap(c => subs[c.key].items).filter(i => i.pts !== null);
+  const item = i => `<li class="flex items-center justify-between gap-2">
+      <span class="truncate muted">${i.label}</span>
+      <span class="num text-[11px] px-1.5 py-0.5 rounded shrink-0" style="${ptsStyle(i.pts)}">${i.pts}</span></li>`;
+  const strong = [...all].sort((a, b) => b.pts - a.pts).filter(i => i.pts >= 60).slice(0, 3);
+  const weak = [...all].sort((a, b) => a.pts - b.pts).filter(i => i.pts <= 40).slice(0, 3);
+  document.getElementById('strengths').innerHTML = strong.map(item).join('') || '<li class="faint">keine ausgeprägten</li>';
+  document.getElementById('weaknesses').innerHTML = weak.map(item).join('') || '<li class="faint">keine ausgeprägten</li>';
+}
+
+function renderMetrics(s, subs, eff) {
+  const box = document.getElementById('metrics');
+  // Aufgeklappte Zeilen bleiben beim Neuzeichnen (z. B. Regler bewegen) offen
+  const open = new Set([...box.querySelectorAll('details.metric[open]')].map(d => d.dataset.id));
+
+  box.innerHTML = CATEGORIES.map(c => {
+    const sub = subs[c.key];
+    return `
+    <div>
+      <div class="flex items-center justify-between gap-3 pb-2 mb-1" style="border-bottom:1px solid var(--line)">
+        <h3 class="flex items-center gap-2 text-sm font-semibold text-white">
+          <span class="w-2 h-2 rounded-full" style="background:${catColor(c)}"></span>${c.label}
+        </h3>
+        <span class="flex items-center gap-3">
+          <span class="text-xs faint num">${Math.round(eff[c.key] * 100)} %</span>
+          <span class="num text-sm font-semibold w-8 text-right" style="color:${sub.score === null ? 'var(--faint)' : scoreColor(sub.score)}">${sub.score ?? '–'}</span>
+        </span>
+      </div>
+      ${sub.items.map(i => {
+        const lines = i.pts === null ? [] : i.metric.detail(s).filter(Boolean);
+        return `
+        <details class="metric rounded-lg" data-id="${i.id}"${open.has(i.id) ? ' open' : ''}>
+          <summary class="grid items-center gap-3 px-2 py-2.5 rounded-lg" style="grid-template-columns:minmax(0,1fr) auto auto auto">
+            <span class="text-sm truncate" style="color:var(--text)">${i.label}</span>
+            <span class="num text-sm text-right ${i.pts === null ? 'faint' : ''}">${i.raw}</span>
+            <span class="hidden sm:flex items-center gap-2">
+              <span class="w-20 h-1 rounded-full overflow-hidden" style="background:var(--line-2)">
+                <span class="bar-fill block h-full rounded-full" style="width:${i.pts ?? 0}%;background:${i.pts === null ? 'transparent' : scoreColor(i.pts)}"></span>
+              </span>
+              <span class="num text-[11px] w-9 text-center rounded py-0.5" style="${ptsStyle(i.pts)}">${i.pts ?? '–'}</span>
+            </span>
+            ${CHEVRON}
+          </summary>
+          <div class="mx-2 mb-2 mt-1 p-3 rounded-lg text-[13px] leading-relaxed" style="background:var(--panel-2);border:1px solid var(--line)">
+            ${lines.length ? `<dl class="grid gap-x-4 gap-y-1.5" style="grid-template-columns:minmax(0,auto) minmax(0,1fr)">
+              ${lines.map(([k, v]) => `<dt class="faint">${k}</dt><dd class="num text-white break-words">${esc(v)}</dd>`).join('')}
+              <dt class="faint sm:hidden">Punkte</dt><dd class="num sm:hidden" style="color:${i.pts === null ? 'var(--faint)' : scoreColor(i.pts)}">${i.pts ?? '–'}</dd>
+            </dl>` : `<p class="faint">Für diese Kennzahl liefert die Datenquelle keinen Wert. Sie zählt deshalb nicht in den Score.</p>`}
+            <p class="muted mt-2.5 pt-2.5" style="border-top:1px solid var(--line)"><span class="faint">Regel:</span> ${i.metric.rule}</p>
+          </div>
+        </details>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+
+// Alle Werte, die zum Coin vorliegen, als Tabelle
+function renderRaw(s) {
+  const eur = v => (has(v) ? `${price(v)} €` : null);
+  const pc = v => (has(v) ? `${f2(v)} %` : null);
+  const amount = v => (has(v) ? `${units(v)} ${s.ticker}` : null);
+  const rows = [
+    ['Kurs', eur(s.price)],
+    ['Veränderung 24 h', has(s.changePct) ? `${has(s.change) ? `${price(s.change)} € / ` : ''}${f2(s.changePct)} %` : null],
+    ['Veränderung 7 Tage', pc(s.ch7)],
+    ['Veränderung 30 Tage', pc(s.ch30)],
+    ['Veränderung 1 Jahr', pc(s.ch1y)],
+    ['52-Wochen-Tief', eur(s.yearLow)],
+    ['52-Wochen-Hoch', eur(s.yearHigh)],
+    ['Abstand zum 52-Wochen-Hoch', pc(s.fromHigh)],
+    ['Allzeithoch', has(s.ath) ? `${price(s.ath)} €${s.athDate ? ` (${new Date(s.athDate).toLocaleDateString('de-DE')})` : ''}` : null],
+    ['Abstand zum Allzeithoch', pc(s.athChange)],
+    ['Gleitender Durchschnitt 50 Tage', eur(s.avg50)],
+    ['Gleitender Durchschnitt 200 Tage', eur(s.avg200)],
+    ['RSI (14)', has(s.rsi) ? f2(s.rsi) : null],
+    ['Volatilität 90 Tage p. a.', pc(s.vol)],
+    ['Max. Rückgang 1 Jahr', pc(s.maxDD)],
+    ['Marktkapitalisierung', has(s.marketCap) ? `${formatCap(s.marketCap)} € (${s.marketCap.toLocaleString('de-DE', { maximumFractionDigits: 0 })})` : null],
+    ['Voll verwässerte Bewertung (FDV)', has(s.fdv) ? `${formatCap(s.fdv)} €` : null],
+    ['Rang', has(s.rank) ? `#${s.rank}` : null],
+    ['Handelsvolumen 24 h', has(s.volume) ? `${formatCap(s.volume)} €` : null],
+    ['Umschlag (Volumen / Marktkap.)', pc(s.turnover)],
+    ['Im Umlauf', amount(s.circ)],
+    ['Gesamtmenge', amount(s.totalSupply)],
+    ['Höchstmenge', s.live || s.maxSupply !== undefined ? (has(s.maxSupply) ? amount(s.maxSupply) : 'keine') : null],
+    ['Umlaufquote', pc(s.circRatio)],
+    ['Start', s.genesis ? new Date(s.genesis).toLocaleDateString('de-DE') : null],
+    ['Alter', has(s.age) ? `${f2(s.age)} Jahre` : null],
+    ['Kategorien (CoinGecko)', s.categories?.length ? s.categories.join(', ') : null],
+    ['CoinGecko-ID', s.cgId || null],
+    ['Datenstand', s.live && s.asOf ? new Date(s.asOf).toLocaleString('de-DE') : s.simulated ? 'Simulierte Werte' : 'Demo-Datensatz'],
+  ].filter(([, v]) => v !== null);
+  document.getElementById('rawBody').innerHTML = rows.map(([k, v]) => `
+    <tr style="border-top:1px solid var(--line)">
+      <th scope="row" class="text-left font-normal faint py-2 pr-4 align-top">${k}</th>
+      <td class="num text-right text-white py-2">${esc(v)}</td>
+    </tr>`).join('');
+}
+
+function render() {
+  const s = state.stock;
+  if (!s) return;
+  const { subs, eff, total, avail } = computeScore(s);
+  const col = scoreColor(total);
+  const [verdict, text] = verdictFor(total);
+
+  renderHead(s);
+  renderWatchBtn();
+  renderWarnings(s);
+
+  // Gauge
+  const C = 2 * Math.PI * 84;
+  const arc = document.getElementById('gaugeArc');
+  arc.style.strokeDashoffset = C * (1 - total / 100);
+  arc.style.stroke = col;
+  animateNumber(document.getElementById('totalScore'), total);
+  const vEl = document.getElementById('verdict');
+  vEl.textContent = verdict;
+  vEl.style.color = col;
+  vEl.style.background = tint(col, 0.12);
+  document.getElementById('scaleMarker').style.left = `calc(${total}% - 2px)`;
+
+  const summary = document.getElementById('summary');
+  if (avail.length) {
+    const best = avail.reduce((a, c) => subs[c.key].score > subs[a.key].score ? c : a);
+    const worst = avail.reduce((a, c) => subs[c.key].score < subs[a.key].score ? c : a);
+    const missing = CATEGORIES.length - avail.length;
+    summary.innerHTML =
+      `${text} Stärkster Bereich: <b class="text-white font-medium">${best.short}</b> (${subs[best.key].score}), ` +
+      `schwächster: <b class="text-white font-medium">${worst.short}</b> (${subs[worst.key].score}).` +
+      (missing ? ` <span class="text-amber-300">${missing} Bereich(e) ohne Daten, nicht gewertet.</span>` : '');
+  } else {
+    summary.textContent = 'Für diesen Coin liegen keine auswertbaren Kennzahlen vor.';
+  }
+  renderStrengths(subs);
+
+  // Teilbereiche
+  document.getElementById('subScores').innerHTML = CATEGORIES.map(c => {
+    const sc = subs[c.key].score, pct = Math.round(eff[c.key] * 100);
+    return `<div>
+      <div class="flex items-baseline justify-between text-sm">
+        <span class="flex items-center gap-2" style="color:var(--text)"><span class="w-2 h-2 rounded-full" style="background:${catColor(c)}"></span>${c.label}</span>
+        <span class="num font-semibold text-white">${sc ?? '–'}</span>
+      </div>
+      <div class="h-1.5 rounded-full mt-1.5 overflow-hidden" style="background:var(--line-2)">
+        <div class="bar-fill h-full rounded-full" style="width:${sc ?? 0}%;background:${scoreColor(sc ?? 0)}"></div>
+      </div>
+      <div class="flex justify-between text-[11px] faint mt-1 num">
+        <span>Gewicht ${pct} %</span><span>${sc === null ? 'keine Daten' : `+${num(sc * eff[c.key], 1)} Pkt.`}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Radar
+  radar.data.datasets[0].data = CATEGORIES.map(c => subs[c.key].score ?? 0);
+  radar.data.datasets[0].borderColor = col;
+  radar.data.datasets[0].pointBackgroundColor = CATEGORIES.map(catColor);
+  radar.data.datasets[0].backgroundColor = tint(col, 0.14);
+  radar.data.datasets[1].data = CATEGORIES.map(c => Math.round(eff[c.key] * 100));
+  radar.update();
+
+  renderChart(s);
+  renderMetrics(s, subs, eff);
+  renderRaw(s);
+  renderWeights();
+  renderWatchlist(); // Ranking folgt der Gewichtung
+}
+
+// Kursverlauf als schlichte Linie; Zeitraum über die Buttons darüber
+const RANGES = [['1M', 31], ['3M', 91], ['6M', 181], ['1J', 366]]; // Krypto handelt täglich
+function renderChart(s) {
+  const box = document.getElementById('priceChart');
+  const btns = document.getElementById('rangeBtns');
+  const label = document.getElementById('rangeChange');
+  const hist = s.history || [];
+  if (hist.length < 2) {
+    box.innerHTML = `<p class="text-xs faint py-3">${s.live ? 'Für diesen Coin liefert CoinGecko keinen Kursverlauf.' : 'Kursverlauf gibt es nur mit Live-Daten.'}</p>`;
+    btns.innerHTML = '';
+    label.textContent = '';
+    return;
+  }
+  btns.innerHTML = RANGES.map(([r]) => `<button type="button" class="chip" data-range="${r}" aria-pressed="${r === state.range}">${r}</button>`).join('');
+
+  const pts = hist.slice(-RANGES.find(([r]) => r === state.range)[1]);
+  const closes = pts.map(p => p[1]);
+  const min = Math.min(...closes), max = Math.max(...closes);
+  const W = 1000, H = 200, pad = 8;
+  const xy = closes.map((c, i) => [(i / (closes.length - 1)) * W, pad + (1 - (c - min) / (max - min || 1)) * (H - 2 * pad)]);
+  const line = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join('');
+  const change = (closes.at(-1) / closes[0] - 1) * 100;
+  const color = state.mode === 'clean' ? '#ffffff' : change >= 0 ? 'var(--up)' : 'var(--down)';
+  const [lx, ly] = xy.at(-1);
+  const fmtDate = d => new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
+  label.textContent = `${state.range}: ${change >= 0 ? '+' : ''}${f2(change)} % · ${fmtDate(pts[0][0])} – ${fmtDate(pts.at(-1)[0])}`;
+  label.style.color = state.mode === 'clean' ? 'var(--muted)' : color;
+  box.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full" style="height:clamp(140px, 22vw, 220px)" role="img"
+         aria-label="Kursverlauf ${state.range}, ${change >= 0 ? 'plus' : 'minus'} ${f2(Math.abs(change))} Prozent">
+      <path d="${line}L${W},${H}L0,${H}Z" fill="${state.mode === 'clean' ? 'rgba(255,255,255,.03)' : 'rgba(142,154,171,.06)'}"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    </svg>
+    <span class="absolute w-2 h-2 rounded-full" style="left:calc(${(lx / W) * 100}% - 4px);top:calc(${(ly / H) * 100}% - 4px);background:${color}"></span>
+    <div class="flex justify-between text-[11px] faint num mt-1"><span>Tief ${price(min)}</span><span>Hoch ${price(max)}</span></div>`;
+}
+
+// Standard- oder Clean-Modus (Konzept A); Wahl bleibt im Browser gespeichert
+function applyMode() {
+  const clean = state.mode === 'clean';
+  document.documentElement.dataset.mode = clean ? 'clean' : '';
+  document.getElementById('modeLabel').textContent = clean ? 'Standard' : 'Clean';
+  document.getElementById('modeBtn').setAttribute('aria-pressed', String(clean));
+  renderSource();
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', clean ? '#000000' : '#0a0d13');
+  if (radar) {
+    const grid = clean ? '#1c1c1c' : '#1e2633';
+    radar.options.scales.r.grid.color = grid;
+    radar.options.scales.r.angleLines.color = grid;
+    radar.data.datasets[1].borderColor = clean ? 'rgba(255,255,255,.35)' : 'rgba(142,154,171,0.5)';
+    Chart.defaults.font.family = clean ? 'Inter, system-ui, sans-serif' : '"IBM Plex Sans", system-ui, sans-serif';
+  }
+  render();
+}
+
+function renderWeights() {
+  const w = normWeights();
+  for (const c of CATEGORIES) {
+    const pct = Math.round(w[c.key] * 100);
+    const val = document.getElementById(`w-val-${c.key}`);
+    val.textContent = `${pct} %`;
+    val.style.color = catColor(c);
+    const el = document.getElementById(`w-${c.key}`);
+    el.value = state.weights[c.key];
+    el.style.setProperty('--p', `${state.weights[c.key]}%`);
+  }
+  document.getElementById('weightBar').innerHTML = CATEGORIES
+    .map(c => `<div class="transition-all duration-500" title="${c.short}" style="width:${w[c.key] * 100}%;background:${catColor(c)}"></div>`).join('');
+  document.querySelectorAll('[data-preset]').forEach(b => {
+    const p = PRESETS[b.dataset.preset];
+    b.setAttribute('aria-pressed', String(CATEGORIES.every(c => p[c.key] === state.weights[c.key])));
+  });
+}
+
+function animateNumber(el, to) {
+  const from = +el.textContent || 0, t0 = performance.now(), dur = 600;
+  cancelAnimationFrame(el._raf);
+  const step = t => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(from + (to - from) * e);
+    if (k < 1) el._raf = requestAnimationFrame(step);
+  };
+  el._raf = requestAnimationFrame(step);
+}
+
+function setError(msg) {
+  const el = document.getElementById('loadError');
+  el.textContent = msg;
+  el.hidden = !msg;
+}
+
+function setLoading(on) {
+  const btn = document.getElementById('analyseBtn');
+  btn.disabled = on;
+  btn.textContent = on ? 'Lade …' : 'Analysieren';
+}
+
+function renderSource() {
+  const el = document.getElementById('sourceStatus');
+  el.textContent = 'Live (CoinGecko)';
+  el.style.color = state.mode === 'clean' ? 'var(--text)' : 'var(--up)';
+}
+
+let loadSeq = 0; // nur die zuletzt gestartete Suche darf das Ergebnis setzen
+// Weitere Suchtreffer als Buttons, damit man bei gleichen Kürzeln umschalten kann
+function renderHits(hits, currentId) {
+  const box = document.getElementById('altHits');
+  const others = (hits || []).filter(h => h.id !== currentId).slice(0, 6);
+  box.replaceChildren();
+  box.hidden = !others.length;
+  if (!others.length) return;
+  const label = document.createElement('span');
+  label.className = 'text-xs faint mr-1';
+  label.textContent = 'Nicht der gesuchte Coin? Andere Treffer:';
+  box.append(label);
+  for (const h of others) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = `${h.name} · ${(h.symbol || '').toUpperCase()}${h.market_cap_rank ? ` · #${h.market_cap_rank}` : ''}`;
+    b.addEventListener('click', () => selectStock(h.name || h.id, h.id));
+    box.append(b);
+  }
+}
+
+const markQuick = s => {
+  const known = STOCKS.find(k => k.cgId === s.cgId || k.name === s.name);
+  document.querySelectorAll('[data-quick]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.quick === known?.name)));
+};
+
+async function selectStock(query, id) {
+  if (!query.trim()) return;
+  const seq = ++loadSeq;
+  setError('');
+  setLoading(true);
+  let stock, hits = [];
+  try {
+    [stock, hits] = await loadLive(query, id);
+  } catch (e) {
+    // Nicht gefunden oder gebremst: keine Ersatzzahlen für einen echten Coin zeigen, die bisherige Ansicht bleibt.
+    // Nur ohne Verbindung (oder wenn noch nichts angezeigt wird) auf Demo-Daten ausweichen.
+    if ((e.code === 'api' || e.code === 'limit') && state.stock) {
+      if (seq === loadSeq) {
+        setLoading(false);
+        setError(`${e.message} Angezeigt wird weiter ${state.stock.name}.`);
+        document.getElementById('searchInput').value = query;
+      }
+      return;
+    }
+    stock = findStock(query);
+    hits = [];
+    if (seq === loadSeq) setError(`${e.message} Angezeigt werden ${stock.simulated ? 'simulierte Daten' : 'Demo-Daten'}.`);
+  }
+  if (seq !== loadSeq || !stock) return;
+  setLoading(false);
+  if (hits !== null) state.hits = hits;
+  renderHits(state.hits, stock.cgId);
+  state.stock = stock;
+  document.getElementById('searchInput').value = stock.name;
+  markQuick(stock);
+  syncWatch(stock);
+  render();
+}
+
+/* ---------------------------------------------------------------
+   Init
+---------------------------------------------------------------- */
+function init() {
+  document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
+  document.getElementById('stockList').innerHTML = STOCKS.map(s => `<option value="${s.name}">${s.ticker}</option>`).join('');
+  document.getElementById('quickPicks').innerHTML = QUICK.map(n => `<button type="button" class="chip" data-quick="${n}" aria-pressed="false">${n}</button>`).join('');
+  document.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => selectStock(b.dataset.quick)));
+
+  document.getElementById('searchForm').addEventListener('submit', e => {
+    e.preventDefault();
+    selectStock(document.getElementById('searchInput').value);
+  });
+
+  document.getElementById('presets').innerHTML = Object.keys(PRESETS).map(p => `<button type="button" class="chip" data-preset="${p}">${p}</button>`).join('');
+  document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+    state.weights = { ...PRESETS[b.dataset.preset] };
+    render();
+  }));
+  document.getElementById('resetWeights').addEventListener('click', () => { state.weights = { ...PRESETS['Ausgewogen'] }; render(); });
+
+  document.getElementById('weightSliders').innerHTML = CATEGORIES.map(c => `
+    <div>
+      <div class="flex justify-between text-sm mb-2">
+        <label for="w-${c.key}" style="color:var(--text)">${c.label}</label>
+        <span id="w-val-${c.key}" class="num font-semibold"></span>
+      </div>
+      <input id="w-${c.key}" type="range" min="0" max="100" step="1" style="--c:${c.color};--p:25%" />
+    </div>`).join('');
+  CATEGORIES.forEach(c => document.getElementById(`w-${c.key}`).addEventListener('input', e => {
+    state.weights[c.key] = +e.target.value;
+    // alles auf 0 verhindern
+    if (Object.values(state.weights).every(v => v === 0)) state.weights[c.key] = 1;
+    render();
+  }));
+
+  Chart.defaults.color = '#8e9aab';
+  Chart.defaults.font.family = '"IBM Plex Sans", system-ui, sans-serif';
+  radar = new Chart(document.getElementById('radarChart'), {
+    type: 'radar',
+    data: {
+      labels: CATEGORIES.map(c => c.short),
+      datasets: [
+        { label: 'Score', data: [0, 0, 0, 0], borderWidth: 2, pointRadius: 4, pointBorderWidth: 0, fill: true },
+        { label: 'Gewichtung %', data: [25, 25, 25, 25], borderColor: 'rgba(142,154,171,0.5)', borderDash: [4, 4],
+          borderWidth: 1.5, pointRadius: 0, fill: false },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      animation: { duration: 700, easing: 'easeOutCubic' },
+      scales: {
+        r: {
+          min: 0, max: 100, ticks: { stepSize: 25, display: false },
+          grid: { color: '#1e2633' }, angleLines: { color: '#1e2633' },
+          pointLabels: { color: '#e6ebf2', font: { size: 12, weight: '500' } },
+        },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.formattedValue}` } },
+      },
+    },
+  });
+
+  renderSource();
+
+  document.getElementById('toggleAll').addEventListener('click', e => {
+    const rows = [...document.querySelectorAll('#metrics details.metric')];
+    const openAll = rows.some(d => !d.open);
+    rows.forEach(d => { d.open = openAll; });
+    e.currentTarget.textContent = openAll ? 'Alle zuklappen' : 'Alle aufklappen';
+  });
+
+  document.getElementById('rangeBtns').addEventListener('click', e => {
+    const r = e.target.closest('[data-range]')?.dataset.range;
+    if (!r || !state.stock) return;
+    state.range = r;
+    renderChart(state.stock);
+  });
+  document.getElementById('modeBtn').addEventListener('click', () => {
+    state.mode = state.mode === 'clean' ? 'standard' : 'clean';
+    store.set('rr:mode', state.mode);
+    applyMode();
+  });
+  initWatch();
+  applyMode();
+
+  initFullscreen();
+  initCriteria();
+  selectStock('Bitcoin');
+}
+
+/* ---------------------------------------------------------------
+   Gesamtscore eines Coins mit der aktuellen Gewichtung
+   (genutzt von Hauptansicht, Watchlist und Vergleich)
+---------------------------------------------------------------- */
+function computeScore(stock) {
+  const subs = analyse(stock);
+  const w = normWeights();
+  // Kategorien ohne Daten fallen raus, die übrigen Gewichte werden neu verteilt
+  const avail = CATEGORIES.filter(c => subs[c.key].score !== null);
+  const wAvail = avail.reduce((a, c) => a + w[c.key], 0) || 1;
+  const eff = Object.fromEntries(CATEGORIES.map(c => [c.key, subs[c.key].score === null ? 0 : w[c.key] / wAvail]));
+  const total = Math.round(avail.reduce((a, c) => a + subs[c.key].score * eff[c.key], 0));
+  return { subs, eff, total, avail };
+}
+
+/* ---------------------------------------------------------------
+   Warnsignale: auffällige Werte, unabhängig von der Gewichtung
+---------------------------------------------------------------- */
+function warningsFor(s) {
+  const out = [];
+  const add = (level, text) => out.push({ level, text });
+  if (s.stable) add('hoch', 'Stablecoin: an eine Währung gekoppelt, der Score ist hier kaum aussagekräftig');
+  if (has(s.marketCap) && s.marketCap < 1e8) add('hoch', `Sehr kleine Marktkapitalisierung (${formatCap(s.marketCap)} €): leicht manipulierbar`);
+  if (has(s.athChange) && s.athChange < -90) add('hoch', `${num(-s.athChange, 0)} % unter dem Allzeithoch`);
+  if (has(s.circRatio) && s.circRatio < 40) add('mittel', `Erst ${num(s.circRatio, 0)} % im Umlauf: weitere Coins verwässern den Wert`);
+  if (s.capped === false) add('mittel', 'Keine Höchstmenge: unbegrenzt neue Coins möglich');
+  if (has(s.turnover) && s.turnover < 0.3) add('mittel', `Wenig Handel (${num(s.turnover, 2)} % der Marktkap. pro Tag)`);
+  if (has(s.vol) && s.vol > 100) add('mittel', `Extrem schwankungsanfällig (${num(s.vol, 0)} % p. a.)`);
+  if (has(s.maxDD) && s.maxDD < -60) add('mittel', `Im letzten Jahr zeitweise ${num(-s.maxDD, 0)} % eingebrochen`);
+  if (has(s.age) && s.age < 2) add('mittel', `Junges Projekt (${num(s.age, 1)} Jahre)`);
+  if (has(s.rsi) && s.rsi > 75) add('mittel', `RSI ${num(s.rsi, 0)}: überkauft`);
+  if (has(s.rsi) && s.rsi < 25) add('mittel', `RSI ${num(s.rsi, 0)}: stark überverkauft`);
+  if (s.sma200 === false) add('mittel', 'Kurs unter der 200-Tage-Linie (Abwärtstrend)');
+  if (has(s.fromHigh) && s.fromHigh < -50) add('mittel', `Kurs ${num(-s.fromHigh, 0)} % unter dem Jahreshoch`);
+  return out.sort((a, b) => (a.level === 'hoch' ? 0 : 1) - (b.level === 'hoch' ? 0 : 1));
+}
+
+const warnStyle = level => state.mode === 'clean'
+  ? `border:1px solid ${level === 'hoch' ? '#fff' : 'var(--line-2)'};color:${level === 'hoch' ? '#fff' : 'var(--muted)'}`
+  : level === 'hoch'
+    ? 'border:1px solid rgba(240,99,99,.35);background:rgba(240,99,99,.08);color:#ffb4b4'
+    : 'border:1px solid rgba(242,196,109,.3);background:rgba(242,196,109,.06);color:#f2d29a';
+const warnChips = list => list.map(w => `<li class="text-xs px-2.5 py-1.5 rounded-lg" style="${warnStyle(w.level)}">${esc(w.text)}</li>`).join('');
+
+function renderWarnings(s) {
+  const box = document.getElementById('warnings');
+  const list = warningsFor(s);
+  if (!list.length) {
+    box.innerHTML = `<p class="text-xs faint">Keine Warnsignale.</p>`;
+    return;
+  }
+  const clean = state.mode === 'clean';
+  box.innerHTML = `
+    <div class="flex items-center gap-2 mb-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:${clean ? '#fff' : '#f2c46d'}" aria-hidden="true"><path d="M12 3 2 20h20L12 3zM12 10v4M12 17v.01"/></svg>
+      <span class="eyebrow" style="color:var(--text)">${list.length} Warnsignal${list.length === 1 ? '' : 'e'}</span>
+    </div>
+    <ul class="flex flex-wrap gap-2">${warnChips(list)}</ul>`;
+}
+
+/* ---------------------------------------------------------------
+   Watchlist: gemerkte Coins als Momentaufnahme im Browser (getrennt von der Aktien-Watchlist).
+   Kein Abruf nötig; wird ein gemerkter Coin neu analysiert, wird sein Stand aktualisiert.
+---------------------------------------------------------------- */
+const MAX_COMPARE = 4;
+const stockId = s => (s.live ? 'L:' : s.simulated ? 'S:' : 'D:') + (s.simulated ? s.name : s.cgId);
+const snapshot = s => JSON.parse(JSON.stringify(s));
+const isWatched = s => state.watch.some(e => e.id === stockId(s));
+const saveWatch = () => store.set('rr:cwatch', state.watch);
+
+function toggleWatch() {
+  const s = state.stock;
+  if (!s) return;
+  const id = stockId(s);
+  if (isWatched(s)) {
+    state.watch = state.watch.filter(e => e.id !== id);
+    state.compare.delete(id);
+  } else {
+    state.watch.push({ id, stock: snapshot(s), saved: Date.now() });
+  }
+  saveWatch();
+  render();
+}
+
+// Neuer Stand eines gemerkten Coins (nach erneuter Analyse)
+function syncWatch(s) {
+  const entry = state.watch.find(e => e.id === stockId(s));
+  if (!entry) return;
+  entry.stock = snapshot(s);
+  entry.saved = Date.now();
+  saveWatch();
+}
+
+function openEntry(id) {
+  const entry = state.watch.find(e => e.id === id);
+  if (!entry) return;
+  loadSeq++; // laufende Suche verwerfen
+  setLoading(false);
+  setError('');
+  state.stock = snapshot(entry.stock);
+  document.getElementById('searchInput').value = state.stock.name;
+  renderHits([], state.stock.cgId);
+  markQuick(state.stock);
+  render();
+  document.getElementById('stockName').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+const SORTS = [['score', 'Score'], ['change', '24 h'], ['name', 'Name']];
+
+function renderWatchBtn() {
+  const on = !!state.stock && isWatched(state.stock);
+  const btn = document.getElementById('watchBtn');
+  btn.setAttribute('aria-pressed', String(on));
+  document.getElementById('watchLabel').textContent = on ? 'Gemerkt' : 'Merken';
+  document.getElementById('watchStar').setAttribute('fill', on ? 'currentColor' : 'none');
+  btn.style.color = on ? (state.mode === 'clean' ? '#fff' : '#f2c46d') : '';
+}
+
+function renderWatchlist() {
+  document.getElementById('watchSort').innerHTML = SORTS
+    .map(([k, l]) => `<button type="button" class="chip" data-sort="${k}" aria-pressed="${state.watchSort === k}">${l}</button>`).join('');
+  const body = document.getElementById('watchBody');
+  const cmp = document.getElementById('compareBtn');
+  const flagged = state.watch.filter(e => warningsFor(e.stock).length).length;
+  document.getElementById('watchCount').textContent = state.watch.length
+    ? `${state.watch.length} Coin${state.watch.length === 1 ? '' : 's'}${flagged ? ` · ${flagged} mit Warnsignalen` : ''}` : '';
+  cmp.disabled = state.compare.size < 2;
+  cmp.textContent = `Vergleichen${state.compare.size ? ` (${state.compare.size})` : ''}`;
+
+  if (!state.watch.length) {
+    body.innerHTML = `<p class="text-sm faint py-2">Noch leer. Tippe bei einem Coin auf <b class="muted">Merken</b>, dann erscheint sie hier mit Score und Rang.</p>`;
+    return;
+  }
+  const rows = state.watch.map(e => ({ e, sc: computeScore(e.stock), warn: warningsFor(e.stock) }));
+  rows.sort((a, b) => state.watchSort === 'name' ? a.e.stock.name.localeCompare(b.e.stock.name, 'de')
+    : state.watchSort === 'change' ? (b.e.stock.changePct ?? -Infinity) - (a.e.stock.changePct ?? -Infinity)
+    : b.sc.total - a.sc.total);
+  const full = state.compare.size >= MAX_COMPARE;
+  const current = state.stock ? stockId(state.stock) : null;
+
+  body.innerHTML = `
+    <div class="overflow-x-auto -mx-1">
+      <table class="w-full text-sm" style="min-width:560px">
+        <thead><tr class="text-left">
+          <th class="eyebrow font-semibold py-2 px-1 w-8">#</th>
+          <th class="eyebrow font-semibold py-2 px-1">Coin</th>
+          <th class="eyebrow font-semibold py-2 px-1">Score</th>
+          ${CATEGORIES.map(c => `<th class="eyebrow font-semibold py-2 px-1 text-right hidden md:table-cell" title="${c.label}">${c.short.slice(0, 4)}.</th>`).join('')}
+          <th class="eyebrow font-semibold py-2 px-1 text-right">Kurs</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-right">24 h</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-center" title="Warnsignale">!</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-center">Vgl.</th>
+          <th class="py-2 px-1"><span class="sr-only">Entfernen</span></th>
+        </tr></thead>
+        <tbody>${rows.map(({ e, sc, warn }, i) => {
+          const s = e.stock, chk = state.compare.has(e.id);
+          const up = (s.changePct ?? 0) >= 0;
+          return `<tr style="border-top:1px solid var(--line)${e.id === current ? ';background:rgba(255,255,255,.025)' : ''}">
+            <td class="num faint py-2.5 px-1">${i + 1}</td>
+            <td class="py-2.5 px-1 max-w-[220px]">
+              <button type="button" data-open="${esc(e.id)}" class="text-left w-full">
+                <span class="block truncate text-white">${esc(s.name)}</span>
+                <span class="block text-[11px] faint num">${esc(s.ticker)} · ${s.live ? `Stand ${new Date(e.saved).toLocaleDateString('de-DE')}` : s.simulated ? 'simuliert' : 'Demo'}</span>
+              </button>
+            </td>
+            <td class="py-2.5 px-1">
+              <span class="flex items-center gap-2">
+                <span class="num font-semibold w-7 text-right" style="color:${scoreColor(sc.total)}">${sc.total}</span>
+                <span class="w-16 h-1 rounded-full overflow-hidden hidden sm:block" style="background:var(--line-2)"><span class="block h-full" style="width:${sc.total}%;background:${scoreColor(sc.total)}"></span></span>
+              </span>
+            </td>
+            ${CATEGORIES.map(c => `<td class="num text-right py-2.5 px-1 hidden md:table-cell muted">${sc.subs[c.key].score ?? '–'}</td>`).join('')}
+            <td class="num text-right py-2.5 px-1">${has(s.price) ? price(s.price) : '<span class="faint">–</span>'}</td>
+            <td class="num text-right py-2.5 px-1" style="color:${has(s.changePct) ? (state.mode === 'clean' ? 'var(--muted)' : up ? 'var(--up)' : 'var(--down)') : 'var(--faint)'}">${has(s.changePct) ? `${up ? '+' : ''}${f2(s.changePct)} %` : '–'}</td>
+            <td class="text-center py-2.5 px-1">${warn.length
+              ? `<button type="button" data-warn="${esc(e.id)}" aria-expanded="${state.watchWarn.has(e.id)}"
+                   class="num text-xs min-w-[28px] px-1.5 py-1 rounded-md" style="${warnStyle(warn.some(w => w.level === 'hoch') ? 'hoch' : 'mittel')}"
+                   aria-label="${warn.length} Warnsignale für ${esc(s.name)} ${state.watchWarn.has(e.id) ? 'ausblenden' : 'anzeigen'}">${warn.length}</button>`
+              : '<span class="faint">–</span>'}</td>
+            <td class="text-center py-2.5 px-1">
+              <input type="checkbox" data-compare="${esc(e.id)}" ${chk ? 'checked' : ''} ${!chk && full ? 'disabled' : ''}
+                     aria-label="${esc(s.name)} vergleichen" class="w-4 h-4 align-middle" style="accent-color:${state.mode === 'clean' ? '#fff' : 'var(--accent)'}">
+            </td>
+            <td class="text-right py-2.5 px-1">
+              <button type="button" data-remove="${esc(e.id)}" class="faint hover:text-white px-1" aria-label="${esc(s.name)} entfernen">✕</button>
+            </td>
+          </tr>${warn.length && state.watchWarn.has(e.id) ? `
+          <tr><td></td><td colspan="11" class="pb-3 pt-0 px-1"><ul class="flex flex-wrap gap-2">${warnChips(warn)}</ul></td></tr>` : ''}`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+    <p class="text-[11px] faint mt-2">Ranking mit deiner aktuellen Gewichtung. Antippen öffnet den gespeicherten Stand ohne neuen Abruf. Für aktuelle Daten den Coin neu suchen.</p>`;
+}
+
+/* ---------------------------------------------------------------
+   Vergleich von 2–4 gemerkten Coins
+---------------------------------------------------------------- */
+const COMPARE_COLORS = ['#5ab0f0', '#e7b34a', '#e97fb4', '#a38cf5'];
+const CLEAN_DASH = [[], [6, 4], [2, 3], [10, 3, 2, 3]];
+const compareColor = i => state.mode === 'clean' ? ['#ffffff', '#bdbdbd', '#8a8a8a', '#d9d9d9'][i] : COMPARE_COLORS[i];
+let compareRadar;
+
+function renderCompare() {
+  const entries = state.watch.filter(e => state.compare.has(e.id));
+  const items = entries.map((e, i) => ({ s: e.stock, sc: computeScore(e.stock), color: compareColor(i), dash: state.mode === 'clean' ? CLEAN_DASH[i] : [] }));
+  const dashCss = d => d.length ? `stroke-dasharray="${d.join(' ')}"` : '';
+
+  document.getElementById('compareLegend').innerHTML = items.map(({ s, sc, color, dash }) => `
+    <span class="flex items-center gap-2 text-sm">
+      <svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="${color}" stroke-width="2.5" ${dashCss(dash)}/></svg>
+      <span class="text-white">${esc(s.name)}</span><span class="num faint">${esc(s.ticker)} · ${sc.total}</span>
+    </span>`).join('');
+
+  // Radar
+  const datasets = items.map(({ s, sc, color, dash }) => ({
+    label: s.name, data: CATEGORIES.map(c => sc.subs[c.key].score ?? 0),
+    borderColor: color, backgroundColor: 'transparent', borderWidth: 2, borderDash: dash, pointRadius: 3, pointBackgroundColor: color,
+  }));
+  const grid = state.mode === 'clean' ? '#1c1c1c' : '#1e2633';
+  if (!compareRadar) {
+    compareRadar = new Chart(document.getElementById('compareRadar'), {
+      type: 'radar',
+      data: { labels: CATEGORIES.map(c => c.short), datasets },
+      options: {
+        maintainAspectRatio: false, animation: { duration: 400 },
+        scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, display: false }, grid: { color: grid }, angleLines: { color: grid },
+          pointLabels: { color: '#e6ebf2', font: { size: 12, weight: '500' } } } },
+        plugins: { legend: { display: false } },
+      },
+    });
+  } else {
+    compareRadar.data.datasets = datasets;
+    compareRadar.options.scales.r.grid.color = grid;
+    compareRadar.options.scales.r.angleLines.color = grid;
+    compareRadar.update();
+  }
+
+  // Kursentwicklung in Prozent, gemeinsame Skala
+  const chartBox = document.getElementById('compareChart');
+  const seriesList = items.map(it => ({ ...it, pts: (it.s.history || []).slice(-181).map(p => p[1]) })).filter(x => x.pts.length > 1);
+  if (!seriesList.length) {
+    chartBox.innerHTML = '<p class="text-xs faint py-6">Kursverläufe gibt es nur für Coins mit Live-Daten.</p>';
+  } else {
+    const rel = seriesList.map(x => ({ ...x, r: x.pts.map(v => (v / x.pts[0] - 1) * 100) }));
+    const all = rel.flatMap(x => x.r);
+    const lo = Math.min(0, ...all), hi = Math.max(0, ...all);
+    const W = 1000, H = 260, pad = 10;
+    const y = v => pad + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * pad);
+    chartBox.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full" style="height:260px" role="img" aria-label="Kursentwicklung der verglichenen Coins in Prozent">
+        <line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-2)" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="4 4"/>
+        ${rel.map(x => `<path d="${x.r.map((v, i) => `${i ? 'L' : 'M'}${((i / (x.r.length - 1)) * W).toFixed(1)},${y(v).toFixed(1)}`).join('')}"
+            fill="none" stroke="${x.color}" stroke-width="2" vector-effect="non-scaling-stroke" ${dashCss(x.dash)}/>`).join('')}
+      </svg>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs num">${rel.map(x => `<span style="color:${x.color}">${esc(x.s.ticker)} ${x.r.at(-1) >= 0 ? '+' : ''}${f2(x.r.at(-1))} %</span>`).join('')}</div>`;
+  }
+
+  // Tabelle: Scores und alle Kennzahlen nebeneinander, bester Wert hervorgehoben
+  const cell = (val, pts, best) => `<td class="num text-right py-2 px-2 whitespace-nowrap ${best ? 'text-white font-semibold' : 'muted'}">${val}${pts !== null && pts !== undefined ? ` <span class="text-[11px] ${best ? '' : 'faint'}">(${pts})</span>` : ''}${best ? ' ▲' : ''}</td>`;
+  // Index des besten Werts; -1, wenn keiner heraussticht (alle gleich oder keine Daten)
+  const bestIdx = (vals, lowerIsBetter = false) => {
+    const nums = vals.map(v => (v === null || v === undefined ? null : lowerIsBetter ? -v : v));
+    const valid = nums.filter(v => v !== null);
+    if (!valid.length) return -1;
+    const max = Math.max(...valid);
+    return valid.filter(v => v === max).length > 1 ? -1 : nums.indexOf(max);
+  };
+  const scoreRow = (label, vals, { strong = false, lowerIsBetter = false } = {}) => {
+    const b = bestIdx(vals, lowerIsBetter);
+    return `<tr style="border-top:1px solid var(--line)"><th scope="row" class="text-left font-${strong ? 'semibold text-white' : 'normal muted'} py-2 pr-3">${label}</th>
+      ${vals.map((v, i) => cell(v ?? '–', null, i === b)).join('')}</tr>`;
+  };
+  const head = `<thead><tr><th></th>${items.map(({ s, color }) => `<th class="text-right py-2 px-2 font-semibold whitespace-nowrap" style="color:${color}">${esc(s.ticker)}</th>`).join('')}</tr></thead>`;
+  const rows = [
+    scoreRow('Gesamtscore', items.map(x => x.sc.total), { strong: true }),
+    ...CATEGORIES.map(c => scoreRow(c.label, items.map(x => x.sc.subs[c.key].score))),
+    ...CATEGORIES.flatMap(c => c.metrics.map((m, mi) => {
+      const its = items.map(x => x.sc.subs[c.key].items[mi]);
+      const b = bestIdx(its.map(i => i.pts));
+      return `<tr style="border-top:1px solid var(--line)"><th scope="row" class="text-left font-normal faint py-2 pr-3">${m.label}</th>
+        ${its.map((it, i) => cell(esc(it.raw), it.pts, i === b)).join('')}</tr>`;
+    })),
+    scoreRow('Warnsignale', items.map(x => warningsFor(x.s).length), { lowerIsBetter: true }),
+  ];
+  document.getElementById('compareTable').innerHTML = head + `<tbody>${rows.join('')}</tbody>`;
+}
+
+function initWatch() {
+  document.getElementById('watchBtn').addEventListener('click', toggleWatch);
+  document.getElementById('watchSort').addEventListener('click', e => {
+    const k = e.target.closest('[data-sort]')?.dataset.sort;
+    if (!k) return;
+    state.watchSort = k;
+    store.set('rr:watchSort', k);
+    renderWatchlist();
+  });
+  document.getElementById('watchBody').addEventListener('click', e => {
+    const open = e.target.closest('[data-open]')?.dataset.open;
+    const remove = e.target.closest('[data-remove]')?.dataset.remove;
+    const warnId = e.target.closest('[data-warn]')?.dataset.warn;
+    if (warnId) {
+      if (state.watchWarn.has(warnId)) state.watchWarn.delete(warnId); else state.watchWarn.add(warnId);
+      renderWatchlist();
+      return;
+    }
+    if (open) openEntry(open);
+    if (remove) {
+      state.watch = state.watch.filter(x => x.id !== remove);
+      state.compare.delete(remove);
+      saveWatch();
+      render();
+      renderWatchlist();
+    }
+  });
+  document.getElementById('watchBody').addEventListener('change', e => {
+    const id = e.target.dataset.compare;
+    if (!id) return;
+    if (e.target.checked) state.compare.add(id); else state.compare.delete(id);
+    renderWatchlist();
+  });
+  const dlg = document.getElementById('compareDialog');
+  document.getElementById('compareBtn').addEventListener('click', () => {
+    if (state.compare.size < 2) return;
+    dlg.showModal();
+    renderCompare(); // nach showModal, damit das Diagramm seine Größe kennt
+  });
+  document.getElementById('closeCompare').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  renderWatchlist();
+}
+
+/* ---------------------------------------------------------------
+   Bewertungskriterien-Dialog (aus CATEGORIES erzeugt, bleibt also synchron)
+---------------------------------------------------------------- */
+function renderCriteria() {
+  const w = normWeights();
+  document.getElementById('criteriaBody').innerHTML = `
+    <section>
+      <h3 class="font-semibold text-white mb-1">So entsteht der Score</h3>
+      <p class="muted">Jede Kennzahl wird in 0–100 Punkte umgerechnet. Pro Bereich zählt der Durchschnitt der Kennzahlen, die Daten haben.
+        Der Gesamtscore ist die gewichtete Summe der vier Bereiche. Bereiche ganz ohne Daten fallen raus, ihr Gewicht wird auf die anderen verteilt.</p>
+    </section>
+    ${CATEGORIES.map(c => `
+      <section>
+        <div class="flex items-baseline justify-between gap-3 mb-2">
+          <h3 class="font-semibold" style="color:${catColor(c)}">${c.label}</h3>
+          <span class="num text-xs muted">Gewicht ${Math.round(w[c.key] * 100)} %</span>
+        </div>
+        <ul class="space-y-2">${c.metrics.map(m => `
+          <li class="inset px-3 py-2">
+            <div class="font-medium text-white">${m.label}</div>
+            <div class="muted">${m.rule}</div>
+          </li>`).join('')}
+        </ul>
+      </section>`).join('')}
+    <section>
+      <h3 class="font-semibold text-white mb-2">Einstufung des Gesamtscores</h3>
+      <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2">${[[80, 'Exzellent'], [65, 'Attraktiv'], [50, 'Neutral'], [35, 'Erhöhtes Risiko'], [0, 'Hohes Risiko']]
+        .map(([min, name], i, arr) => `<li class="flex items-center gap-2"><span class="w-3 h-3 rounded-full" style="background:${scoreColor(min + 7)}"></span>
+          <span class="num muted w-14">${min}${i ? `–${arr[i - 1][0] - 1}` : '+'}</span><span class="text-white">${name}</span></li>`).join('')}
+      </ul>
+    </section>
+    <p class="text-xs faint">Keine Anlageberatung. Die Schwellen sind Faustregeln für Krypto und lassen sich im Code in CATEGORIES anpassen.</p>`;
+}
+
+function initCriteria() {
+  const dlg = document.getElementById('criteriaDialog');
+  document.querySelectorAll('[data-open-criteria]').forEach(b => b.addEventListener('click', () => {
+    renderCriteria();
+    dlg.showModal();
+  }));
+  document.getElementById('closeCriteria').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); }); // Klick neben das Fenster schließt
+}
+
+/* ---------------------------------------------------------------
+   Vollbild (inkl. webkit-Präfix für Safari auf dem iPad)
+---------------------------------------------------------------- */
+function initFullscreen() {
+  const root = document.documentElement;
+  const btn = document.getElementById('fullscreenBtn');
+  const hint = document.getElementById('fullscreenHint');
+  const current = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const enter = root.requestFullscreen?.bind(root) || root.webkitRequestFullscreen?.bind(root);
+  const exit = (document.exitFullscreen || document.webkitExitFullscreen)?.bind(document);
+
+  const sync = () => { document.getElementById('fullscreenLabel').textContent = current() ? 'Vollbild beenden' : 'Vollbild'; };
+  document.addEventListener('fullscreenchange', sync);
+  document.addEventListener('webkitfullscreenchange', sync);
+
+  btn.addEventListener('click', async () => {
+    try {
+      if (current()) await exit();
+      else if (enter) await enter();
+      else throw new Error('unsupported');
+      hint.hidden = true;
+    } catch {
+      hint.hidden = false;
+    }
+    sync();
+  });
+}
+init();
+</script>
+</body>
+</html>
