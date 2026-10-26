@@ -188,6 +188,22 @@
       </details>
     </section>
 
+    <!-- Watchlist mit Ranking -->
+    <section id="watchCard" class="card p-4 sm:p-5 mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-baseline gap-2">
+          <h2 class="eyebrow">Watchlist</h2>
+          <span id="watchCount" class="text-xs faint num"></span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs faint">Sortieren</span>
+          <div id="watchSort" class="flex gap-1.5"></div>
+          <button id="compareBtn" type="button" class="btn btn-sm" disabled>Vergleichen</button>
+        </div>
+      </div>
+      <div id="watchBody" class="mt-3"></div>
+    </section>
+
     <!-- Aktienkopf mit Kennzahlenleiste -->
     <section class="card p-5 sm:p-6 mb-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
@@ -196,6 +212,10 @@
             <h1 id="stockName" class="text-2xl sm:text-[28px] font-semibold text-white tracking-tight" style="text-wrap:balance">–</h1>
             <span id="stockTicker" class="num text-xs px-2 py-0.5 rounded-md muted" style="border:1px solid var(--line-2)"></span>
             <span id="dataBadge"></span>
+            <button id="watchBtn" type="button" class="btn btn-sm" aria-pressed="false">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path id="watchStar" d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
+              <span id="watchLabel">Merken</span>
+            </button>
           </div>
           <p id="stockMeta" class="text-sm muted mt-1"></p>
         </div>
@@ -213,6 +233,7 @@
       </div>
       <dl id="keyStats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px mt-5 rounded-xl overflow-hidden"
           style="background:var(--line);border:1px solid var(--line)"></dl>
+      <div id="warnings" class="mt-4"></div>
     </section>
 
     <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -311,6 +332,33 @@
       </section>
     </main>
 
+    <!-- Vergleich -->
+    <dialog id="compareDialog" aria-labelledby="compareTitle"
+            class="rounded-2xl p-0 w-[min(1100px,calc(100vw-24px))] max-h-[90vh]" style="background:var(--panel);border:1px solid var(--line-2)">
+      <div class="sticky top-0 z-10 flex items-center justify-between gap-4 px-5 sm:px-6 py-4" style="background:var(--panel);border-bottom:1px solid var(--line)">
+        <h2 id="compareTitle" class="text-lg font-semibold text-white">Vergleich</h2>
+        <button type="button" id="closeCompare" class="btn btn-sm">Schließen</button>
+      </div>
+      <div class="px-5 sm:px-6 py-5 space-y-6">
+        <div id="compareLegend" class="flex flex-wrap gap-x-5 gap-y-2"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 class="eyebrow mb-2">Teilbereiche</h3>
+            <div class="relative h-72"><canvas id="compareRadar" role="img" aria-label="Radar-Vergleich der Teilbereiche"></canvas></div>
+          </div>
+          <div>
+            <h3 class="eyebrow mb-2">Kursentwicklung 6 Monate</h3>
+            <div id="compareChart"></div>
+          </div>
+        </div>
+        <div>
+          <h3 class="eyebrow mb-2">Kennzahlen</h3>
+          <div class="overflow-x-auto"><table class="w-full text-sm" id="compareTable"></table></div>
+          <p class="text-xs faint mt-2">Der beste Wert je Zeile ist hervorgehoben. Werte aus dem Stand, zu dem die Aktie gemerkt bzw. zuletzt analysiert wurde.</p>
+        </div>
+      </div>
+    </dialog>
+
     <!-- Bewertungskriterien -->
     <dialog id="criteriaDialog" aria-labelledby="criteriaTitle"
             class="rounded-2xl p-0 w-[min(760px,calc(100vw-32px))] max-h-[85vh]" style="background:var(--panel);border:1px solid var(--line-2)">
@@ -349,7 +397,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '1.9';
+const APP_VERSION = '2.0';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -797,7 +845,8 @@ function verdictFor(s) {
 /* ---------------------------------------------------------------
    State & Rendering
 ---------------------------------------------------------------- */
-const state = { stock: null, weights: { ...PRESETS['Ausgewogen'] }, apiKey: store.get('rr:apiKey') || '', mode: store.get('rr:mode') || 'standard', range: '6M' };
+const state = { stock: null, weights: { ...PRESETS['Ausgewogen'] }, apiKey: store.get('rr:apiKey') || '', mode: store.get('rr:mode') || 'standard', range: '6M',
+  watch: store.get('rr:watch') || [], compare: new Set(), watchSort: store.get('rr:watchSort') || 'score' };
 let radar;
 
 function normWeights() {
@@ -998,17 +1047,13 @@ function renderRaw(s) {
 function render() {
   const s = state.stock;
   if (!s) return;
-  const subs = analyse(s);
-  const w = normWeights();
-  // Kategorien ohne Daten fallen raus, die übrigen Gewichte werden neu verteilt
-  const avail = CATEGORIES.filter(c => subs[c.key].score !== null);
-  const wAvail = avail.reduce((a, c) => a + w[c.key], 0) || 1;
-  const eff = Object.fromEntries(CATEGORIES.map(c => [c.key, subs[c.key].score === null ? 0 : w[c.key] / wAvail]));
-  const total = Math.round(avail.reduce((a, c) => a + subs[c.key].score * eff[c.key], 0));
+  const { subs, eff, total, avail } = computeScore(s);
   const col = scoreColor(total);
   const [verdict, text] = verdictFor(total);
 
   renderHead(s);
+  renderWatchBtn();
+  renderWarnings(s);
 
   // Gauge
   const C = 2 * Math.PI * 84;
@@ -1065,6 +1110,7 @@ function render() {
   renderMetrics(s, subs, eff);
   renderRaw(s);
   renderWeights();
+  renderWatchlist(); // Ranking folgt der Gewichtung
 }
 
 // Kursverlauf als schlichte Linie; Zeitraum über die Buttons darüber
@@ -1225,6 +1271,7 @@ async function selectStock(query, symbol) {
   document.getElementById('searchInput').value = stock.name;
   const known = STOCKS.find(k => k.name === stock.name || (k.live || k.ticker) === stock.ticker);
   document.querySelectorAll('[data-quick]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.quick === known?.name)));
+  syncWatch(stock);
   render();
 }
 
@@ -1317,6 +1364,7 @@ function init() {
     if (v === null) store.del(`rr:moat:${state.stock.ticker}`); else store.set(`rr:moat:${state.stock.ticker}`, v);
     state.stock.moatOverride = v;
     state.stock.moat = v ?? state.stock.moatBase;
+    syncWatch(state.stock);
     render();
   });
 
@@ -1338,11 +1386,328 @@ function init() {
     store.set('rr:mode', state.mode);
     applyMode();
   });
+  initWatch();
   applyMode();
 
   initFullscreen();
   initCriteria();
   selectStock('Microsoft');
+}
+
+/* ---------------------------------------------------------------
+   Gesamtscore einer Aktie mit der aktuellen Gewichtung
+   (genutzt von Hauptansicht, Watchlist und Vergleich)
+---------------------------------------------------------------- */
+function computeScore(stock) {
+  const subs = analyse(stock);
+  const w = normWeights();
+  // Kategorien ohne Daten fallen raus, die übrigen Gewichte werden neu verteilt
+  const avail = CATEGORIES.filter(c => subs[c.key].score !== null);
+  const wAvail = avail.reduce((a, c) => a + w[c.key], 0) || 1;
+  const eff = Object.fromEntries(CATEGORIES.map(c => [c.key, subs[c.key].score === null ? 0 : w[c.key] / wAvail]));
+  const total = Math.round(avail.reduce((a, c) => a + subs[c.key].score * eff[c.key], 0));
+  return { subs, eff, total, avail };
+}
+
+/* ---------------------------------------------------------------
+   Warnsignale: auffällige Werte, unabhängig von der Gewichtung
+---------------------------------------------------------------- */
+function warningsFor(s) {
+  const out = [];
+  const add = (level, text) => out.push({ level, text });
+  if (has(s.z) && s.z < 1.8) add('hoch', `Altman-Z ${num(s.z)}: erhöhtes Insolvenzrisiko`);
+  if (has(s.margin) && s.margin < 0) add('hoch', `Verlust: Nettomarge ${num(s.margin)} %`);
+  if (has(s.pe) && s.pe > 0 && has(s.margin) && s.margin < 0) add('mittel', 'Positives KGV trotz Verlust: Daten widersprüchlich, bitte prüfen');
+  if (has(s.de) && s.de > 2) add('mittel', `Hohe Verschuldung (Debt/Equity ${num(s.de, 2)})`);
+  if (has(s.cr) && s.cr < 1) add('mittel', `Current Ratio ${num(s.cr, 2)}: kurzfristige Schulden nicht voll gedeckt`);
+  if (has(s.growth) && s.growth < 0) add('mittel', `Umsatz schrumpft (${num(s.growth)} %)`);
+  if (has(s.pe) && s.pe > 0 && s.bench && s.pe > 2 * s.bench.pe) add('mittel', `KGV ${num(s.pe, 0)} mehr als doppelt so hoch wie die Branche (${num(s.bench.pe, 0)})`);
+  if (has(s.rsi) && s.rsi > 75) add('mittel', `RSI ${num(s.rsi, 0)}: überkauft`);
+  if (has(s.rsi) && s.rsi < 25) add('mittel', `RSI ${num(s.rsi, 0)}: stark überverkauft`);
+  if (s.sma200 === false) add('mittel', 'Kurs unter der 200-Tage-Linie (Abwärtstrend)');
+  if (has(s.fromHigh) && s.fromHigh < -35) add('mittel', `Kurs ${num(-s.fromHigh, 0)} % unter dem Jahreshoch`);
+  if (has(s.beta) && s.beta > 1.8) add('mittel', `Sehr schwankungsanfällig (Beta ${num(s.beta, 2)})`);
+  return out.sort((a, b) => (a.level === 'hoch' ? 0 : 1) - (b.level === 'hoch' ? 0 : 1));
+}
+
+function renderWarnings(s) {
+  const box = document.getElementById('warnings');
+  const list = warningsFor(s);
+  if (!list.length) {
+    box.innerHTML = `<p class="text-xs faint">Keine Warnsignale.</p>`;
+    return;
+  }
+  const clean = state.mode === 'clean';
+  const style = level => clean
+    ? `border:1px solid ${level === 'hoch' ? '#fff' : 'var(--line-2)'};color:${level === 'hoch' ? '#fff' : 'var(--muted)'}`
+    : level === 'hoch'
+      ? 'border:1px solid rgba(240,99,99,.35);background:rgba(240,99,99,.08);color:#ffb4b4'
+      : 'border:1px solid rgba(242,196,109,.3);background:rgba(242,196,109,.06);color:#f2d29a';
+  box.innerHTML = `
+    <div class="flex items-center gap-2 mb-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:${clean ? '#fff' : '#f2c46d'}" aria-hidden="true"><path d="M12 3 2 20h20L12 3zM12 10v4M12 17v.01"/></svg>
+      <span class="eyebrow" style="color:var(--text)">${list.length} Warnsignal${list.length === 1 ? '' : 'e'}</span>
+    </div>
+    <ul class="flex flex-wrap gap-2">${list.map(w => `<li class="text-xs px-2.5 py-1.5 rounded-lg" style="${style(w.level)}">${esc(w.text)}</li>`).join('')}</ul>`;
+}
+
+/* ---------------------------------------------------------------
+   Watchlist: gemerkte Aktien als Momentaufnahme im Browser.
+   Kein Abruf nötig; wird eine gemerkte Aktie neu analysiert, wird ihr Stand aktualisiert.
+---------------------------------------------------------------- */
+const MAX_COMPARE = 4;
+const stockId = s => (s.live ? 'L:' : s.simulated ? 'S:' : 'D:') + (s.simulated ? s.name : s.ticker);
+const snapshot = s => JSON.parse(JSON.stringify(s));
+const isWatched = s => state.watch.some(e => e.id === stockId(s));
+const saveWatch = () => store.set('rr:watch', state.watch);
+
+function toggleWatch() {
+  const s = state.stock;
+  if (!s) return;
+  const id = stockId(s);
+  if (isWatched(s)) {
+    state.watch = state.watch.filter(e => e.id !== id);
+    state.compare.delete(id);
+  } else {
+    state.watch.push({ id, stock: snapshot(s), saved: Date.now() });
+  }
+  saveWatch();
+  render();
+}
+
+// Neuer Stand einer gemerkten Aktie (nach Analyse oder geänderter Moat-Einschätzung)
+function syncWatch(s) {
+  const entry = state.watch.find(e => e.id === stockId(s));
+  if (!entry) return;
+  entry.stock = snapshot(s);
+  entry.saved = Date.now();
+  saveWatch();
+}
+
+function openEntry(id) {
+  const entry = state.watch.find(e => e.id === id);
+  if (!entry) return;
+  loadSeq++; // laufende Suche verwerfen
+  setLoading(false);
+  setError('');
+  state.stock = snapshot(entry.stock);
+  document.getElementById('searchInput').value = state.stock.name;
+  renderHits([], state.stock.ticker);
+  const known = STOCKS.find(k => k.name === state.stock.name || (k.live || k.ticker) === state.stock.ticker);
+  document.querySelectorAll('[data-quick]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.quick === known?.name)));
+  render();
+  document.getElementById('stockName').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+const SORTS = [['score', 'Score'], ['change', 'Heute'], ['name', 'Name']];
+
+function renderWatchBtn() {
+  const on = !!state.stock && isWatched(state.stock);
+  const btn = document.getElementById('watchBtn');
+  btn.setAttribute('aria-pressed', String(on));
+  document.getElementById('watchLabel').textContent = on ? 'Gemerkt' : 'Merken';
+  document.getElementById('watchStar').setAttribute('fill', on ? 'currentColor' : 'none');
+  btn.style.color = on ? (state.mode === 'clean' ? '#fff' : '#f2c46d') : '';
+}
+
+function renderWatchlist() {
+  document.getElementById('watchSort').innerHTML = SORTS
+    .map(([k, l]) => `<button type="button" class="chip" data-sort="${k}" aria-pressed="${state.watchSort === k}">${l}</button>`).join('');
+  const body = document.getElementById('watchBody');
+  const cmp = document.getElementById('compareBtn');
+  document.getElementById('watchCount').textContent = state.watch.length ? `${state.watch.length} Aktie${state.watch.length === 1 ? '' : 'n'}` : '';
+  cmp.disabled = state.compare.size < 2;
+  cmp.textContent = `Vergleichen${state.compare.size ? ` (${state.compare.size})` : ''}`;
+
+  if (!state.watch.length) {
+    body.innerHTML = `<p class="text-sm faint py-2">Noch leer. Tippe bei einer Aktie auf <b class="muted">Merken</b>, dann erscheint sie hier mit Score und Rang.</p>`;
+    return;
+  }
+  const rows = state.watch.map(e => ({ e, sc: computeScore(e.stock), warn: warningsFor(e.stock) }));
+  rows.sort((a, b) => state.watchSort === 'name' ? a.e.stock.name.localeCompare(b.e.stock.name, 'de')
+    : state.watchSort === 'change' ? (b.e.stock.changePct ?? -Infinity) - (a.e.stock.changePct ?? -Infinity)
+    : b.sc.total - a.sc.total);
+  const full = state.compare.size >= MAX_COMPARE;
+  const current = state.stock ? stockId(state.stock) : null;
+
+  body.innerHTML = `
+    <div class="overflow-x-auto -mx-1">
+      <table class="w-full text-sm" style="min-width:560px">
+        <thead><tr class="text-left">
+          <th class="eyebrow font-semibold py-2 px-1 w-8">#</th>
+          <th class="eyebrow font-semibold py-2 px-1">Aktie</th>
+          <th class="eyebrow font-semibold py-2 px-1">Score</th>
+          ${CATEGORIES.map(c => `<th class="eyebrow font-semibold py-2 px-1 text-right hidden md:table-cell" title="${c.label}">${c.short.slice(0, 4)}.</th>`).join('')}
+          <th class="eyebrow font-semibold py-2 px-1 text-right">Kurs</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-right">Heute</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-center" title="Warnsignale">!</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-center">Vgl.</th>
+          <th class="py-2 px-1"><span class="sr-only">Entfernen</span></th>
+        </tr></thead>
+        <tbody>${rows.map(({ e, sc, warn }, i) => {
+          const s = e.stock, chk = state.compare.has(e.id);
+          const up = (s.changePct ?? 0) >= 0;
+          return `<tr style="border-top:1px solid var(--line)${e.id === current ? ';background:rgba(255,255,255,.025)' : ''}">
+            <td class="num faint py-2.5 px-1">${i + 1}</td>
+            <td class="py-2.5 px-1 max-w-[220px]">
+              <button type="button" data-open="${esc(e.id)}" class="text-left w-full">
+                <span class="block truncate text-white">${esc(s.name)}</span>
+                <span class="block text-[11px] faint num">${esc(s.ticker)} · ${s.live ? `Stand ${new Date(e.saved).toLocaleDateString('de-DE')}` : s.simulated ? 'simuliert' : 'Demo'}</span>
+              </button>
+            </td>
+            <td class="py-2.5 px-1">
+              <span class="flex items-center gap-2">
+                <span class="num font-semibold w-7 text-right" style="color:${scoreColor(sc.total)}">${sc.total}</span>
+                <span class="w-16 h-1 rounded-full overflow-hidden hidden sm:block" style="background:var(--line-2)"><span class="block h-full" style="width:${sc.total}%;background:${scoreColor(sc.total)}"></span></span>
+              </span>
+            </td>
+            ${CATEGORIES.map(c => `<td class="num text-right py-2.5 px-1 hidden md:table-cell muted">${sc.subs[c.key].score ?? '–'}</td>`).join('')}
+            <td class="num text-right py-2.5 px-1">${has(s.price) ? f2(s.price) : '<span class="faint">–</span>'}</td>
+            <td class="num text-right py-2.5 px-1" style="color:${has(s.changePct) ? (state.mode === 'clean' ? 'var(--muted)' : up ? 'var(--up)' : 'var(--down)') : 'var(--faint)'}">${has(s.changePct) ? `${up ? '+' : ''}${f2(s.changePct)} %` : '–'}</td>
+            <td class="num text-center py-2.5 px-1" style="color:${warn.length ? (state.mode === 'clean' ? '#fff' : warn.some(w => w.level === 'hoch') ? '#ff9b9b' : '#f2d29a') : 'var(--faint)'}" title="${esc(warn.map(w => w.text).join('\n'))}">${warn.length || '–'}</td>
+            <td class="text-center py-2.5 px-1">
+              <input type="checkbox" data-compare="${esc(e.id)}" ${chk ? 'checked' : ''} ${!chk && full ? 'disabled' : ''}
+                     aria-label="${esc(s.name)} vergleichen" class="w-4 h-4 align-middle" style="accent-color:${state.mode === 'clean' ? '#fff' : 'var(--accent)'}">
+            </td>
+            <td class="text-right py-2.5 px-1">
+              <button type="button" data-remove="${esc(e.id)}" class="faint hover:text-white px-1" aria-label="${esc(s.name)} entfernen">✕</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+    <p class="text-[11px] faint mt-2">Ranking mit deiner aktuellen Gewichtung. Antippen öffnet den gespeicherten Stand ohne neuen Abruf. Für aktuelle Daten die Aktie neu suchen.</p>`;
+}
+
+/* ---------------------------------------------------------------
+   Vergleich von 2–4 gemerkten Aktien
+---------------------------------------------------------------- */
+const COMPARE_COLORS = ['#5ab0f0', '#e7b34a', '#e97fb4', '#a38cf5'];
+const CLEAN_DASH = [[], [6, 4], [2, 3], [10, 3, 2, 3]];
+const compareColor = i => state.mode === 'clean' ? ['#ffffff', '#bdbdbd', '#8a8a8a', '#d9d9d9'][i] : COMPARE_COLORS[i];
+let compareRadar;
+
+function renderCompare() {
+  const entries = state.watch.filter(e => state.compare.has(e.id));
+  const items = entries.map((e, i) => ({ s: e.stock, sc: computeScore(e.stock), color: compareColor(i), dash: state.mode === 'clean' ? CLEAN_DASH[i] : [] }));
+  const dashCss = d => d.length ? `stroke-dasharray="${d.join(' ')}"` : '';
+
+  document.getElementById('compareLegend').innerHTML = items.map(({ s, sc, color, dash }) => `
+    <span class="flex items-center gap-2 text-sm">
+      <svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="${color}" stroke-width="2.5" ${dashCss(dash)}/></svg>
+      <span class="text-white">${esc(s.name)}</span><span class="num faint">${esc(s.ticker)} · ${sc.total}</span>
+    </span>`).join('');
+
+  // Radar
+  const datasets = items.map(({ s, sc, color, dash }) => ({
+    label: s.name, data: CATEGORIES.map(c => sc.subs[c.key].score ?? 0),
+    borderColor: color, backgroundColor: 'transparent', borderWidth: 2, borderDash: dash, pointRadius: 3, pointBackgroundColor: color,
+  }));
+  const grid = state.mode === 'clean' ? '#1c1c1c' : '#1e2633';
+  if (!compareRadar) {
+    compareRadar = new Chart(document.getElementById('compareRadar'), {
+      type: 'radar',
+      data: { labels: CATEGORIES.map(c => c.short), datasets },
+      options: {
+        maintainAspectRatio: false, animation: { duration: 400 },
+        scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, display: false }, grid: { color: grid }, angleLines: { color: grid },
+          pointLabels: { color: '#e6ebf2', font: { size: 12, weight: '500' } } } },
+        plugins: { legend: { display: false } },
+      },
+    });
+  } else {
+    compareRadar.data.datasets = datasets;
+    compareRadar.options.scales.r.grid.color = grid;
+    compareRadar.options.scales.r.angleLines.color = grid;
+    compareRadar.update();
+  }
+
+  // Kursentwicklung in Prozent, gemeinsame Skala
+  const chartBox = document.getElementById('compareChart');
+  const seriesList = items.map(it => ({ ...it, pts: (it.s.history || []).slice(-128).map(p => p[1]) })).filter(x => x.pts.length > 1);
+  if (!seriesList.length) {
+    chartBox.innerHTML = '<p class="text-xs faint py-6">Kursverläufe gibt es nur für Aktien mit Live-Daten.</p>';
+  } else {
+    const rel = seriesList.map(x => ({ ...x, r: x.pts.map(v => (v / x.pts[0] - 1) * 100) }));
+    const all = rel.flatMap(x => x.r);
+    const lo = Math.min(0, ...all), hi = Math.max(0, ...all);
+    const W = 1000, H = 260, pad = 10;
+    const y = v => pad + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * pad);
+    chartBox.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full" style="height:260px" role="img" aria-label="Kursentwicklung der verglichenen Aktien in Prozent">
+        <line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line-2)" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="4 4"/>
+        ${rel.map(x => `<path d="${x.r.map((v, i) => `${i ? 'L' : 'M'}${((i / (x.r.length - 1)) * W).toFixed(1)},${y(v).toFixed(1)}`).join('')}"
+            fill="none" stroke="${x.color}" stroke-width="2" vector-effect="non-scaling-stroke" ${dashCss(x.dash)}/>`).join('')}
+      </svg>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs num">${rel.map(x => `<span style="color:${x.color}">${esc(x.s.ticker)} ${x.r.at(-1) >= 0 ? '+' : ''}${f2(x.r.at(-1))} %</span>`).join('')}</div>`;
+  }
+
+  // Tabelle: Scores und alle Kennzahlen nebeneinander, bester Wert hervorgehoben
+  const cell = (val, pts, best) => `<td class="num text-right py-2 px-2 whitespace-nowrap ${best ? 'text-white font-semibold' : 'muted'}">${val}${pts !== null && pts !== undefined ? ` <span class="text-[11px] ${best ? '' : 'faint'}">(${pts})</span>` : ''}${best ? ' ▲' : ''}</td>`;
+  // Index des besten Werts; -1, wenn keiner heraussticht (alle gleich oder keine Daten)
+  const bestIdx = (vals, lowerIsBetter = false) => {
+    const nums = vals.map(v => (v === null || v === undefined ? null : lowerIsBetter ? -v : v));
+    const valid = nums.filter(v => v !== null);
+    if (!valid.length) return -1;
+    const max = Math.max(...valid);
+    return valid.filter(v => v === max).length > 1 ? -1 : nums.indexOf(max);
+  };
+  const scoreRow = (label, vals, { strong = false, lowerIsBetter = false } = {}) => {
+    const b = bestIdx(vals, lowerIsBetter);
+    return `<tr style="border-top:1px solid var(--line)"><th scope="row" class="text-left font-${strong ? 'semibold text-white' : 'normal muted'} py-2 pr-3">${label}</th>
+      ${vals.map((v, i) => cell(v ?? '–', null, i === b)).join('')}</tr>`;
+  };
+  const head = `<thead><tr><th></th>${items.map(({ s, color }) => `<th class="text-right py-2 px-2 font-semibold whitespace-nowrap" style="color:${color}">${esc(s.ticker)}</th>`).join('')}</tr></thead>`;
+  const rows = [
+    scoreRow('Gesamtscore', items.map(x => x.sc.total), { strong: true }),
+    ...CATEGORIES.map(c => scoreRow(c.label, items.map(x => x.sc.subs[c.key].score))),
+    ...CATEGORIES.flatMap(c => c.metrics.map((m, mi) => {
+      const its = items.map(x => x.sc.subs[c.key].items[mi]);
+      const b = bestIdx(its.map(i => i.pts));
+      return `<tr style="border-top:1px solid var(--line)"><th scope="row" class="text-left font-normal faint py-2 pr-3">${m.label}</th>
+        ${its.map((it, i) => cell(esc(it.raw), it.pts, i === b)).join('')}</tr>`;
+    })),
+    scoreRow('Warnsignale', items.map(x => warningsFor(x.s).length), { lowerIsBetter: true }),
+  ];
+  document.getElementById('compareTable').innerHTML = head + `<tbody>${rows.join('')}</tbody>`;
+}
+
+function initWatch() {
+  document.getElementById('watchBtn').addEventListener('click', toggleWatch);
+  document.getElementById('watchSort').addEventListener('click', e => {
+    const k = e.target.closest('[data-sort]')?.dataset.sort;
+    if (!k) return;
+    state.watchSort = k;
+    store.set('rr:watchSort', k);
+    renderWatchlist();
+  });
+  document.getElementById('watchBody').addEventListener('click', e => {
+    const open = e.target.closest('[data-open]')?.dataset.open;
+    const remove = e.target.closest('[data-remove]')?.dataset.remove;
+    if (open) openEntry(open);
+    if (remove) {
+      state.watch = state.watch.filter(x => x.id !== remove);
+      state.compare.delete(remove);
+      saveWatch();
+      render();
+      renderWatchlist();
+    }
+  });
+  document.getElementById('watchBody').addEventListener('change', e => {
+    const id = e.target.dataset.compare;
+    if (!id) return;
+    if (e.target.checked) state.compare.add(id); else state.compare.delete(id);
+    renderWatchlist();
+  });
+  const dlg = document.getElementById('compareDialog');
+  document.getElementById('compareBtn').addEventListener('click', () => {
+    if (state.compare.size < 2) return;
+    dlg.showModal();
+    renderCompare(); // nach showModal, damit das Diagramm seine Größe kennt
+  });
+  document.getElementById('closeCompare').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  renderWatchlist();
 }
 
 /* ---------------------------------------------------------------
