@@ -398,7 +398,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '2.2';
+const APP_VERSION = '2.3';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -848,7 +848,7 @@ function verdictFor(s) {
    State & Rendering
 ---------------------------------------------------------------- */
 const state = { stock: null, weights: { ...PRESETS['Ausgewogen'] }, apiKey: store.get('rr:apiKey') || '', mode: store.get('rr:mode') || 'standard', range: '6M',
-  watch: store.get('rr:watch') || [], compare: new Set(), watchSort: store.get('rr:watchSort') || 'score' };
+  watch: store.get('rr:watch') || [], compare: new Set(), watchWarn: new Set(), watchSort: store.get('rr:watchSort') || 'score' };
 let radar;
 
 function normWeights() {
@@ -1468,6 +1468,13 @@ function warningsFor(s) {
   return out.sort((a, b) => (a.level === 'hoch' ? 0 : 1) - (b.level === 'hoch' ? 0 : 1));
 }
 
+const warnStyle = level => state.mode === 'clean'
+  ? `border:1px solid ${level === 'hoch' ? '#fff' : 'var(--line-2)'};color:${level === 'hoch' ? '#fff' : 'var(--muted)'}`
+  : level === 'hoch'
+    ? 'border:1px solid rgba(240,99,99,.35);background:rgba(240,99,99,.08);color:#ffb4b4'
+    : 'border:1px solid rgba(242,196,109,.3);background:rgba(242,196,109,.06);color:#f2d29a';
+const warnChips = list => list.map(w => `<li class="text-xs px-2.5 py-1.5 rounded-lg" style="${warnStyle(w.level)}">${esc(w.text)}</li>`).join('');
+
 function renderWarnings(s) {
   const box = document.getElementById('warnings');
   const list = warningsFor(s);
@@ -1476,17 +1483,12 @@ function renderWarnings(s) {
     return;
   }
   const clean = state.mode === 'clean';
-  const style = level => clean
-    ? `border:1px solid ${level === 'hoch' ? '#fff' : 'var(--line-2)'};color:${level === 'hoch' ? '#fff' : 'var(--muted)'}`
-    : level === 'hoch'
-      ? 'border:1px solid rgba(240,99,99,.35);background:rgba(240,99,99,.08);color:#ffb4b4'
-      : 'border:1px solid rgba(242,196,109,.3);background:rgba(242,196,109,.06);color:#f2d29a';
   box.innerHTML = `
     <div class="flex items-center gap-2 mb-2">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:${clean ? '#fff' : '#f2c46d'}" aria-hidden="true"><path d="M12 3 2 20h20L12 3zM12 10v4M12 17v.01"/></svg>
       <span class="eyebrow" style="color:var(--text)">${list.length} Warnsignal${list.length === 1 ? '' : 'e'}</span>
     </div>
-    <ul class="flex flex-wrap gap-2">${list.map(w => `<li class="text-xs px-2.5 py-1.5 rounded-lg" style="${style(w.level)}">${esc(w.text)}</li>`).join('')}</ul>`;
+    <ul class="flex flex-wrap gap-2">${warnChips(list)}</ul>`;
 }
 
 /* ---------------------------------------------------------------
@@ -1553,7 +1555,9 @@ function renderWatchlist() {
     .map(([k, l]) => `<button type="button" class="chip" data-sort="${k}" aria-pressed="${state.watchSort === k}">${l}</button>`).join('');
   const body = document.getElementById('watchBody');
   const cmp = document.getElementById('compareBtn');
-  document.getElementById('watchCount').textContent = state.watch.length ? `${state.watch.length} Aktie${state.watch.length === 1 ? '' : 'n'}` : '';
+  const flagged = state.watch.filter(e => warningsFor(e.stock).length).length;
+  document.getElementById('watchCount').textContent = state.watch.length
+    ? `${state.watch.length} Aktie${state.watch.length === 1 ? '' : 'n'}${flagged ? ` · ${flagged} mit Warnsignalen` : ''}` : '';
   cmp.disabled = state.compare.size < 2;
   cmp.textContent = `Vergleichen${state.compare.size ? ` (${state.compare.size})` : ''}`;
 
@@ -1602,7 +1606,11 @@ function renderWatchlist() {
             ${CATEGORIES.map(c => `<td class="num text-right py-2.5 px-1 hidden md:table-cell muted">${sc.subs[c.key].score ?? '–'}</td>`).join('')}
             <td class="num text-right py-2.5 px-1">${has(s.price) ? f2(s.price) : '<span class="faint">–</span>'}</td>
             <td class="num text-right py-2.5 px-1" style="color:${has(s.changePct) ? (state.mode === 'clean' ? 'var(--muted)' : up ? 'var(--up)' : 'var(--down)') : 'var(--faint)'}">${has(s.changePct) ? `${up ? '+' : ''}${f2(s.changePct)} %` : '–'}</td>
-            <td class="num text-center py-2.5 px-1" style="color:${warn.length ? (state.mode === 'clean' ? '#fff' : warn.some(w => w.level === 'hoch') ? '#ff9b9b' : '#f2d29a') : 'var(--faint)'}" title="${esc(warn.map(w => w.text).join('\n'))}">${warn.length || '–'}</td>
+            <td class="text-center py-2.5 px-1">${warn.length
+              ? `<button type="button" data-warn="${esc(e.id)}" aria-expanded="${state.watchWarn.has(e.id)}"
+                   class="num text-xs min-w-[28px] px-1.5 py-1 rounded-md" style="${warnStyle(warn.some(w => w.level === 'hoch') ? 'hoch' : 'mittel')}"
+                   aria-label="${warn.length} Warnsignale für ${esc(s.name)} ${state.watchWarn.has(e.id) ? 'ausblenden' : 'anzeigen'}">${warn.length}</button>`
+              : '<span class="faint">–</span>'}</td>
             <td class="text-center py-2.5 px-1">
               <input type="checkbox" data-compare="${esc(e.id)}" ${chk ? 'checked' : ''} ${!chk && full ? 'disabled' : ''}
                      aria-label="${esc(s.name)} vergleichen" class="w-4 h-4 align-middle" style="accent-color:${state.mode === 'clean' ? '#fff' : 'var(--accent)'}">
@@ -1610,7 +1618,8 @@ function renderWatchlist() {
             <td class="text-right py-2.5 px-1">
               <button type="button" data-remove="${esc(e.id)}" class="faint hover:text-white px-1" aria-label="${esc(s.name)} entfernen">✕</button>
             </td>
-          </tr>`;
+          </tr>${warn.length && state.watchWarn.has(e.id) ? `
+          <tr><td></td><td colspan="11" class="pb-3 pt-0 px-1"><ul class="flex flex-wrap gap-2">${warnChips(warn)}</ul></td></tr>` : ''}`;
         }).join('')}</tbody>
       </table>
     </div>
@@ -1722,6 +1731,12 @@ function initWatch() {
   document.getElementById('watchBody').addEventListener('click', e => {
     const open = e.target.closest('[data-open]')?.dataset.open;
     const remove = e.target.closest('[data-remove]')?.dataset.remove;
+    const warnId = e.target.closest('[data-warn]')?.dataset.warn;
+    if (warnId) {
+      if (state.watchWarn.has(warnId)) state.watchWarn.delete(warnId); else state.watchWarn.add(warnId);
+      renderWatchlist();
+      return;
+    }
     if (open) openEntry(open);
     if (remove) {
       state.watch = state.watch.filter(x => x.id !== remove);
