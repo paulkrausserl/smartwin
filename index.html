@@ -218,7 +218,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '1.5';
+const APP_VERSION = '1.6';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -319,6 +319,9 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch { /* egal */ } },
 };
 
+// Fehler mit `code`, damit der Aufrufer unterscheiden kann: plan | auth | limit | network | api
+const fmpError = (code, message) => Object.assign(new Error(message), { code });
+
 async function fmp(path, params = {}) {
   const url = new URL(FMP_BASE + path);
   for (const [k, v] of Object.entries({ ...params, apikey: state.apiKey })) url.searchParams.set(k, v);
@@ -326,14 +329,14 @@ async function fmp(path, params = {}) {
   try {
     res = await fetch(url);
   } catch {
-    throw new Error('Financial Modeling Prep ist nicht erreichbar. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.');
+    throw fmpError('network', 'Financial Modeling Prep ist nicht erreichbar. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.');
   }
   const body = await res.json().catch(() => null);
   const apiMsg = body && !Array.isArray(body) ? body['Error Message'] || body.message : null;
-  if (res.status === 401) throw new Error('Der API-Key ist ungültig. Prüfe ihn unter „Datenquelle“.');
-  if (res.status === 402) throw new Error('Diese Aktie oder Kennzahl ist im Gratis-Tarif von FMP nicht enthalten.');
-  if (res.status === 429) throw new Error('Das Tageslimit des Gratis-Tarifs (250 Abrufe) ist erreicht.');
-  if (!res.ok || apiMsg) throw new Error(apiMsg || `Financial Modeling Prep antwortet mit Fehler ${res.status}.`);
+  if (res.status === 401) throw fmpError('auth', 'Der API-Key ist ungültig. Prüfe ihn unter „Datenquelle“.');
+  if (res.status === 402 || res.status === 403) throw fmpError('plan', 'Diese Aktie oder Kennzahl ist im Gratis-Tarif von FMP nicht enthalten.');
+  if (res.status === 429) throw fmpError('limit', 'Das Tageslimit des Gratis-Tarifs (250 Abrufe) ist erreicht.');
+  if (!res.ok || apiMsg) throw fmpError('api', apiMsg || `Financial Modeling Prep antwortet mit Fehler ${res.status}.`);
   return body;
 }
 // Optionale Abrufe: ein Fehler lässt nur die betroffenen Kennzahlen leer
@@ -406,13 +409,35 @@ function rsi(closes, period = 14) {
 
 // Liefert [stock, hits]; hits = null, wenn der Ticker direkt vorgegeben war
 async function loadLive(query, forcedSymbol) {
-  const { symbol, hits } = forcedSymbol ? { symbol: forcedSymbol, hits: null } : await resolveSymbol(query);
-  const cached = store.get(`rr:data2:${symbol}`);
-  if (cached && Date.now() - cached.t < CACHE_MS) return [cached.stock, hits];
+  const resolved = forcedSymbol ? { symbol: forcedSymbol, hits: null } : await resolveSymbol(query);
+  const { hits } = resolved;
+
+  // Erst nur den Kurs holen: ist der Ticker im Gratis-Tarif gesperrt (z. B. Tokio),
+  // werden die nächsten Treffer probiert, ohne für jeden alle 7 Abrufe zu verbrauchen.
+  const candidates = [resolved.symbol, ...(hits || []).map(h => h.symbol).filter(x => x !== resolved.symbol)].slice(0, 4);
+  const blocked = [];
+  let symbol = null, q = null;
+  for (const cand of candidates) {
+    const cached = store.get(`rr:data2:${cand}`);
+    if (cached && Date.now() - cached.t < CACHE_MS) return [cached.stock, hits];
+    try {
+      q = first(await fmp('quote', { symbol: cand }));
+    } catch (e) {
+      if (e.code !== 'plan') throw e;
+      blocked.push(cand);
+      continue;
+    }
+    if (q && finite(q.price) != null) { symbol = cand; break; }
+  }
+  if (!symbol) {
+    if (blocked.length) {
+      throw fmpError('plan', `„${query.trim()}“ ist im Gratis-Tarif von FMP nicht enthalten (geprüft: ${blocked.join(', ')}). Meist betrifft das Börsen außerhalb der USA.`);
+    }
+    throw fmpError('api', `Für „${query.trim()}“ wurde kein Kurs gefunden.`);
+  }
 
   const from = new Date(Date.now() - 150 * 86400000).toISOString().slice(0, 10);
-  const [quote, profile, ratios, keyMetrics, scores, growth, hist] = await Promise.all([
-    fmp('quote', { symbol }),
+  const [profile, ratios, keyMetrics, scores, growth, hist] = await Promise.all([
     optional(fmp('profile', { symbol })),
     optional(fmp('ratios-ttm', { symbol })),
     optional(fmp('key-metrics-ttm', { symbol })),
@@ -420,8 +445,6 @@ async function loadLive(query, forcedSymbol) {
     optional(fmp('financial-growth', { symbol, limit: 1 })),
     optional(fmp('historical-price-eod/light', { symbol, from })),
   ]);
-  const q = first(quote);
-  if (!q || finite(q.price) == null) throw new Error(`Für „${query.trim()}“ wurde kein Kurs gefunden.`);
   const p = first(profile) || {}, r = first(ratios) || {}, km = first(keyMetrics) || {}, sc = first(scores) || {}, g = first(growth) || {};
 
   const closes = (Array.isArray(hist) ? hist : [])
