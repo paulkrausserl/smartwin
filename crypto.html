@@ -394,7 +394,7 @@ for (const c of STOCKS) {
   c.capped = c.maxSupply != null;
 }
 const QUICK = ['Bitcoin', 'Ethereum', 'Solana', 'XRP'];
-const APP_VERSION = '2.5';
+const APP_VERSION = '2.6';
 
 /* ---------------------------------------------------------------
    Scoring-Logik
@@ -1017,7 +1017,60 @@ function render() {
 }
 
 // Kursverlauf als schlichte Linie; Zeitraum über die Buttons darüber
-const RANGES = [['1M', 31], ['3M', 91], ['6M', 181], ['1J', 366]]; // Krypto handelt täglich
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_KEY = s => `rr:cmax1:${s.cgId}`;
+// CoinGecko gibt ohne Key nur etwa ein Jahr her. Darum zuerst CryptoCompare (ganze Historie in Euro, ohne Key),
+// danach CoinGecko mit days=max. Passt der letzte Kurs nicht zum aktuellen, ist es ein anderer Coin mit gleichem Kürzel.
+async function fetchMaxHistory(s) {
+  const plausible = series => series.length > 30 && Math.abs(series.at(-1)[1] / s.price - 1) < 0.25;
+  try {
+    const res = await fetch(`https://min-api.cryptocompare.com/data/v2/histoday?fsym=${encodeURIComponent(s.ticker)}&tsym=EUR&allData=true`);
+    const body = await res.json();
+    const rows = body?.Response === 'Success' ? body.Data?.Data : null;
+    if (Array.isArray(rows)) {
+      const series = rows.filter(r => finite(r.close) > 0).map(r => [new Date(r.time * 1000).toISOString().slice(0, 10), r.close]);
+      if (plausible(series)) return { series, note: 'Quelle: CryptoCompare' };
+    }
+  } catch { /* nächste Quelle probieren */ }
+  try {
+    const chart = await cg(`coins/${encodeURIComponent(s.cgId)}/market_chart`, { vs_currency: 'eur', days: 'max', interval: 'daily' });
+    const byDay = new Map();
+    for (const [t, v] of chart?.prices || []) if (finite(v) != null) byDay.set(new Date(t).toISOString().slice(0, 10), v);
+    const series = [...byDay].sort((a, b) => a[0].localeCompare(b[0]));
+    if (plausible(series)) return { series, note: series.length > 400 ? 'Quelle: CoinGecko' : 'CoinGecko liefert ohne Key nur etwa 1 Jahr' };
+  } catch { /* unten Meldung */ }
+  throw fmpError('api', 'Der gesamte Kursverlauf ist gerade nicht abrufbar. Später erneut versuchen.');
+}
+
+// Gesamter Kursverlauf („Max“): erst beim Antippen laden, 24 h zwischenspeichern
+const maxLoading = new WeakSet();
+// Für Chart und Speicher reichen etwa 1500 Punkte; der letzte Kurs bleibt immer enthalten
+const thin = (series, n = 1500) => {
+  if (series.length <= n) return series;
+  const step = series.length / n;
+  return Array.from({ length: n }, (_, i) => series[Math.floor(i * step)]).concat([series.at(-1)]);
+};
+async function loadMax(s) {
+  if (maxLoading.has(s)) return;
+  maxLoading.add(s);
+  const key = MAX_KEY(s);
+  const cached = store.get(key);
+  if (cached && Date.now() - cached.t < DAY_MS) {
+    Object.assign(s, { historyMax: cached.series, maxNote: cached.note });
+  } else {
+    try {
+      const { series, note } = await fetchMaxHistory(s);
+      Object.assign(s, { historyMax: thin(series), maxNote: note });
+      store.set(key, { t: Date.now(), series: s.historyMax, note });
+    } catch (e) {
+      s.maxError = e.message;
+    }
+  }
+  maxLoading.delete(s);
+  if (state.stock === s && state.range === 'Max') renderChart(s);
+}
+
+const RANGES = [['1M', 31], ['3M', 91], ['6M', 181], ['1J', 366], ['Max', Infinity]]; // Krypto handelt täglich
 function renderChart(s) {
   const box = document.getElementById('priceChart');
   const btns = document.getElementById('rangeBtns');
@@ -1032,7 +1085,15 @@ function renderChart(s) {
   }
   btns.innerHTML = RANGES.map(([r]) => `<button type="button" class="chip" data-range="${r}" aria-pressed="${r === state.range}">${r}</button>`).join('');
 
-  const pts = hist.slice(-RANGES.find(([r]) => r === state.range)[1]);
+  const isMax = state.range === 'Max';
+  if (isMax && !s.historyMax) {
+    box._scrub = null;
+    label.textContent = '';
+    box.innerHTML = `<p class="text-xs py-3 ${s.maxError ? '' : 'faint'}" style="min-height:140px">${s.maxError ? esc(s.maxError) : 'Lade gesamten Kursverlauf …'}</p>`;
+    if (!s.maxError) loadMax(s);
+    return;
+  }
+  const pts = isMax ? s.historyMax : hist.slice(-RANGES.find(([r]) => r === state.range)[1]);
   const closes = pts.map(p => p[1]);
   const min = Math.min(...closes), max = Math.max(...closes);
   const W = 1000, H = 200, pad = 8;
@@ -1043,7 +1104,7 @@ function renderChart(s) {
   const [lx, ly] = xy.at(-1);
   const fmtDate = d => new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
-  label.textContent = `${state.range}: ${change >= 0 ? '+' : ''}${f2(change)} % · ${fmtDate(pts[0][0])} – ${fmtDate(pts.at(-1)[0])}`;
+  label.textContent = `${state.range}: ${change >= 0 ? '+' : ''}${Math.abs(change) >= 1000 ? num(change, 0) : f2(change)} % · ${fmtDate(pts[0][0])} – ${fmtDate(pts.at(-1)[0])}${isMax && s.maxNote ? ` · ${s.maxNote}` : ''}`;
   label.style.color = state.mode === 'clean' ? 'var(--muted)' : color;
   box._scrub = { pts, xy, W, H, color };
   box.innerHTML = `
@@ -1087,7 +1148,7 @@ function initScrub() {
     const diff = (close / d.pts[0][1] - 1) * 100;
     const day = new Date(date).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
     tip.innerHTML = `<div class="num text-[15px] font-semibold text-white">${price(close)} €</div>
-      <div class="muted mt-0.5">${day} · <span class="num" style="color:${state.mode === 'clean' ? 'var(--text)' : diff >= 0 ? 'var(--up)' : 'var(--down)'}">${diff >= 0 ? '+' : ''}${f2(diff)} %</span></div>`;
+      <div class="muted mt-0.5">${day} · <span class="num" style="color:${state.mode === 'clean' ? 'var(--text)' : diff >= 0 ? 'var(--up)' : 'var(--down)'}">${diff >= 0 ? '+' : ''}${Math.abs(diff) >= 1000 ? num(diff, 0) : f2(diff)} %</span></div>`;
     tip.style.left = `${clamp(px - tip.offsetWidth / 2, 0, rect.width - tip.offsetWidth)}px`;
   };
   const hide = () => {
@@ -1403,7 +1464,7 @@ function renderWarnings(s) {
 ---------------------------------------------------------------- */
 const MAX_COMPARE = 4;
 const stockId = s => (s.live ? 'L:' : s.simulated ? 'S:' : 'D:') + (s.simulated ? s.name : s.cgId);
-const snapshot = s => JSON.parse(JSON.stringify(s));
+const snapshot = s => JSON.parse(JSON.stringify(s, (k, v) => (['historyMax', 'maxNote', 'maxError'].includes(k) ? undefined : v)));
 const isWatched = s => state.watch.some(e => e.id === stockId(s));
 const saveWatch = () => store.set('rr:cwatch', state.watch);
 
