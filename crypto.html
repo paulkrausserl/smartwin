@@ -65,6 +65,14 @@
     .seg-item { font-size: .8125rem; padding: .4rem .8rem; border-radius: .55rem; color: var(--muted); transition: color .15s, background .15s; }
     .seg-item:hover { color: var(--text); }
     .seg-item[aria-current="page"] { background: var(--text); color: var(--bg); font-weight: 600; }
+    /* Bereichs-Tabs unter der Suche, bleiben beim Scrollen oben */
+    .tabs { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: .25rem; background: var(--bg);
+            border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; padding-top: env(safe-area-inset-top, 0px); }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { padding: .8rem .9rem; font-size: .9rem; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; transition: color .15s, border-color .15s; }
+    .tab:hover { color: var(--text); }
+    .tab[aria-selected="true"] { color: var(--text); border-color: var(--accent); font-weight: 600; }
+    .tab .count { font-size: 11px; margin-left: .35rem; padding: 0 .4rem; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--muted); }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .metric > summary { list-style: none; cursor: pointer; }
@@ -139,17 +147,17 @@
           <a href="crypto.html" class="seg-item" aria-current="page">Krypto</a>
           <a href="radar.html" class="seg-item">Radar</a>
         </nav>
-        <button type="button" data-open-criteria class="btn">
+        <button type="button" data-open-criteria class="btn" aria-label="Bewertungskriterien" title="Bewertungskriterien">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
-          Bewertungskriterien
+          <span class="hidden lg:inline">Bewertungskriterien</span>
         </button>
-        <button id="modeBtn" type="button" class="btn" aria-pressed="false">
+        <button id="modeBtn" type="button" class="btn" aria-pressed="false" title="Clean-Modus">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
-          <span id="modeLabel">Clean</span>
+          <span id="modeLabel" class="hidden lg:inline">Clean</span>
         </button>
-        <button id="fullscreenBtn" type="button" class="btn">
+        <button id="fullscreenBtn" type="button" class="btn" title="Vollbild">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-          <span id="fullscreenLabel">Vollbild</span>
+          <span id="fullscreenLabel" class="hidden lg:inline">Vollbild</span>
         </button>
       </div>
       <p id="fullscreenHint" hidden class="w-full text-xs text-amber-300 sm:text-right">
@@ -178,154 +186,177 @@
 
       <!-- Datenquelle -->
       <p class="text-xs faint mt-4 pt-4 leading-relaxed" style="border-top:1px solid var(--line)">
-        Datenquelle: <span id="sourceStatus" class="font-semibold"></span>. Kein Key nötig: CoinGecko erlaubt ohne Konto etwa 10–30 Abrufe pro Minute,
-        eine Analyse braucht 2–3. Ergebnisse werden 6 Stunden zwischengespeichert. Alle Beträge in Euro.
+        Datenquelle: <span id="sourceStatus" class="font-semibold"></span> · ohne Key · Beträge in Euro
+        <span class="hidden sm:inline">· 6 Stunden zwischengespeichert</span>
       </p>
     </section>
 
-    <!-- Watchlist mit Ranking -->
-    <section id="watchCard" class="card p-4 sm:p-5 mb-6">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-baseline gap-2">
-          <h2 class="eyebrow">Watchlist</h2>
-          <span id="watchCount" class="text-xs faint num"></span>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="text-xs faint">Sortieren</span>
-          <div id="watchSort" class="flex gap-1.5"></div>
-          <button id="compareBtn" type="button" class="btn btn-sm" disabled>Vergleichen</button>
-        </div>
-      </div>
-      <div id="watchBody" class="mt-3"></div>
-    </section>
+    <!-- Tabs: Überblick | Kennzahlen | Gewichtung | Watchlist -->
+    <div id="tabs" class="tabs mb-6" role="tablist" aria-label="Ansicht">
+      <button type="button" class="tab" role="tab" data-tab="overview" aria-selected="true">Überblick</button>
+      <button type="button" class="tab" role="tab" data-tab="metrics" aria-selected="false">Kennzahlen</button>
+      <button type="button" class="tab" role="tab" data-tab="weights" aria-selected="false">Gewichtung</button>
+      <button type="button" class="tab" role="tab" data-tab="watch" aria-selected="false">Watchlist<span id="watchTabCount" class="count num" hidden></span></button>
+      <span id="tabStock" class="ml-auto pl-3 text-xs muted whitespace-nowrap num"></span>
+    </div>
 
-    <!-- Coin-Kopf mit Kennzahlenleiste -->
-    <section class="card p-5 sm:p-6 mb-6">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div class="min-w-0">
+    <div data-panel="overview" class="space-y-6">
+      <!-- Coin-Kopf mit Kennzahlenleiste -->
+      <section class="card p-5 sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h1 id="stockName" class="text-2xl sm:text-[28px] font-semibold text-white tracking-tight" style="text-wrap:balance">–</h1>
+              <span id="stockTicker" class="num text-xs px-2 py-0.5 rounded-md muted" style="border:1px solid var(--line-2)"></span>
+              <span id="dataBadge"></span>
+              <button id="watchBtn" type="button" class="btn btn-sm" aria-pressed="false">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path id="watchStar" d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
+                <span id="watchLabel">Merken</span>
+              </button>
+            </div>
+            <p id="stockMeta" class="text-sm muted mt-1"></p>
+          </div>
+          <div id="priceBox" class="text-right">
+            <div id="stockPrice" class="num text-2xl sm:text-[28px] text-white leading-tight"></div>
+            <div id="stockChange" class="num text-sm mt-0.5"></div>
+          </div>
+        </div>
+        <div class="mt-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div id="rangeBtns" class="flex gap-1.5"></div>
+            <span id="rangeChange" class="num text-xs muted"></span>
+          </div>
+          <div id="priceChart" class="relative select-none" style="-webkit-touch-callout:none;-webkit-user-select:none"></div>
+        </div>
+        <dl id="keyStats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px mt-5 rounded-xl overflow-hidden"
+            style="background:var(--line);border:1px solid var(--line)"></dl>
+        <div id="warnings" class="mt-4"></div>
+      </section>
+
+      <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Gesamtscore -->
+        <section class="card p-5 sm:p-6 lg:col-span-4 flex flex-col">
+          <div class="flex items-center justify-between">
+            <h2 class="eyebrow">Gesamtscore</h2>
+            <span class="text-xs faint">0–100</span>
+          </div>
+          <div class="gauge-box relative mx-auto my-5 w-52 h-52">
+            <svg viewBox="0 0 200 200" class="w-full h-full -rotate-90" aria-hidden="true">
+              <circle cx="100" cy="100" r="84" fill="none" stroke="var(--line)" stroke-width="12" />
+              <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="84" fill="none" stroke="#3ecf8e"
+                      stroke-width="12" stroke-linecap="round" stroke-dasharray="527.79" stroke-dashoffset="527.79" />
+            </svg>
+            <div class="gauge-center absolute inset-0 flex flex-col items-center justify-center">
+              <span id="totalScore" class="num text-[56px] font-semibold text-white leading-none">0</span>
+              <span id="verdict" class="mt-3 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">–</span>
+            </div>
+          </div>
+          <div>
+            <div class="relative h-1.5 rounded-full score-scale">
+              <div id="scaleMarker" class="absolute -top-1.5 w-1 h-4 rounded-sm transition-all duration-700" style="left:0%;background:var(--text);box-shadow:0 0 0 2px var(--panel)"></div>
+            </div>
+            <div class="flex justify-between text-[10px] uppercase tracking-wide faint mt-2">
+              <span>Hohes Risiko</span><span>Neutral</span><span>Exzellent</span>
+            </div>
+          </div>
+          <p id="summary" class="text-sm muted mt-4 leading-relaxed"></p>
+          <div class="grid grid-cols-2 gap-3 mt-5">
+            <div>
+              <h3 class="eyebrow mb-2" style="color:var(--up)">Stärken</h3>
+              <ul id="strengths" class="space-y-1.5 text-sm"></ul>
+            </div>
+            <div>
+              <h3 class="eyebrow mb-2" style="color:var(--down)">Schwächen</h3>
+              <ul id="weaknesses" class="space-y-1.5 text-sm"></ul>
+            </div>
+          </div>
+        </section>
+        <!-- Teilbereiche -->
+        <section class="card p-5 sm:p-6 lg:col-span-8">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="eyebrow">Teilbereiche</h2>
+            <span class="text-xs faint">Score · Gewicht · Beitrag zum Gesamtscore</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div class="relative h-72"><canvas id="radarChart" aria-label="Radar-Diagramm der vier Teilbereiche" role="img"></canvas></div>
+            <div id="subScores" class="space-y-4"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div data-panel="metrics" hidden>
+        <!-- Kennzahlen im Detail -->
+        <section class="card p-5 sm:p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 class="eyebrow">Kennzahlen im Detail</h2>
+              <p class="text-xs faint mt-1">Zeile antippen für genaue Werte und Berechnung.</p>
+            </div>
+            <div class="flex gap-2">
+              <button type="button" id="toggleAll" class="btn btn-sm">Alle aufklappen</button>
+              <button type="button" data-open-criteria class="btn btn-sm">Kriterien</button>
+            </div>
+          </div>
+          <div id="metrics" class="space-y-5"></div>
+          <details id="rawData" class="raw mt-6 inset">
+            <summary class="flex items-center justify-between gap-3 px-4 py-3">
+              <span class="text-sm font-medium text-white">Rohdaten</span>
+              <span class="flex items-center gap-2 text-xs faint">alle abgerufenen Werte
+                <svg class="chev w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
+              </span>
+            </summary>
+            <div class="overflow-x-auto px-4 pb-4">
+              <table class="w-full text-sm">
+                <tbody id="rawBody"></tbody>
+              </table>
+            </div>
+          </details>
+        </section>
+    </div>
+
+    <div data-panel="weights" hidden>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Gewichtung -->
+        <section class="card p-5 sm:p-6 lg:col-span-4 self-start">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="eyebrow">Gewichtung</h2>
+            <button id="resetWeights" type="button" class="text-xs muted hover:text-white transition">Zurücksetzen</button>
+          </div>
+          <p class="text-xs faint mb-4">Die Regler werden automatisch auf 100 % normiert.</p>
+          <div class="flex flex-wrap gap-2 mb-5" id="presets"></div>
+          <div id="weightSliders" class="space-y-5"></div>
+          <div class="mt-6">
+            <div class="flex h-2 rounded-full overflow-hidden" id="weightBar"></div>
+            <div class="flex justify-between text-[10px] faint mt-1.5"><span>Verteilung</span><span>Σ 100 %</span></div>
+          </div>
+        </section>
+
+        <!-- Vorschau: Wirkung der Gewichtung sofort sehen -->
+        <section class="card p-5 sm:p-6 lg:col-span-8 self-start">
+          <h2 class="eyebrow mb-4">Wirkung auf den Score</h2>
+          <div id="weightsPreview"></div>
+        </section>
+      </div>
+    </div>
+
+    <div data-panel="watch" hidden>
+      <!-- Watchlist mit Ranking -->
+      <section id="watchCard" class="card p-4 sm:p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-baseline gap-2">
+            <h2 class="eyebrow">Watchlist</h2>
+            <span id="watchCount" class="text-xs faint num"></span>
+          </div>
           <div class="flex flex-wrap items-center gap-2">
-            <h1 id="stockName" class="text-2xl sm:text-[28px] font-semibold text-white tracking-tight" style="text-wrap:balance">–</h1>
-            <span id="stockTicker" class="num text-xs px-2 py-0.5 rounded-md muted" style="border:1px solid var(--line-2)"></span>
-            <span id="dataBadge"></span>
-            <button id="watchBtn" type="button" class="btn btn-sm" aria-pressed="false">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path id="watchStar" d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
-              <span id="watchLabel">Merken</span>
-            </button>
-          </div>
-          <p id="stockMeta" class="text-sm muted mt-1"></p>
-        </div>
-        <div id="priceBox" class="text-right">
-          <div id="stockPrice" class="num text-2xl sm:text-[28px] text-white leading-tight"></div>
-          <div id="stockChange" class="num text-sm mt-0.5"></div>
-        </div>
-      </div>
-      <div class="mt-5">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <div id="rangeBtns" class="flex gap-1.5"></div>
-          <span id="rangeChange" class="num text-xs muted"></span>
-        </div>
-        <div id="priceChart" class="relative select-none" style="-webkit-touch-callout:none;-webkit-user-select:none"></div>
-      </div>
-      <dl id="keyStats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px mt-5 rounded-xl overflow-hidden"
-          style="background:var(--line);border:1px solid var(--line)"></dl>
-      <div id="warnings" class="mt-4"></div>
-    </section>
-
-    <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-      <!-- Gesamtscore -->
-      <section class="card p-5 sm:p-6 lg:col-span-4 flex flex-col">
-        <div class="flex items-center justify-between">
-          <h2 class="eyebrow">Gesamtscore</h2>
-          <span class="text-xs faint">0–100</span>
-        </div>
-        <div class="gauge-box relative mx-auto my-5 w-52 h-52">
-          <svg viewBox="0 0 200 200" class="w-full h-full -rotate-90" aria-hidden="true">
-            <circle cx="100" cy="100" r="84" fill="none" stroke="var(--line)" stroke-width="12" />
-            <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="84" fill="none" stroke="#3ecf8e"
-                    stroke-width="12" stroke-linecap="round" stroke-dasharray="527.79" stroke-dashoffset="527.79" />
-          </svg>
-          <div class="gauge-center absolute inset-0 flex flex-col items-center justify-center">
-            <span id="totalScore" class="num text-[56px] font-semibold text-white leading-none">0</span>
-            <span id="verdict" class="mt-3 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">–</span>
+            <span class="text-xs faint">Sortieren</span>
+            <div id="watchSort" class="flex gap-1.5"></div>
+            <button id="compareBtn" type="button" class="btn btn-sm" disabled>Vergleichen</button>
           </div>
         </div>
-        <div>
-          <div class="relative h-1.5 rounded-full score-scale">
-            <div id="scaleMarker" class="absolute -top-1.5 w-1 h-4 rounded-sm transition-all duration-700" style="left:0%;background:var(--text);box-shadow:0 0 0 2px var(--panel)"></div>
-          </div>
-          <div class="flex justify-between text-[10px] uppercase tracking-wide faint mt-2">
-            <span>Hohes Risiko</span><span>Neutral</span><span>Exzellent</span>
-          </div>
-        </div>
-        <p id="summary" class="text-sm muted mt-4 leading-relaxed"></p>
-        <div class="grid grid-cols-2 gap-3 mt-5">
-          <div>
-            <h3 class="eyebrow mb-2" style="color:var(--up)">Stärken</h3>
-            <ul id="strengths" class="space-y-1.5 text-sm"></ul>
-          </div>
-          <div>
-            <h3 class="eyebrow mb-2" style="color:var(--down)">Schwächen</h3>
-            <ul id="weaknesses" class="space-y-1.5 text-sm"></ul>
-          </div>
-        </div>
+        <div id="watchBody" class="mt-3"></div>
       </section>
-
-      <!-- Teilbereiche -->
-      <section class="card p-5 sm:p-6 lg:col-span-8">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="eyebrow">Teilbereiche</h2>
-          <span class="text-xs faint">Score · Gewicht · Beitrag zum Gesamtscore</span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-          <div class="relative h-72"><canvas id="radarChart" aria-label="Radar-Diagramm der vier Teilbereiche" role="img"></canvas></div>
-          <div id="subScores" class="space-y-4"></div>
-        </div>
-      </section>
-
-      <!-- Kennzahlen im Detail -->
-      <section class="card p-5 sm:p-6 lg:col-span-8">
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div>
-            <h2 class="eyebrow">Kennzahlen im Detail</h2>
-            <p class="text-xs faint mt-1">Zeile antippen für genaue Werte und Berechnung.</p>
-          </div>
-          <div class="flex gap-2">
-            <button type="button" id="toggleAll" class="btn btn-sm">Alle aufklappen</button>
-            <button type="button" data-open-criteria class="btn btn-sm">Kriterien</button>
-          </div>
-        </div>
-        <div id="metrics" class="space-y-5"></div>
-        <details id="rawData" class="raw mt-6 inset">
-          <summary class="flex items-center justify-between gap-3 px-4 py-3">
-            <span class="text-sm font-medium text-white">Rohdaten</span>
-            <span class="flex items-center gap-2 text-xs faint">alle abgerufenen Werte
-              <svg class="chev w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>
-            </span>
-          </summary>
-          <div class="overflow-x-auto px-4 pb-4">
-            <table class="w-full text-sm">
-              <tbody id="rawBody"></tbody>
-            </table>
-          </div>
-        </details>
-      </section>
-
-      <!-- Gewichtung -->
-      <section class="card p-5 sm:p-6 lg:col-span-4 self-start">
-        <div class="flex items-center justify-between mb-1">
-          <h2 class="eyebrow">Gewichtung</h2>
-          <button id="resetWeights" type="button" class="text-xs muted hover:text-white transition">Zurücksetzen</button>
-        </div>
-        <p class="text-xs faint mb-4">Die Regler werden automatisch auf 100 % normiert.</p>
-        <div class="flex flex-wrap gap-2 mb-5" id="presets"></div>
-        <div id="weightSliders" class="space-y-5"></div>
-        <div class="mt-6">
-          <div class="flex h-2 rounded-full overflow-hidden" id="weightBar"></div>
-          <div class="flex justify-between text-[10px] faint mt-1.5"><span>Verteilung</span><span>Σ 100 %</span></div>
-        </div>
-      </section>
-    </main>
+    </div>
 
     <!-- Vergleich -->
     <dialog id="compareDialog" aria-labelledby="compareTitle"
@@ -395,7 +426,7 @@ for (const c of STOCKS) {
   c.capped = c.maxSupply != null;
 }
 const QUICK = ['Bitcoin', 'Ethereum', 'Solana', 'XRP'];
-const APP_VERSION = '2.7';
+const APP_VERSION = '2.8';
 
 /* ---------------------------------------------------------------
    Scoring-Logik
@@ -1015,6 +1046,7 @@ function render() {
   renderRaw(s);
   renderWeights();
   renderWatchlist(); // Ranking folgt der Gewichtung
+  renderTabExtras(s, total, verdict, subs, eff);
 }
 
 // Kursverlauf als schlichte Linie; Zeitraum über die Buttons darüber
@@ -1302,7 +1334,47 @@ async function selectStock(query, id) {
   document.getElementById('searchInput').value = stock.name;
   markQuick(stock);
   syncWatch(stock);
+  if (state.tab === 'watch') setTab('overview');
   render();
+}
+
+
+/* ---------------------------------------------------------------
+   Tabs
+---------------------------------------------------------------- */
+function setTab(tab) {
+  state.tab = tab;
+  store.set('rr:ctab', tab);
+  document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  document.querySelectorAll('[data-panel]').forEach(el => { el.hidden = el.dataset.panel !== tab; });
+  if (tab === 'overview') radar?.resize(); // war versteckt, kennt seine Größe noch nicht
+}
+
+// Name und Score im Tab-Balken, damit man in jedem Tab weiß, worum es geht; dazu die Gewichtungs-Vorschau
+function renderTabExtras(s, total, verdict, subs, eff) {
+  document.getElementById('tabStock').innerHTML = `${esc(s.name)} · <b style="color:${scoreColor(total)}">${total}</b>`;
+  document.getElementById('weightsPreview').innerHTML = `
+    <div class="flex items-baseline gap-3">
+      <span class="num text-5xl font-semibold" style="color:${scoreColor(total)}">${total}</span>
+      <span class="text-sm muted">${verdict} · ${esc(s.name)}</span>
+    </div>
+    <div class="space-y-3 mt-5">${CATEGORIES.map(c => {
+      const sc = subs[c.key].score;
+      return `<div>
+        <div class="flex justify-between text-sm"><span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" style="background:${catColor(c)}"></span>${c.label}</span>
+          <span class="num muted">${sc ?? '–'} × ${Math.round(eff[c.key] * 100)} % = <b class="text-white">${sc === null ? '–' : num(sc * eff[c.key], 1)}</b></span></div>
+        <div class="h-1.5 rounded-full mt-1.5 overflow-hidden" style="background:var(--line-2)"><div class="bar-fill h-full rounded-full" style="width:${sc ?? 0}%;background:${scoreColor(sc ?? 0)}"></div></div>
+      </div>`;
+    }).join('')}</div>
+    <p class="text-xs faint mt-4">Regler links verschieben: Gesamtscore und Watchlist-Ranking ändern sich sofort.</p>`;
+}
+
+function initTabs() {
+  document.getElementById('tabs').addEventListener('click', e => {
+    const tab = e.target.closest('[data-tab]')?.dataset.tab;
+    if (tab) setTab(tab);
+  });
+  setTab(store.get('rr:ctab') || 'overview');
 }
 
 /* ---------------------------------------------------------------
@@ -1391,6 +1463,7 @@ function init() {
     applyMode();
   });
   initWatch();
+  initTabs();
   applyMode();
 
   initFullscreen();
@@ -1501,11 +1574,12 @@ function openEntry(id) {
   setLoading(false);
   setError('');
   state.stock = snapshot(entry.stock);
+  setTab('overview');
   document.getElementById('searchInput').value = state.stock.name;
   renderHits([], state.stock.cgId);
   markQuick(state.stock);
   render();
-  document.getElementById('stockName').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 const SORTS = [['score', 'Score'], ['change', '24 h'], ['name', 'Name']];
@@ -1527,6 +1601,9 @@ function renderWatchlist() {
   const flagged = state.watch.filter(e => warningsFor(e.stock).length).length;
   document.getElementById('watchCount').textContent = state.watch.length
     ? `${state.watch.length} Coin${state.watch.length === 1 ? '' : 's'}${flagged ? ` · ${flagged} mit Warnsignalen` : ''}` : '';
+  const wc = document.getElementById('watchTabCount');
+  wc.textContent = state.watch.length;
+  wc.hidden = !state.watch.length;
   cmp.disabled = state.compare.size < 2;
   cmp.textContent = `Vergleichen${state.compare.size ? ` (${state.compare.size})` : ''}`;
 

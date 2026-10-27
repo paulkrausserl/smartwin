@@ -139,17 +139,17 @@
           <a href="crypto.html" class="seg-item">Krypto</a>
           <a href="radar.html" class="seg-item" aria-current="page">Radar</a>
         </nav>
-        <button type="button" id="helpBtn" class="btn">
+        <button type="button" id="helpBtn" class="btn" aria-label="So funktioniert's" title="So funktioniert's">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
-          So funktioniert's
+          <span class="hidden lg:inline">So funktioniert's</span>
         </button>
-        <button id="modeBtn" type="button" class="btn" aria-pressed="false">
+        <button id="modeBtn" type="button" class="btn" aria-pressed="false" title="Clean-Modus">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
-          <span id="modeLabel">Clean</span>
+          <span id="modeLabel" class="hidden lg:inline">Clean</span>
         </button>
-        <button id="fullscreenBtn" type="button" class="btn">
+        <button id="fullscreenBtn" type="button" class="btn" title="Vollbild">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-          <span id="fullscreenLabel">Vollbild</span>
+          <span id="fullscreenLabel" class="hidden lg:inline">Vollbild</span>
         </button>
       </div>
       <p id="fullscreenHint" hidden class="w-full text-xs text-amber-300 sm:text-right">
@@ -187,9 +187,12 @@
     </section>
 
     <!-- Eigenes Thema -->
-    <section class="card p-4 sm:p-5 mb-6">
-      <h2 class="eyebrow mb-1">Eigenes Thema hinzufügen</h2>
-      <p class="text-xs faint mb-3">Ein Begriff, zu dem es einen englischen Wikipedia-Artikel gibt, z. B. „Stanley cup“, „Matcha“ oder „Rheinmetall“. Ein Kurs ist optional.</p>
+    <details id="addPanel" class="raw card p-4 sm:p-5 mb-6">
+      <summary class="flex items-center justify-between gap-3">
+        <h2 class="eyebrow">Eigenes Thema hinzufügen</h2>
+        <svg class="chev w-4 h-4 faint transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </summary>
+      <p class="text-xs faint mt-3 mb-3">Ein Begriff, zu dem es einen englischen Wikipedia-Artikel gibt, z. B. „Stanley cup“, „Matcha“ oder „Rheinmetall“. Ein Kurs ist optional.</p>
       <form id="addForm" class="grid grid-cols-1 sm:grid-cols-12 gap-3" autocomplete="off">
         <div class="sm:col-span-5">
           <label for="addName" class="text-xs muted">Thema</label>
@@ -211,7 +214,7 @@
         </div>
       </form>
       <p id="addError" hidden class="text-sm mt-3" style="color:#ffb4b4"></p>
-    </section>
+    </details>
 
     <!-- Detail -->
     <dialog id="detailDialog" aria-labelledby="detailTitle"
@@ -245,7 +248,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '2.7';
+const APP_VERSION = '2.8';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -602,7 +605,7 @@ function render() {
 
   document.getElementById('themeBody').innerHTML = `
     <div class="overflow-x-auto -mx-1">
-      <table class="w-full text-sm" style="min-width:640px">
+      <table class="w-full text-sm" style="min-width:560px">
         <thead><tr class="text-left">
           <th class="eyebrow font-semibold py-2 px-1">Thema</th>
           <th class="eyebrow font-semibold py-2 px-1">Phase</th>
@@ -610,7 +613,6 @@ function render() {
           <th class="eyebrow font-semibold py-2 px-1 text-right">Aufmerks.</th>
           <th class="eyebrow font-semibold py-2 px-1 hidden sm:table-cell">Verlauf 4 Mon.</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Preis 30 T.</th>
-          <th class="eyebrow font-semibold py-2 px-1 text-right hidden md:table-cell">Volumen</th>
         </tr></thead>
         <tbody>${list.map(r => `
           <tr data-open="${esc(r.t.id)}" class="cursor-pointer hover:bg-white/[.02]" style="border-top:1px solid var(--line)">
@@ -623,7 +625,6 @@ function render() {
             <td class="py-2.5 px-1 text-right num" style="color:${r.a ? upDown(r.a.ratio - 1) : 'var(--faint)'}">${attnTxt(r.a)}</td>
             <td class="py-2.5 px-1 hidden sm:table-cell w-[130px]">${attnSpark(r, { w: 120, h: 28, color: r.phase ? phaseColor(r.phase) : 'var(--muted)' })}</td>
             <td class="py-2.5 px-1 text-right num" style="color:${upDown(r.p?.p30)}" title="${esc(r.d.priceError || '')}">${has(r.p?.p30) ? pctTxt(r.p.p30) : r.t.price ? '<span class="faint">n. v.</span>' : '<span class="faint">–</span>'}</td>
-            <td class="py-2.5 px-1 text-right num hidden md:table-cell muted">${r.p?.volRatio ? `${num(r.p.volRatio, 1)}×` : '–'}</td>
           </tr>`).join('')}</tbody>
       </table>
     </div>
