@@ -137,6 +137,7 @@
         <nav class="seg" aria-label="Bereich">
           <a href="./" class="seg-item" aria-current="page">Aktien</a>
           <a href="crypto.html" class="seg-item">Krypto</a>
+          <a href="radar.html" class="seg-item">Radar</a>
         </nav>
         <button type="button" data-open-criteria class="btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
@@ -406,7 +407,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '2.6';
+const APP_VERSION = '2.7';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -1549,7 +1550,9 @@ function init() {
   initFullscreen();
   initScrub();
   initCriteria();
-  selectStock('Microsoft');
+  // Aufruf aus dem Radar: ?q=Ticker bzw. CoinGecko-ID
+  const q = new URLSearchParams(location.search).get('q');
+  if (q) selectStock(q, q); else selectStock('Microsoft');
 }
 
 /* ---------------------------------------------------------------

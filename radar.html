@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Vom Home-Bildschirm gestartet: ohne Browserleisten -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SmartWin Radar" />
+  <meta name="theme-color" content="#0a0d13" />
+  <title>SmartWin Radar</title>
+  <script>
+    // Gewählten Modus vor dem ersten Zeichnen setzen
+    try { if (localStorage.getItem('rr:mode') === '"clean"') document.documentElement.dataset.mode = 'clean'; } catch { /* egal */ }
+  </script>
+  <script src="https://cdn.tailwindcss.com/3.4.5"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    /* Layout: Kopfzeile, Suche, Aktienkopf mit Kennzahlenleiste, dann Score | Teilbereiche, Kennzahlen | Gewichtung */
+    :root {
+      --bg: #0a0d13; --panel: #10151e; --panel-2: #151b26; --line: #1e2633; --line-2: #2a3443;
+      --text: #e6ebf2; --muted: #8e9aab; --faint: #5f6b7c;
+      --accent: #3ecf8e; --accent-ink: #03140c; --up: #3ecf8e; --down: #f06363;
+      color-scheme: dark;
+    }
+    html, body { background: var(--bg); color: var(--text); }
+    body { background: linear-gradient(180deg, #0e1420 0, var(--bg) 420px) no-repeat, var(--bg); }
+    .app { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+    .inset { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .faint { color: var(--faint); }
+
+    .btn { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; line-height: 1.25rem; padding: .5rem .85rem;
+           border-radius: .6rem; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); transition: background .15s, border-color .15s; }
+    .btn:hover { background: #1a2230; border-color: #3a4657; }
+    .btn-sm { font-size: .8125rem; padding: .35rem .7rem; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+    .btn-primary:hover { background: #55dba0; border-color: #55dba0; }
+    .btn:disabled { opacity: .6; cursor: wait; }
+    .field { width: 100%; background: var(--bg); border: 1px solid var(--line-2); border-radius: .7rem; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s; }
+    .field::placeholder { color: var(--faint); }
+    .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(62, 207, 142, .18); }
+    .chip { font-size: .8125rem; padding: .35rem .75rem; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); background: transparent; transition: all .15s; }
+    .chip:hover { color: var(--text); border-color: #3a4657; }
+    .chip[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+    .seg { display: inline-flex; padding: 2px; border-radius: .7rem; border: 1px solid var(--line-2); }
+    .seg-item { font-size: .8125rem; padding: .4rem .8rem; border-radius: .55rem; color: var(--muted); transition: color .15s, background .15s; }
+    .seg-item:hover { color: var(--text); }
+    .seg-item[aria-current="page"] { background: var(--text); color: var(--bg); font-weight: 600; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .metric > summary { list-style: none; cursor: pointer; }
+    .metric > summary::-webkit-details-marker { display: none; }
+    .metric > summary:hover { background: rgba(255, 255, 255, .02); }
+    .metric .chev { transition: transform .2s; }
+    .metric[open] .chev { transform: rotate(90deg); }
+    .raw > summary { list-style: none; cursor: pointer; }
+    .raw > summary::-webkit-details-marker { display: none; }
+    .raw[open] .chev { transform: rotate(90deg); }
+
+    dialog { color: var(--text); }
+    dialog::backdrop { background: rgba(3, 6, 12, .72); backdrop-filter: blur(2px); }
+    .score-scale { background: linear-gradient(90deg, hsl(0 70% 52%) 0%, hsl(30 70% 52%) 25%, hsl(55 70% 50%) 50%, hsl(90 60% 48%) 75%, hsl(140 55% 48%) 100%); }
+
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 9999px;
+                        background: linear-gradient(90deg, var(--c) var(--p), var(--line-2) var(--p)); outline: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+                        background: var(--text); border: 4px solid var(--c); cursor: pointer; }
+    input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 4px solid var(--c); cursor: pointer; }
+
+    /* Clean-Modus: reines Schwarz, keine Flächen, nur Haarlinien und Graustufen */
+    :root[data-mode="clean"] {
+      --bg: #000; --panel: #000; --panel-2: #0b0b0b; --line: #1c1c1c; --line-2: #2a2a2a;
+      --text: #fff; --muted: #8a8a8a; --faint: #5c5c5c; --accent: #fff; --accent-ink: #000; --up: #fff; --down: #8a8a8a;
+    }
+    [data-mode="clean"] body { background: #000; font-family: Inter, system-ui, sans-serif; font-feature-settings: 'tnum' 1, 'cv11' 1; }
+    [data-mode="clean"] .num { font-family: Inter, system-ui, sans-serif; font-feature-settings: 'tnum' 1; }
+    [data-mode="clean"] .card { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding-left: 0; padding-right: 0; }
+    [data-mode="clean"] .inset { background: transparent; }
+    [data-mode="clean"] .btn { background: transparent; border-color: transparent; color: var(--muted); }
+    [data-mode="clean"] .btn:hover { color: var(--text); background: transparent; }
+    [data-mode="clean"] .btn-primary { background: #fff; border-color: #fff; color: #000; }
+    [data-mode="clean"] .btn-primary:hover { background: #e6e6e6; color: #000; }
+    [data-mode="clean"] .field { background: transparent; border-width: 0 0 1px; border-radius: 0; }
+    [data-mode="clean"] .field:focus { box-shadow: none; border-color: #fff; }
+    [data-mode="clean"] #searchInput { padding-left: 2.25rem; }
+    [data-mode="clean"] .gauge-box { width: auto; height: auto; margin: 1.25rem 0 .5rem; }
+    [data-mode="clean"] .gauge-box svg { display: none; }
+    [data-mode="clean"] .gauge-center { position: static; align-items: flex-start; }
+    [data-mode="clean"] #totalScore { font-size: 112px; font-weight: 300; letter-spacing: -.05em; }
+    [data-mode="clean"] #verdict { background: transparent !important; color: var(--muted) !important; padding: 0; text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 400; }
+    [data-mode="clean"] .score-scale { background: linear-gradient(90deg, #262626, #fff); height: 2px; }
+    [data-mode="clean"] .logo { background: #fff !important; color: #000 !important; }
+    [data-mode="clean"] input[type=range] { --c: #fff !important; }
+    [data-mode="clean"] #keyStats { border-radius: 0; border-width: 1px 0 0 !important; }
+    [data-mode="clean"] #loadError { background: transparent !important; border-color: var(--line-2) !important; color: var(--text) !important; }
+    [data-mode="clean"] .metric > summary:hover { background: transparent; }
+
+    .gauge-arc { transition: stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1), stroke .5s; }
+    .bar-fill  { transition: width .6s cubic-bezier(.2,.8,.2,1), background-color .4s; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+  <div class="app max-w-7xl mx-auto py-6 sm:py-8">
+
+    <!-- Kopfzeile -->
+    <header class="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div class="flex items-center gap-3">
+        <div class="logo w-9 h-9 rounded-lg grid place-items-center" style="background:var(--accent);color:var(--accent-ink)" aria-hidden="true">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M4 19V11M10 19V5M16 19v-6M22 19H2"/></svg>
+        </div>
+        <div>
+          <div class="text-[15px] font-semibold text-white leading-tight">SmartWin</div>
+          <div class="text-xs muted leading-tight">Hype- und Knappheits-Radar</div>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <nav class="seg" aria-label="Bereich">
+          <a href="./" class="seg-item">Aktien</a>
+          <a href="crypto.html" class="seg-item">Krypto</a>
+          <a href="radar.html" class="seg-item" aria-current="page">Radar</a>
+        </nav>
+        <button type="button" id="helpBtn" class="btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+          So funktioniert's
+        </button>
+        <button id="modeBtn" type="button" class="btn" aria-pressed="false">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
+          <span id="modeLabel">Clean</span>
+        </button>
+        <button id="fullscreenBtn" type="button" class="btn">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <span id="fullscreenLabel">Vollbild</span>
+        </button>
+      </div>
+      <p id="fullscreenHint" hidden class="w-full text-xs text-amber-300 sm:text-right">
+        Vollbild ist in dieser Ansicht gesperrt. Öffne die Seite in Safari oder Chrome, oder lege sie über Teilen → „Zum Home-Bildschirm“ ab.
+      </p>
+    </header>
+
+    <!-- Aufsteiger -->
+    <section class="card p-4 sm:p-5 mb-6">
+      <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+        <div>
+          <h2 class="eyebrow">Aufsteiger</h2>
+          <p class="text-xs faint mt-1">Wo die Aufmerksamkeit gerade am stärksten über dem Normalniveau liegt.</p>
+        </div>
+        <span id="status" class="text-xs faint num"></span>
+      </div>
+      <div id="risers" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+    </section>
+
+    <!-- Alle Themen -->
+    <section class="card p-4 sm:p-5 mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-baseline gap-2">
+          <h2 class="eyebrow">Alle Themen</h2>
+          <span id="themeCount" class="text-xs faint num"></span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs faint">Sortieren</span>
+          <div id="sortBtns" class="flex flex-wrap gap-1.5"></div>
+        </div>
+      </div>
+      <div id="groupBtns" class="flex flex-wrap gap-1.5 mt-3"></div>
+      <p id="priceHint" hidden class="text-xs mt-3 px-3 py-2 rounded-lg inset muted"></p>
+      <div id="themeBody" class="mt-3"></div>
+    </section>
+
+    <!-- Eigenes Thema -->
+    <section class="card p-4 sm:p-5 mb-6">
+      <h2 class="eyebrow mb-1">Eigenes Thema hinzufügen</h2>
+      <p class="text-xs faint mb-3">Ein Begriff, zu dem es einen englischen Wikipedia-Artikel gibt, z. B. „Stanley cup“, „Matcha“ oder „Rheinmetall“. Ein Kurs ist optional.</p>
+      <form id="addForm" class="grid grid-cols-1 sm:grid-cols-12 gap-3" autocomplete="off">
+        <div class="sm:col-span-5">
+          <label for="addName" class="text-xs muted">Thema</label>
+          <input id="addName" class="field mt-1 px-3 py-2.5 text-sm" placeholder="z. B. Matcha" required />
+        </div>
+        <div class="sm:col-span-3">
+          <label for="addSymbol" class="text-xs muted">Kurs über (optional)</label>
+          <input id="addSymbol" class="field mt-1 px-3 py-2.5 text-sm num" placeholder="z. B. NVDA oder pepe" />
+        </div>
+        <div class="sm:col-span-2">
+          <label for="addType" class="text-xs muted">Art</label>
+          <select id="addType" class="field mt-1 px-3 py-2.5 text-sm">
+            <option value="fmp">Aktie / ETF</option>
+            <option value="cg">Krypto</option>
+          </select>
+        </div>
+        <div class="sm:col-span-2 flex items-end">
+          <button id="addBtn" type="submit" class="btn btn-primary w-full justify-center py-2.5">Hinzufügen</button>
+        </div>
+      </form>
+      <p id="addError" hidden class="text-sm mt-3" style="color:#ffb4b4"></p>
+    </section>
+
+    <!-- Detail -->
+    <dialog id="detailDialog" aria-labelledby="detailTitle"
+            class="rounded-2xl p-0 w-[min(980px,calc(100vw-24px))] max-h-[90vh]" style="background:var(--panel);border:1px solid var(--line-2)">
+      <div class="sticky top-0 z-10 flex items-center justify-between gap-4 px-5 sm:px-6 py-4" style="background:var(--panel);border-bottom:1px solid var(--line)">
+        <div class="min-w-0">
+          <h2 id="detailTitle" class="text-lg font-semibold text-white truncate"></h2>
+          <p id="detailSub" class="text-xs muted"></p>
+        </div>
+        <button type="button" id="closeDetail" class="btn btn-sm">Schließen</button>
+      </div>
+      <div id="detailBody" class="px-5 sm:px-6 py-5 space-y-6"></div>
+    </dialog>
+
+    <!-- Erklärung -->
+    <dialog id="helpDialog" aria-labelledby="helpTitle"
+            class="rounded-2xl p-0 w-[min(760px,calc(100vw-32px))] max-h-[85vh]" style="background:var(--panel);border:1px solid var(--line-2)">
+      <div class="sticky top-0 flex items-center justify-between gap-4 px-6 py-4" style="background:var(--panel);border-bottom:1px solid var(--line)">
+        <h2 id="helpTitle" class="text-lg font-semibold text-white">So funktioniert das Radar</h2>
+        <button type="button" id="closeHelp" class="btn btn-sm">Schließen</button>
+      </div>
+      <div id="helpBody" class="px-6 py-5 space-y-5 text-sm leading-relaxed"></div>
+    </dialog>
+
+    <div id="appVersion" class="fixed z-20 num text-[11px] px-2 py-1 rounded-md muted pointer-events-none"
+         style="background:rgba(16,21,30,.9);border:1px solid var(--line-2);right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px))"></div>
+
+    <footer class="text-center text-[11px] faint mt-10 pb-8 leading-relaxed">
+      Aufmerksamkeit: Aufrufe der englischen Wikipedia (Wikimedia). Kurse: Financial Modeling Prep und CoinGecko.<br />
+      Signale, keine Vorhersagen. Keine Anlageberatung.
+    </footer>
+  </div>
+<script>
+const APP_VERSION = '2.7';
+
+/* ---------------------------------------------------------------
+   Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
+   `price`: optionaler Kurs als Stellvertreter (fmp = Aktie/ETF, cg = CoinGecko-ID).
+   `scarcity`: kuratierter Hintergrund zur Knappheit.
+---------------------------------------------------------------- */
+const THEMES = [
+  { id: 'pokemon', name: 'Pokémon-Karten', group: 'Sammelobjekte', wiki: 'Pokémon Trading Card Game', scarcity: 'Ältere Sets werden nicht nachgedruckt, gefragte Neuerscheinungen sind oft schnell vergriffen.' },
+  { id: 'onepiece', name: 'One-Piece-Karten', group: 'Sammelobjekte', wiki: 'One Piece Card Game' },
+  { id: 'mtg', name: 'Magic-Karten', group: 'Sammelobjekte', wiki: 'Magic: The Gathering', scarcity: 'Frühe Karten stehen auf der „Reserved List“ und werden nie nachgedruckt.' },
+  { id: 'labubu', name: 'Labubu', group: 'Sammelobjekte', wiki: 'Labubu', scarcity: 'Verkauf in Blindboxen und limitierten Drops.' },
+  { id: 'lego', name: 'LEGO', group: 'Sammelobjekte', wiki: 'Lego', scarcity: 'Sets werden nach einigen Jahren eingestellt und danach nur noch gebraucht gehandelt.' },
+  { id: 'rolex', name: 'Rolex', group: 'Sammelobjekte', wiki: 'Rolex', scarcity: 'Begrenzte Produktion, beliebte Modelle mit Wartelisten.' },
+  { id: 'whisky', name: 'Whisky', group: 'Sammelobjekte', wiki: 'Scotch whisky', scarcity: 'Alte Abfüllungen sind endlich, jede geöffnete Flasche verschwindet vom Markt.' },
+  { id: 'sneaker', name: 'Sneaker', group: 'Sammelobjekte', wiki: 'Sneaker collecting', scarcity: 'Limitierte Releases über Verlosungen.' },
+  { id: 'cards', name: 'Sammelkarten allgemein', group: 'Sammelobjekte', wiki: 'Trading card' },
+  { id: 'gold', name: 'Gold', group: 'Rohstoffe', wiki: 'Gold', price: { fmp: 'GLD', label: 'Gold-ETF GLD' }, scarcity: 'Die Fördermenge wächst nur um wenige Prozent pro Jahr.' },
+  { id: 'silver', name: 'Silber', group: 'Rohstoffe', wiki: 'Silver', price: { fmp: 'SLV', label: 'Silber-ETF SLV' }, scarcity: 'Wird überwiegend als Nebenprodukt anderer Minen gefördert, das Angebot reagiert kaum auf den Preis.' },
+  { id: 'uranium', name: 'Uran', group: 'Rohstoffe', wiki: 'Uranium', price: { fmp: 'URA', label: 'Uran-ETF URA' }, scarcity: 'Neue Minen brauchen viele Jahre bis zur Förderung.' },
+  { id: 'copper', name: 'Kupfer', group: 'Rohstoffe', wiki: 'Copper', price: { fmp: 'CPER', label: 'Kupfer-ETF CPER' }, scarcity: 'Stromnetze und E-Autos brauchen viel Kupfer, neue Minen kommen langsam.' },
+  { id: 'oil', name: 'Öl', group: 'Rohstoffe', wiki: 'Petroleum', price: { fmp: 'USO', label: 'Öl-ETF USO' } },
+  { id: 'cocoa', name: 'Kakao', group: 'Rohstoffe', wiki: 'Cocoa bean', scarcity: 'Die Ernte hängt an wenigen Anbauländern in Westafrika.' },
+  { id: 'bitcoin', name: 'Bitcoin', group: 'Krypto', wiki: 'Bitcoin', price: { cg: 'bitcoin', label: 'Bitcoin' }, scarcity: 'Höchstmenge 21 Mio. BTC, die Ausgabe halbiert sich etwa alle 4 Jahre.' },
+  { id: 'ethereum', name: 'Ethereum', group: 'Krypto', wiki: 'Ethereum', price: { cg: 'ethereum', label: 'Ethereum' } },
+  { id: 'solana', name: 'Solana', group: 'Krypto', wiki: 'Solana (blockchain platform)', price: { cg: 'solana', label: 'Solana' } },
+  { id: 'xrp', name: 'XRP', group: 'Krypto', wiki: 'Ripple Labs', price: { cg: 'ripple', label: 'XRP' } },
+  { id: 'meme', name: 'Memecoins', group: 'Krypto', wiki: 'Meme coin', price: { cg: 'dogecoin', label: 'Dogecoin' } },
+  { id: 'ai', name: 'Künstliche Intelligenz', group: 'Technologie', wiki: 'Artificial intelligence', price: { fmp: 'NVDA', label: 'Nvidia' } },
+  { id: 'quantum', name: 'Quantencomputer', group: 'Technologie', wiki: 'Quantum computing', price: { fmp: 'IONQ', label: 'IonQ' } },
+  { id: 'robots', name: 'Humanoide Roboter', group: 'Technologie', wiki: 'Humanoid robot', price: { fmp: 'BOTZ', label: 'Robotik-ETF BOTZ' } },
+  { id: 'smr', name: 'Mini-Atomkraftwerke', group: 'Technologie', wiki: 'Small modular reactor', price: { fmp: 'SMR', label: 'NuScale' } },
+  { id: 'glp1', name: 'Abnehmspritzen', group: 'Technologie', wiki: 'Semaglutide', price: { fmp: 'NVO', label: 'Novo Nordisk' } },
+  { id: 'space', name: 'Raumfahrt', group: 'Technologie', wiki: 'Rocket Lab', price: { fmp: 'RKLB', label: 'Rocket Lab' } },
+  { id: 'drones', name: 'Drohnen', group: 'Technologie', wiki: 'Unmanned aerial vehicle' },
+];
+const GROUPS = ['Alle', 'Sammelobjekte', 'Rohstoffe', 'Krypto', 'Technologie', 'Eigene'];
+
+/* ---------------------------------------------------------------
+   Helfer
+---------------------------------------------------------------- */
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* Speicher voll oder gesperrt: ohne Cache weiter */ } },
+  del(k) { try { localStorage.removeItem(k); } catch { /* egal */ } },
+};
+const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
+const lin = (v, bad, good) => clamp(((v - bad) / (good - bad)) * 100);
+const num = (v, d = 1) => v.toLocaleString('de-DE', { maximumFractionDigits: d });
+const f2 = v => v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const has = v => v !== null && v !== undefined && !(typeof v === 'number' && Number.isNaN(v));
+const finite = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CACHE_MS = 12 * 60 * 60 * 1000;
+const ymd = d => d.toISOString().slice(0, 10);
+// Prozent mit Vorzeichen; große Sprünge ohne Nachkommastellen
+const pctTxt = v => `${v >= 0 ? '+' : ''}${Math.abs(v) >= 100 ? num(v, 0) : num(v, 1)} %`;
+// gleitender 7-Tage-Schnitt, damit Wochenenden und Einzelspitzen die Kurve nicht zerreißen
+const smooth = (v, n = 7) => v.map((_, i) => mean(v.slice(Math.max(0, i - n + 1), i + 1)));
+
+const state = { mode: store.get('rr:mode') || 'standard', sort: store.get('rr:radarSort') || 'hype', group: 'Alle',
+  custom: store.get('rr:radar:custom') || [], data: {}, apiKey: store.get('rr:apiKey') || '' };
+const allThemes = () => [...THEMES, ...state.custom];
+
+/* ---------------------------------------------------------------
+   Datenquellen
+---------------------------------------------------------------- */
+const WIKI_API = 'https://en.wikipedia.org/w/api.php';
+const PAGEVIEWS = 'https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/';
+
+// Artikelnamen auflösen (Weiterleitungen, Schreibweise): ein Abruf für bis zu 50 Titel
+async function resolveTitles(titles) {
+  const out = {};
+  for (let i = 0; i < titles.length; i += 50) {
+    const chunk = titles.slice(i, i + 50);
+    const url = new URL(WIKI_API);
+    Object.entries({ action: 'query', titles: chunk.join('|'), redirects: '1', format: 'json', formatversion: '2', origin: '*' })
+      .forEach(([k, v]) => url.searchParams.set(k, v));
+    const body = await (await fetch(url)).json();
+    const map = t => {
+      for (const n of body.query?.normalized || []) if (n.from === t) t = n.to;
+      for (const r of body.query?.redirects || []) if (r.from === t) t = r.to;
+      return t;
+    };
+    const missing = new Set((body.query?.pages || []).filter(p => p.missing || p.invalid).map(p => p.title));
+    for (const t of chunk) { const m = map(t); out[t] = missing.has(m) ? null : m; }
+  }
+  return out;
+}
+
+// Tägliche Aufrufe des letzten Jahres; Tage ohne Eintrag zählen als 0
+async function loadViews(title) {
+  const end = new Date(Date.now() - DAY_MS), start = new Date(end - 400 * DAY_MS);
+  const fmt = d => ymd(d).replace(/-/g, '');
+  const res = await fetch(`${PAGEVIEWS}${encodeURIComponent(title.replace(/ /g, '_'))}/daily/${fmt(start)}/${fmt(end)}`);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`Wikimedia antwortet mit ${res.status}`);
+  const byDay = new Map(((await res.json()).items || []).map(it => [`${it.timestamp.slice(0, 4)}-${it.timestamp.slice(4, 6)}-${it.timestamp.slice(6, 8)}`, it.views]));
+  const out = [];
+  for (let d = new Date(ymd(start)); d <= end; d = new Date(+d + DAY_MS)) out.push([ymd(d), byDay.get(ymd(d)) ?? 0]);
+  // führende Nullen weglassen (Artikel gab es noch nicht)
+  const first = out.findIndex(x => x[1] > 0);
+  return first < 0 ? [] : out.slice(first);
+}
+
+// Abrufzähler wie auf der Aktienseite, damit das Tageslimit von FMP stimmt
+const usageKey = () => `rr:calls:${new Date().toISOString().slice(0, 10)}`;
+async function loadFmp(symbol) {
+  const url = new URL('https://financialmodelingprep.com/stable/historical-price-eod/light');
+  url.searchParams.set('symbol', symbol);
+  url.searchParams.set('from', ymd(new Date(Date.now() - 400 * DAY_MS)));
+  url.searchParams.set('apikey', state.apiKey);
+  const res = await fetch(url);
+  store.set(usageKey(), (store.get(usageKey()) || 0) + 1);
+  if (res.status === 402 || res.status === 403) throw new Error('im FMP-Gratis-Tarif nicht enthalten');
+  if (res.status === 429) throw new Error('FMP-Tageslimit erreicht');
+  if (!res.ok) throw new Error(`FMP antwortet mit ${res.status}`);
+  const rows = await res.json();
+  return (Array.isArray(rows) ? rows : [])
+    .map(r => [r.date, finite(r.price ?? r.close), finite(r.volume)])
+    .filter(r => r[0] && r[1] != null)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+async function loadCoin(id) {
+  const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart?vs_currency=eur&days=365&interval=daily`;
+  const res = await fetch(url);
+  if (res.status === 429) throw new Error('CoinGecko bremst gerade, später erneut laden');
+  if (!res.ok) throw new Error(`CoinGecko antwortet mit ${res.status}`);
+  const body = await res.json();
+  const vols = new Map((body.total_volumes || []).map(([t, v]) => [ymd(new Date(t)), v]));
+  const byDay = new Map();
+  for (const [t, v] of body.prices || []) if (finite(v) != null) byDay.set(ymd(new Date(t)), v);
+  return [...byDay].sort((a, b) => a[0].localeCompare(b[0])).map(([d, p]) => [d, p, finite(vols.get(d))]);
+}
+
+/* ---------------------------------------------------------------
+   Kennzahlen und Phase
+---------------------------------------------------------------- */
+function attentionStats(views) {
+  const v = views.map(x => x[1]);
+  if (v.length < 60) return null;
+  const last30 = mean(v.slice(-30)), last7 = mean(v.slice(-7));
+  const base = median(v.slice(0, -30)); // Median: einzelne Ausreißer verzerren das Normalniveau nicht
+  return { last30, last7, base, ratio: (last30 + 1) / (base + 1), accel: (last7 + 1) / (last30 + 1), days: v.length };
+}
+
+function priceStats(series) {
+  if (!series || series.length < 30) return null;
+  const last = series.at(-1)[1];
+  const at = days => { const cut = ymd(new Date(Date.parse(series.at(-1)[0]) - days * DAY_MS)); const p = [...series].reverse().find(x => x[0] <= cut); return p ? p[1] : null; };
+  const chg = days => { const p = at(days); return p ? (last / p - 1) * 100 : null; };
+  const closes = series.map(x => x[1]);
+  const vols = series.map(x => x[2]).filter(x => x != null && x > 0);
+  const recentVol = mean(series.slice(-30).map(x => x[2]).filter(x => x != null && x > 0));
+  const baseVol = median(vols.slice(0, -30));
+  return {
+    last, p30: chg(30), p90: chg(90), p365: chg(365),
+    fromHigh: (last / Math.max(...closes) - 1) * 100,
+    volRatio: recentVol && baseVol ? recentVol / baseVol : null,
+  };
+}
+
+// Hype-Score: Aufmerksamkeit 45 %, Beschleunigung 20 %, Handelsvolumen 15 %, Preisdynamik 20 %. Fehlende Teile werden umverteilt.
+function hypeScore(a, p) {
+  const parts = [
+    [0.45, a ? lin(Math.log2(a.ratio), -1, 2) : null],
+    [0.20, a ? lin(Math.log2(a.accel), -0.5, 1) : null],
+    [0.15, p?.volRatio ? lin(Math.log2(p.volRatio), -0.5, 1.5) : null],
+    [0.20, p && has(p.p30) ? lin(p.p30, -15, 30) : null],
+  ].filter(([, v]) => v !== null);
+  if (!parts.length) return null;
+  const w = parts.reduce((x, [k]) => x + k, 0);
+  return Math.round(parts.reduce((x, [k, v]) => x + k * v, 0) / w);
+}
+
+const PHASES = {
+  early:   { label: 'Früh',       color: '#3ecf8e', text: 'Aufmerksamkeit steigt deutlich, der Preis hat noch kaum reagiert.' },
+  running: { label: 'Läuft',      color: '#f2c46d', text: 'Aufmerksamkeit und Preis steigen gemeinsam.' },
+  hot:     { label: 'Überhitzt',  color: '#f06363', text: 'Preis ist stark gestiegen, die Aufmerksamkeit lässt schon nach.' },
+  cooling: { label: 'Abkühlend',  color: '#8e9aab', text: 'Aufmerksamkeit unter Normalniveau, Preis ohne Schwung.' },
+  calm:    { label: 'Ruhig',      color: '#5f6b7c', text: 'Nichts Auffälliges.' },
+};
+function phaseFor(a, p) {
+  if (!a) return null;
+  const up = a.ratio >= 1.5, jump = a.accel >= 1.5;
+  const pr = p?.p30;
+  if (p && ((has(p.p90) && p.p90 > 60) || (has(pr) && pr > 30)) && (a.accel < 0.8 || a.ratio < 1.2)) return 'hot';
+  if ((up || jump) && (!has(pr) || pr < 10)) return 'early';
+  if (up && pr >= 10) return 'running';
+  if (a.ratio < 0.8 && (!has(pr) || pr < 0)) return 'cooling';
+  return 'calm';
+}
+
+function signalsFor(t, a, p) {
+  const out = [];
+  if (!a) return out;
+  if (a.ratio >= 1.5) out.push(`Aufmerksamkeit ${num(a.ratio, 1)}× über dem Normalniveau`);
+  if (a.accel >= 1.5) out.push(`Letzte 7 Tage ${pctTxt((a.accel - 1) * 100)} ggü. Monatsschnitt: springt gerade an`);
+  if (p?.volRatio >= 1.5) out.push(`Handelsvolumen ${num(p.volRatio, 1)}× über normal`);
+  if (p && p.fromHigh > -3) out.push('Kurs nahe am 1-Jahres-Hoch');
+  if ((a.ratio >= 1.5 || a.accel >= 1.5) && p && has(p.p30) && p.p30 < 10) out.push('Aufmerksamkeit steigt, Preis noch nicht: mögliches Frühsignal');
+  if (p && has(p.p90) && p.p90 > 60 && a.accel < 0.8) out.push(`Kurs ${pctTxt(p.p90)} in 90 Tagen bei nachlassender Aufmerksamkeit: Vorsicht`);
+  if (a.ratio < 0.6) out.push('Deutlich weniger Interesse als üblich');
+  return out;
+}
+
+function compute(t) {
+  const d = state.data[t.id] || {};
+  const a = d.views ? attentionStats(d.views) : null;
+  const p = d.price ? priceStats(d.price) : null;
+  return { t, d, a, p, hype: hypeScore(a, p), phase: phaseFor(a, p), signals: signalsFor(t, a, p) };
+}
+
+/* ---------------------------------------------------------------
+   Laden: Cache je Thema 12 h, Ergebnisse erscheinen nach und nach
+---------------------------------------------------------------- */
+let renderQueued = false;
+const queueRender = () => { if (!renderQueued) { renderQueued = true; requestAnimationFrame(() => { renderQueued = false; render(); }); } };
+const cacheKey = t => `rr:rv1:${t.id}`;
+
+async function pool(items, n, fn) {
+  const queue = [...items];
+  await Promise.all(Array.from({ length: Math.min(n, queue.length) }, async () => { while (queue.length) await fn(queue.shift()); }));
+}
+
+async function loadAll(force = false) {
+  const themes = allThemes();
+  const todo = [];
+  for (const t of themes) {
+    const c = store.get(cacheKey(t));
+    // Kurs fehlt im Cache: neu laden, außer er ist im Gratis-Tarif gesperrt oder es gibt (noch) keinen Key
+    const priceOk = c && (!t.price || c.price || /Gratis-Tarif/.test(c.priceError || '') || (t.price.fmp && !state.apiKey));
+    if (!force && c && Date.now() - c.t < CACHE_MS && priceOk) state.data[t.id] = c;
+    else todo.push(t);
+  }
+  renderStatus(todo.length);
+  render();
+  if (!todo.length) return;
+
+  let titles = {};
+  try { titles = await resolveTitles([...new Set(todo.map(t => t.wiki))]); }
+  catch { todo.forEach(t => { titles[t.wiki] = t.wiki; }); } // Auflösung gescheitert: Titel direkt probieren
+  let done = 0;
+  const finish = t => {
+    done++;
+    renderStatus(todo.length - done);
+    // Verbindungsfehler nicht cachen, damit der nächste Aufruf es erneut versucht
+    if (!state.data[t.id].viewsError || !state.data[t.id].title) store.set(cacheKey(t), state.data[t.id]);
+    queueRender();
+  };
+
+  const cgThemes = todo.filter(t => t.price?.cg);
+  const views = pool(todo, 6, async t => {
+    const d = state.data[t.id] = { t: Date.now(), title: titles[t.wiki] ?? null, views: null, price: null, priceError: null };
+    if (!d.title) d.viewsError = 'Kein passender Wikipedia-Artikel gefunden';
+    else {
+      try { d.views = await loadViews(d.title); } catch (e) { d.viewsError = e.name === 'TypeError' ? 'Keine Verbindung zu Wikipedia' : e.message; }
+    }
+    if (t.price?.fmp) {
+      if (!state.apiKey) d.priceError = 'Für Kurse den FMP-Key auf der Aktienseite eintragen';
+      else { try { d.price = await loadFmp(t.price.fmp); } catch (e) { d.priceError = e.name === 'TypeError' ? 'Keine Verbindung zu FMP' : e.message; } }
+    }
+    if (!t.price?.cg) finish(t);
+  });
+  // CoinGecko erlaubt ohne Key nur wenige Abrufe pro Minute: nacheinander
+  const coins = (async () => {
+    for (const t of cgThemes) {
+      let price = null, priceError = null;
+      try { price = await loadCoin(t.price.cg); } catch (e) { priceError = e.message; }
+      await views.catch(() => {}); // erst danach existiert der Eintrag mit den Aufrufen
+      Object.assign(state.data[t.id], { price, priceError });
+      finish(t);
+    }
+  })();
+  await Promise.all([views, coins]);
+}
+
+/* ---------------------------------------------------------------
+   Darstellung
+---------------------------------------------------------------- */
+const phaseColor = ph => state.mode === 'clean' ? ({ early: '#fff', running: '#d0d0d0', hot: '#fff', cooling: '#8a8a8a', calm: '#5c5c5c' }[ph]) : PHASES[ph].color;
+const scoreColor = s => state.mode === 'clean' ? `hsl(0, 0%, ${Math.round(38 + clamp(s) * 0.62)}%)` : `hsl(${clamp(s) * 1.3}, 62%, 52%)`;
+function phaseBadge(ph) {
+  if (!ph) return '<span class="faint text-xs">–</span>';
+  const c = phaseColor(ph);
+  const style = state.mode === 'clean'
+    ? `border:1px solid ${ph === 'hot' || ph === 'early' ? '#fff' : 'var(--line-2)'};color:${c}`
+    : `color:${c};background:${c}1f;border:1px solid ${c}40`;
+  return `<span class="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md whitespace-nowrap" style="${style}">${PHASES[ph].label}</span>`;
+}
+
+function spark(values, { w = 120, h = 32, color = 'var(--muted)', fill = false } = {}) {
+  const v = values.filter(x => x != null);
+  if (v.length < 2) return '<span class="faint text-xs">–</span>';
+  const min = Math.min(...v), max = Math.max(...v);
+  const d = v.map((x, i) => `${i ? 'L' : 'M'}${((i / (v.length - 1)) * w).toFixed(1)},${(2 + (1 - (x - min) / (max - min || 1)) * (h - 4)).toFixed(1)}`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="block" style="width:100%;max-width:${w}px;height:${h}px" aria-hidden="true">
+    ${fill ? `<path d="${d}L${w},${h}L0,${h}Z" fill="${color}" opacity=".12"/>` : ''}
+    <path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+}
+const attnSpark = (r, opts) => spark(r.d.views ? smooth(r.d.views.map(x => x[1])).slice(-120) : [], opts);
+const attnTxt = a => (a ? pctTxt((a.ratio - 1) * 100) : '–');
+const upDown = v => (!has(v) ? 'var(--faint)' : state.mode === 'clean' ? 'var(--text)' : v >= 0 ? 'var(--up)' : 'var(--down)');
+
+function renderStatus(pending) {
+  const el = document.getElementById('status');
+  el.innerHTML = pending
+    ? `Lade … noch ${pending} Thema${pending === 1 ? '' : 'en'}`
+    : `Stand ${new Date(Math.min(...allThemes().map(t => state.data[t.id]?.t || Date.now()))).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · <button type="button" id="reloadBtn" class="underline hover:text-white">aktualisieren</button>`;
+}
+
+const SORTS = [['hype', 'Hype-Score'], ['early', 'Frühsignal'], ['attn', 'Aufmerksamkeit'], ['price', 'Preis 30 T.'], ['name', 'Name']];
+// Frühsignal: hohe Aufmerksamkeit, aber noch wenig Preisbewegung
+const earlyScore = r => (r.a ? Math.log2(r.a.ratio) + 0.5 * Math.log2(r.a.accel) - (has(r.p?.p30) ? Math.max(0, r.p.p30) / 30 : 0) : -99);
+
+function render() {
+  const rows = allThemes().map(compute);
+  const loaded = rows.filter(r => r.a);
+
+  // Aufsteiger
+  const risers = loaded.filter(r => r.a.last30 >= 100).sort((x, y) => y.a.ratio * Math.sqrt(y.a.accel) - x.a.ratio * Math.sqrt(x.a.accel)).slice(0, 4);
+  document.getElementById('risers').innerHTML = risers.length ? risers.map(r => `
+    <button type="button" data-open="${esc(r.t.id)}" class="inset text-left p-3 hover:border-[color:var(--line-2)] transition">
+      <div class="flex items-start justify-between gap-2">
+        <span class="text-sm font-medium text-white leading-tight">${esc(r.t.name)}</span>
+        ${phaseBadge(r.phase)}
+      </div>
+      <div class="num text-xl mt-2" style="color:${upDown(r.a.ratio - 1)}">${attnTxt(r.a)}</div>
+      <div class="text-[11px] faint">Aufrufe 30 T. ggü. normal</div>
+      <div class="mt-2">${attnSpark(r, { w: 220, h: 36, color: phaseColor(r.phase || 'calm'), fill: true })}</div>
+    </button>`).join('')
+    : '<p class="text-sm faint col-span-full py-2">Lade Daten …</p>';
+
+  // Gruppen und Sortierung
+  document.getElementById('groupBtns').innerHTML = GROUPS.filter(g => g !== 'Eigene' || state.custom.length)
+    .map(g => `<button type="button" class="chip" data-group="${g}" aria-pressed="${state.group === g}">${g}</button>`).join('');
+  document.getElementById('sortBtns').innerHTML = SORTS
+    .map(([k, l]) => `<button type="button" class="chip" data-sort="${k}" aria-pressed="${state.sort === k}">${l}</button>`).join('');
+
+  const list = rows.filter(r => state.group === 'Alle' || r.t.group === state.group);
+  const by = {
+    hype: r => r.hype ?? -1, early: earlyScore, attn: r => r.a?.ratio ?? -1, price: r => r.p?.p30 ?? -999,
+  }[state.sort];
+  list.sort(state.sort === 'name' ? (x, y) => x.t.name.localeCompare(y.t.name, 'de') : (x, y) => by(y) - by(x));
+  const flagged = list.filter(r => r.phase === 'early').length;
+  document.getElementById('themeCount').textContent = `${list.length} Themen${flagged ? ` · ${flagged} mit Frühsignal` : ''}`;
+
+  const hint = document.getElementById('priceHint');
+  hint.hidden = !!state.apiKey;
+  hint.innerHTML = 'Kurse für Aktien, ETFs und Rohstoffe kommen von Financial Modeling Prep. Trag dafür deinen Key auf der <a class="underline" href="./">Aktienseite</a> unter „Datenquelle“ ein. Aufmerksamkeit und Krypto-Kurse funktionieren ohne Key.';
+
+  document.getElementById('themeBody').innerHTML = `
+    <div class="overflow-x-auto -mx-1">
+      <table class="w-full text-sm" style="min-width:640px">
+        <thead><tr class="text-left">
+          <th class="eyebrow font-semibold py-2 px-1">Thema</th>
+          <th class="eyebrow font-semibold py-2 px-1">Phase</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-right">Hype</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-right">Aufmerks.</th>
+          <th class="eyebrow font-semibold py-2 px-1 hidden sm:table-cell">Verlauf 4 Mon.</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-right">Preis 30 T.</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-right hidden md:table-cell">Volumen</th>
+        </tr></thead>
+        <tbody>${list.map(r => `
+          <tr data-open="${esc(r.t.id)}" class="cursor-pointer hover:bg-white/[.02]" style="border-top:1px solid var(--line)">
+            <td class="py-2.5 px-1 max-w-[220px]">
+              <span class="block truncate text-white">${esc(r.t.name)}</span>
+              <span class="block text-[11px] faint truncate">${esc(r.t.group)}${r.t.price ? ` · ${esc(r.t.price.label || r.t.price.fmp || r.t.price.cg)}` : ''}${r.t.scarcity ? ' · knapp' : ''}</span>
+            </td>
+            <td class="py-2.5 px-1">${r.d.viewsError && !r.a ? `<span class="text-[11px] faint">${esc(r.d.viewsError)}</span>` : phaseBadge(r.phase)}</td>
+            <td class="py-2.5 px-1 text-right num font-semibold" style="color:${r.hype == null ? 'var(--faint)' : scoreColor(r.hype)}">${r.hype ?? '–'}</td>
+            <td class="py-2.5 px-1 text-right num" style="color:${r.a ? upDown(r.a.ratio - 1) : 'var(--faint)'}">${attnTxt(r.a)}</td>
+            <td class="py-2.5 px-1 hidden sm:table-cell w-[130px]">${attnSpark(r, { w: 120, h: 28, color: r.phase ? phaseColor(r.phase) : 'var(--muted)' })}</td>
+            <td class="py-2.5 px-1 text-right num" style="color:${upDown(r.p?.p30)}" title="${esc(r.d.priceError || '')}">${has(r.p?.p30) ? pctTxt(r.p.p30) : r.t.price ? '<span class="faint">n. v.</span>' : '<span class="faint">–</span>'}</td>
+            <td class="py-2.5 px-1 text-right num hidden md:table-cell muted">${r.p?.volRatio ? `${num(r.p.volRatio, 1)}×` : '–'}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <p class="text-[11px] faint mt-2">Aufmerksamkeit: Wikipedia-Aufrufe der letzten 30 Tage im Vergleich zum Normalniveau des Jahres davor. Antippen für Details.</p>`;
+
+  if (document.getElementById('detailDialog').open) renderDetail();
+}
+
+/* ---------------------------------------------------------------
+   Detailansicht: Aufmerksamkeit und Preis über ein Jahr übereinander
+---------------------------------------------------------------- */
+let detailId = null;
+function renderDetail() {
+  const t = allThemes().find(x => x.id === detailId);
+  if (!t) return;
+  const r = compute(t);
+  document.getElementById('detailTitle').textContent = t.name;
+  document.getElementById('detailSub').textContent = [t.group, r.d.title ? `Wikipedia: ${r.d.title}` : null, t.price ? `Kurs: ${t.price.label || t.price.fmp || t.price.cg}` : null].filter(Boolean).join(' · ');
+
+  const views = r.d.views || [];
+  const price = r.d.price || [];
+  let chart = '<p class="text-sm faint">Keine Aufrufzahlen verfügbar.</p>';
+  if (views.length > 1) {
+    const W = 1000, H = 240, pad = 8;
+    const t0 = Date.parse(views[0][0]), t1 = Date.parse(views.at(-1)[0]);
+    const x = d => ((Date.parse(d) - t0) / (t1 - t0 || 1)) * W;
+    const line = (pts, lo, hi) => pts.map(([d, v], i) => `${i ? 'L' : 'M'}${x(d).toFixed(1)},${(pad + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * pad)).toFixed(1)}`).join('');
+    const sv = smooth(views.map(v => v[1]));
+    const vPts = views.map((v, i) => [v[0], sv[i]]);
+    const vLine = line(vPts, 0, Math.max(...sv));
+    const pIn = price.filter(p => p[0] >= views[0][0]);
+    const pLine = pIn.length > 1 ? line(pIn.map(p => [p[0], p[1]]), Math.min(...pIn.map(p => p[1])), Math.max(...pIn.map(p => p[1]))) : '';
+    const attnColor = state.mode === 'clean' ? '#8a8a8a' : '#5ab0f0';
+    const priceColor = state.mode === 'clean' ? '#ffffff' : '#e7b34a';
+    const baseY = pad + (1 - (r.a?.base || 0) / Math.max(...sv)) * (H - 2 * pad);
+    chart = `
+      <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs mb-2">
+        <span class="flex items-center gap-2"><span class="w-3 h-1.5 rounded-sm" style="background:${attnColor}"></span>Wikipedia-Aufrufe (7-Tage-Schnitt)</span>
+        ${pLine ? `<span class="flex items-center gap-2"><span class="w-3 h-0.5" style="background:${priceColor}"></span>Kurs ${esc(t.price.label || '')}</span>` : ''}
+        ${r.a ? `<span class="flex items-center gap-2 faint"><span class="w-3 border-t border-dashed" style="border-color:var(--muted)"></span>Normalniveau</span>` : ''}
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full" style="height:clamp(160px, 26vw, 260px)" role="img" aria-label="Aufmerksamkeit und Kurs im letzten Jahr">
+        <path d="${vLine}L${W},${H}L0,${H}Z" fill="${attnColor}" opacity=".14"/>
+        <path d="${vLine}" fill="none" stroke="${attnColor}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+        ${r.a ? `<line x1="0" x2="${W}" y1="${baseY}" y2="${baseY}" stroke="var(--muted)" stroke-dasharray="5 5" stroke-width="1" vector-effect="non-scaling-stroke"/>` : ''}
+        ${pLine ? `<path d="${pLine}" fill="none" stroke="${priceColor}" stroke-width="1.8" vector-effect="non-scaling-stroke"/>` : ''}
+      </svg>
+      <div class="flex justify-between text-[11px] faint num mt-1"><span>${new Date(t0).toLocaleDateString('de-DE')}</span><span>${new Date(t1).toLocaleDateString('de-DE')}</span></div>`;
+  }
+
+  const cell = (label, value, color) => `<div class="px-4 py-3" style="background:var(--panel)"><dt class="eyebrow">${label}</dt><dd class="num text-[15px] mt-1" style="color:${color || 'var(--text)'}">${value}</dd></div>`;
+  const a = r.a, p = r.p;
+  const stats = [
+    cell('Hype-Score', r.hype ?? '–', r.hype == null ? null : scoreColor(r.hype)),
+    cell('Aufrufe / Tag', a ? `${num(a.last30, 0)}` : '–'),
+    cell('Normalniveau', a ? `${num(a.base, 0)}` : '–'),
+    cell('Aufmerksamkeit', a ? attnTxt(a) : '–', a ? upDown(a.ratio - 1) : null),
+    cell('7 T. ggü. 30 T.', a ? pctTxt((a.accel - 1) * 100) : '–', a ? upDown(a.accel - 1) : null),
+    cell('Preis 30 T.', has(p?.p30) ? pctTxt(p.p30) : '–', upDown(p?.p30)),
+    cell('Preis 90 T.', has(p?.p90) ? pctTxt(p.p90) : '–', upDown(p?.p90)),
+    cell('Volumen ggü. normal', p?.volRatio ? `${num(p.volRatio, 1)}×` : '–'),
+  ].join('');
+  const open = t.price?.fmp ? `./?q=${encodeURIComponent(t.price.fmp)}` : t.price?.cg ? `crypto.html?q=${encodeURIComponent(t.price.cg)}` : null;
+
+  document.getElementById('detailBody').innerHTML = `
+    <div class="flex flex-wrap items-center gap-3">
+      ${phaseBadge(r.phase)}
+      <span class="text-sm muted">${r.phase ? PHASES[r.phase].text : esc(r.d.viewsError || 'Noch keine Daten.')}</span>
+    </div>
+    <div>${chart}</div>
+    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${stats}</dl>
+    <div>
+      <h3 class="eyebrow mb-2">Signale</h3>
+      ${r.signals.length ? `<ul class="space-y-1.5 text-sm">${r.signals.map(s => `<li class="flex gap-2"><span class="faint">•</span><span>${esc(s)}</span></li>`).join('')}</ul>` : '<p class="text-sm faint">Keine auffälligen Signale.</p>'}
+    </div>
+    <div>
+      <h3 class="eyebrow mb-2">Knappheit</h3>
+      <p class="text-sm ${t.scarcity ? '' : 'faint'}">${t.scarcity ? esc(t.scarcity) : 'Kein Hintergrund hinterlegt.'}</p>
+      ${t.scarcity ? '<p class="text-[11px] faint mt-1">Kuratierter Hintergrund, keine Live-Messung.</p>' : ''}
+    </div>
+    ${r.d.priceError ? `<p class="text-xs faint">Kurs: ${esc(r.d.priceError)}</p>` : ''}
+    <div class="flex flex-wrap gap-2">
+      ${r.d.title ? `<a class="btn btn-sm" href="https://en.wikipedia.org/wiki/${encodeURIComponent(r.d.title.replace(/ /g, '_'))}" target="_blank" rel="noopener">Wikipedia-Artikel</a>` : ''}
+      ${open ? `<a class="btn btn-sm" href="${open}">${esc(t.price.label || 'Kurs')} analysieren</a>` : ''}
+      ${t.group === 'Eigene' ? `<button type="button" class="btn btn-sm" data-remove="${esc(t.id)}">Thema entfernen</button>` : ''}
+    </div>`;
+}
+
+function openDetail(id) {
+  detailId = id;
+  renderDetail();
+  const dlg = document.getElementById('detailDialog');
+  if (!dlg.open) dlg.showModal();
+}
+
+/* ---------------------------------------------------------------
+   Eigene Themen
+---------------------------------------------------------------- */
+async function addTheme(name, symbol, type) {
+  const err = document.getElementById('addError');
+  err.hidden = true;
+  const btn = document.getElementById('addBtn');
+  btn.disabled = true;
+  btn.textContent = 'Suche …';
+  try {
+    const url = new URL(WIKI_API);
+    Object.entries({ action: 'opensearch', search: name, limit: '1', namespace: '0', format: 'json', origin: '*' }).forEach(([k, v]) => url.searchParams.set(k, v));
+    const title = (await (await fetch(url)).json())?.[1]?.[0];
+    if (!title) throw new Error(`Zu „${name}“ gibt es keinen englischen Wikipedia-Artikel. Versuch den englischen Begriff.`);
+    let price;
+    if (symbol) {
+      if (type === 'cg') {
+        const s = await (await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(symbol)}`)).json();
+        const coin = (s.coins || []).sort((x, y) => (x.symbol?.toLowerCase() !== symbol.toLowerCase()) - (y.symbol?.toLowerCase() !== symbol.toLowerCase()) || (x.market_cap_rank ?? 1e9) - (y.market_cap_rank ?? 1e9))[0];
+        if (!coin) throw new Error(`Coin „${symbol}“ nicht gefunden.`);
+        price = { cg: coin.id, label: coin.name };
+      } else {
+        price = { fmp: symbol.toUpperCase(), label: symbol.toUpperCase() };
+      }
+    }
+    const id = `c:${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    if (allThemes().some(t => t.id === id || t.wiki === title)) throw new Error(`„${title}“ ist schon in der Liste.`);
+    state.custom.push({ id, name: name.trim().replace(/^./, c => c.toUpperCase()), group: 'Eigene', wiki: title, price });
+    store.set('rr:radar:custom', state.custom);
+    document.getElementById('addForm').reset();
+    state.group = 'Eigene';
+    await loadAll();
+  } catch (e) {
+    err.textContent = e.message.startsWith('Failed') || e.name === 'TypeError' ? 'Keine Verbindung zu Wikipedia. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.' : e.message;
+    err.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Hinzufügen';
+  }
+}
+
+/* ---------------------------------------------------------------
+   Erklärung
+---------------------------------------------------------------- */
+function renderHelp() {
+  document.getElementById('helpBody').innerHTML = `
+    <section>
+      <h3 class="font-semibold text-white mb-1">Die Idee</h3>
+      <p class="muted">Preise steigen meist in dieser Reihenfolge: erst wächst die Aufmerksamkeit, dann der Handel, dann der Preis, am Ende kommt die Überhitzung.
+        Das Radar misst die Aufmerksamkeit über die täglichen Aufrufe der englischen Wikipedia und legt sie neben Kurs und Handelsvolumen, wo es die gibt.</p>
+    </section>
+    <section>
+      <h3 class="font-semibold text-white mb-2">Phasen</h3>
+      <ul class="space-y-2">${Object.entries(PHASES).map(([k, ph]) => `<li class="flex items-start gap-3">${phaseBadge(k)}<span class="muted">${ph.text}</span></li>`).join('')}</ul>
+      <p class="text-xs faint mt-2">„Steigt deutlich“ heißt: Aufrufe der letzten 30 Tage mindestens 1,5× so hoch wie normal, oder die letzten 7 Tage mindestens 1,5× über dem Monatsschnitt.
+        „Preis reagiert“ heißt: mehr als +10 % in 30 Tagen. „Überhitzt“: mehr als +30 % in 30 oder +60 % in 90 Tagen bei nachlassender Aufmerksamkeit.</p>
+    </section>
+    <section>
+      <h3 class="font-semibold text-white mb-2">Hype-Score (0–100)</h3>
+      <ul class="space-y-2">
+        <li class="inset px-3 py-2"><b class="text-white">Aufmerksamkeit, 45 %:</b> <span class="muted">Aufrufe der letzten 30 Tage ggü. dem Median des Jahres davor. Halbiert = 0, vervierfacht = 100.</span></li>
+        <li class="inset px-3 py-2"><b class="text-white">Beschleunigung, 20 %:</b> <span class="muted">letzte 7 Tage ggü. 30 Tagen. −30 % = 0, verdoppelt = 100.</span></li>
+        <li class="inset px-3 py-2"><b class="text-white">Handelsvolumen, 15 %:</b> <span class="muted">30 Tage ggü. normal. −30 % = 0, knapp 3× = 100.</span></li>
+        <li class="inset px-3 py-2"><b class="text-white">Preisdynamik, 20 %:</b> <span class="muted">Kurs 30 Tage. −15 % = 0, +30 % = 100.</span></li>
+      </ul>
+      <p class="text-xs faint mt-2">Ohne Kurs zählen nur Aufmerksamkeit und Beschleunigung. „Frühsignal“ sortiert nach hoher Aufmerksamkeit bei noch wenig Preisbewegung.</p>
+    </section>
+    <section>
+      <h3 class="font-semibold text-white mb-1">Grenzen</h3>
+      <p class="muted">Google Trends, TikTok, Instagram und Reddit haben keine frei nutzbare Schnittstelle. Hype, der nur auf Social Media läuft, taucht hier erst auf, wenn er Wikipedia erreicht.
+        Bei Sammelobjekten gibt es keinen frei verfügbaren Kurs, Knappheit ist dort ein kuratierter Hintergrund. Kurse von Firmen und ETFs sind Stellvertreter für ein Thema, nicht das Thema selbst.
+        Die Phasen sind Signale, keine Vorhersagen: Viele Hypes verpuffen.</p>
+    </section>`;
+}
+
+/* ---------------------------------------------------------------
+   Modus, Vollbild, Init
+---------------------------------------------------------------- */
+function applyMode() {
+  const clean = state.mode === 'clean';
+  document.documentElement.dataset.mode = clean ? 'clean' : '';
+  document.getElementById('modeLabel').textContent = clean ? 'Standard' : 'Clean';
+  document.getElementById('modeBtn').setAttribute('aria-pressed', String(clean));
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', clean ? '#000000' : '#0a0d13');
+  render();
+}
+
+function initFullscreen() {
+  const root = document.documentElement;
+  const btn = document.getElementById('fullscreenBtn');
+  const hint = document.getElementById('fullscreenHint');
+  const current = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const enter = root.requestFullscreen?.bind(root) || root.webkitRequestFullscreen?.bind(root);
+  const exit = (document.exitFullscreen || document.webkitExitFullscreen)?.bind(document);
+  const sync = () => { document.getElementById('fullscreenLabel').textContent = current() ? 'Vollbild beenden' : 'Vollbild'; };
+  document.addEventListener('fullscreenchange', sync);
+  document.addEventListener('webkitfullscreenchange', sync);
+  btn.addEventListener('click', async () => {
+    try {
+      if (current()) await exit();
+      else if (enter) await enter();
+      else throw new Error('unsupported');
+      hint.hidden = true;
+    } catch {
+      hint.hidden = false;
+    }
+    sync();
+  });
+}
+
+function init() {
+  document.getElementById('appVersion').textContent = `v${APP_VERSION}`;
+  document.addEventListener('click', e => {
+    const remove = e.target.closest('[data-remove]')?.dataset.remove;
+    if (remove) {
+      state.custom = state.custom.filter(t => t.id !== remove);
+      store.set('rr:radar:custom', state.custom);
+      store.del(`rr:rv1:${remove}`);
+      if (!state.custom.length && state.group === 'Eigene') state.group = 'Alle';
+      document.getElementById('detailDialog').close();
+      render();
+      return;
+    }
+    const open = e.target.closest('[data-open]')?.dataset.open;
+    if (open) { openDetail(open); return; }
+    const group = e.target.closest('[data-group]')?.dataset.group;
+    if (group) { state.group = group; render(); return; }
+    const sort = e.target.closest('[data-sort]')?.dataset.sort;
+    if (sort) { state.sort = sort; store.set('rr:radarSort', sort); render(); return; }
+    if (e.target.id === 'reloadBtn') loadAll(true);
+  });
+  document.getElementById('addForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const name = document.getElementById('addName').value.trim();
+    if (name) addTheme(name, document.getElementById('addSymbol').value.trim(), document.getElementById('addType').value);
+  });
+  for (const [dlgId, closeId] of [['detailDialog', 'closeDetail'], ['helpDialog', 'closeHelp']]) {
+    const dlg = document.getElementById(dlgId);
+    document.getElementById(closeId).addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  }
+  document.getElementById('helpBtn').addEventListener('click', () => { renderHelp(); document.getElementById('helpDialog').showModal(); });
+  document.getElementById('modeBtn').addEventListener('click', () => {
+    state.mode = state.mode === 'clean' ? 'standard' : 'clean';
+    store.set('rr:mode', state.mode);
+    applyMode();
+  });
+  initFullscreen();
+  applyMode();
+  loadAll().catch(() => {
+    document.getElementById('status').textContent = 'Keine Verbindung. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.';
+  });
+}
+init();
+</script>
+</body>
+</html>

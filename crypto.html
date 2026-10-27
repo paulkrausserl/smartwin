@@ -137,6 +137,7 @@
         <nav class="seg" aria-label="Bereich">
           <a href="./" class="seg-item">Aktien</a>
           <a href="crypto.html" class="seg-item" aria-current="page">Krypto</a>
+          <a href="radar.html" class="seg-item">Radar</a>
         </nav>
         <button type="button" data-open-criteria class="btn">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
@@ -394,7 +395,7 @@ for (const c of STOCKS) {
   c.capped = c.maxSupply != null;
 }
 const QUICK = ['Bitcoin', 'Ethereum', 'Solana', 'XRP'];
-const APP_VERSION = '2.6';
+const APP_VERSION = '2.7';
 
 /* ---------------------------------------------------------------
    Scoring-Logik
@@ -1395,7 +1396,9 @@ function init() {
   initFullscreen();
   initScrub();
   initCriteria();
-  selectStock('Bitcoin');
+  // Aufruf aus dem Radar: ?q=Ticker bzw. CoinGecko-ID
+  const q = new URLSearchParams(location.search).get('q');
+  if (q) selectStock(q, q); else selectStock('Bitcoin');
 }
 
 /* ---------------------------------------------------------------
