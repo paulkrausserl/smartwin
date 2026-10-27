@@ -312,7 +312,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '3.4';
+const APP_VERSION = '3.5';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -1025,26 +1025,58 @@ const setMore = (t, list) => store.set(moreKey, { ...(store.get(moreKey) || {}),
 const symKey = m => (m.fmp ? `fmp:${m.fmp}` : `cg:${m.cg}`);
 const morePrices = {}; // symKey -> { t, series, error }
 
+// Coin per Name oder Kürzel finden. `strict`: nur bei exaktem Treffer unter den größten 500 Coins
+async function findCoin(q, strict = false) {
+  const s = await (await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`)).json();
+  const lc = q.toLowerCase();
+  const exact = c => c.symbol?.toLowerCase() === lc || c.name?.toLowerCase() === lc || c.id === lc;
+  const coins = (s.coins || []).sort((x, y) => !exact(x) - !exact(y) || (x.market_cap_rank ?? 1e9) - (y.market_cap_rank ?? 1e9));
+  const coin = coins[0];
+  if (!coin || (strict && !(exact(coin) && (coin.market_cap_rank ?? 1e9) <= 500))) return null;
+  return { cg: coin.id, label: coin.name };
+}
+
+// Gleicher Kurs ist schon als Kurs eines Themas geladen (z. B. Bitcoin): den wiederverwenden
+const sharedSeries = m => allThemes().map(x => x.price && symKey(x.price) === symKey(m) ? state.data[x.id]?.price : null).find(x => x?.length);
+
 async function loadMore(t) {
   if (!t) return;
   for (const m of moreFor(t)) {
     const k = symKey(m);
-    if (morePrices[k] && !morePrices[k].loading) continue;
+    if (morePrices[k]?.loading || morePrices[k]?.series) continue; // Fehler werden beim nächsten Öffnen neu versucht
+    const shared = sharedSeries(m);
+    if (shared) { morePrices[k] = { t: Date.now(), series: shared }; continue; }
     const c = store.get(`rr:rp1:${k}`);
-    if (c && Date.now() - c.t < CACHE_MS) { morePrices[k] = c; continue; }
+    if (c?.series && Date.now() - c.t < CACHE_MS) { morePrices[k] = c; continue; }
     morePrices[k] = { loading: true };
     let entry;
     try {
       if (m.fmp && !state.apiKey) throw new Error('Für Aktienkurse den FMP-Key auf der Aktienseite eintragen');
-      entry = { t: Date.now(), series: m.fmp ? await loadFmp(m.fmp) : await loadCoin(m.cg) };
-      if (!entry.series.length) entry = { t: Date.now(), error: 'Keine Kursdaten gefunden' };
-      store.set(`rr:rp1:${k}`, entry);
+      const fetchSeries = () => (m.fmp ? loadFmp(m.fmp) : loadCoin(m.cg));
+      // CoinGecko bremst kurz, solange das Radar im Hintergrund lädt: einmal nach 15 s neu versuchen
+      let series = await fetchSeries().catch(async e => {
+        if (!/bremst/.test(e.message)) throw e;
+        await new Promise(r => setTimeout(r, 15000));
+        return fetchSeries();
+      });
+      if (!series.length && m.fmp) {
+        // Kein Aktienkurs: vielleicht war ein Coin gemeint (z. B. „Bitcoin“ als Aktie eingetragen)
+        const coin = await findCoin(m.fmp, true).catch(() => null);
+        if (coin) {
+          setMore(t, moreFor(t).map(x => (symKey(x) === k ? coin : x)));
+          delete morePrices[k];
+          return loadMore(t);
+        }
+      }
+      entry = series.length ? { t: Date.now(), series } : { t: Date.now(), error: `Keine Kursdaten zu ${m.fmp || m.cg} gefunden` };
+      if (entry.series) store.set(`rr:rp1:${k}`, entry);
     } catch (e) {
       entry = { t: Date.now(), error: e.name === 'TypeError' ? 'Keine Verbindung' : e.message };
     }
     morePrices[k] = entry;
     if (detailId === t.id) renderDetail();
   }
+  if (detailId === t.id) renderDetail();
 }
 
 function moreSection(t) {
@@ -1057,7 +1089,9 @@ function moreSection(t) {
     const st = d?.series ? priceStats(d.series) : null;
     const pts = d?.series ? d.series.slice(-365) : [];
     const cur = m.cg ? '€' : '$';
-    let plot = `<p class="text-xs faint py-3">${d?.error ? esc(d.error) : 'Lädt …'}</p>`;
+    let plot = d?.error
+      ? `<p class="text-xs py-3"><span class="faint">${esc(d.error)}</span> <button type="button" class="underline muted ml-1" data-more-retry="${esc(k)}">Erneut versuchen</button></p>`
+      : '<p class="text-xs faint py-3">Lädt …</p>';
     if (pts.length > 1) {
       const W = 600, H = 70, lo = Math.min(...pts.map(x => x[1])), hi = Math.max(...pts.map(x => x[1]));
       const y = v => 3 + (1 - (v - lo) / (hi - lo || 1)) * (H - 6);
@@ -1093,8 +1127,8 @@ function moreSection(t) {
     <h3 class="eyebrow mb-2">Weitere Kurse</h3>
     ${list.length ? `<div class="grid gap-3">${cards}</div>` : '<p class="text-sm faint">Noch keine weiteren Kurse.</p>'}
     <form id="moreForm" class="flex flex-wrap gap-2 mt-3">
-      <input id="moreSymbol" class="field px-3 py-2 text-sm num" style="flex:1;min-width:140px;width:auto" placeholder="Kürzel, z. B. SPCX oder Solana" autocomplete="off" autocapitalize="characters" />
-      <select id="moreType" class="field px-3 py-2 text-sm" style="width:auto" aria-label="Art des Kurses"><option value="fmp">Aktie/ETF</option><option value="cg">Krypto</option></select>
+      <input id="moreSymbol" class="field px-3 py-2 text-sm num" style="flex:1;min-width:140px;width:auto" placeholder="z. B. SPCX, Bitcoin oder Solana" autocomplete="off" autocapitalize="characters" />
+      <select id="moreType" class="field px-3 py-2 text-sm" style="width:auto" aria-label="Art des Kurses"><option value="auto">Automatisch</option><option value="fmp">Aktie/ETF</option><option value="cg">Krypto</option></select>
       <button type="submit" class="btn btn-sm">Kurs hinzufügen</button>
     </form>
     <p id="moreError" class="text-xs mt-1" style="color:var(--down)" hidden></p>
@@ -1105,15 +1139,14 @@ async function addMore(t, symbol, type) {
   const err = document.getElementById('moreError');
   err.hidden = true;
   try {
-    let m;
-    if (type === 'cg') {
-      const s = await (await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(symbol)}`)).json();
-      const coin = (s.coins || []).sort((x, y) => (x.symbol?.toLowerCase() !== symbol.toLowerCase()) - (y.symbol?.toLowerCase() !== symbol.toLowerCase()) || (x.market_cap_rank ?? 1e9) - (y.market_cap_rank ?? 1e9))[0];
-      if (!coin) throw new Error(`Coin „${symbol}“ nicht gefunden.`);
-      m = { cg: coin.id, label: coin.name };
-    } else {
-      m = { fmp: symbol.toUpperCase(), label: symbol.toUpperCase() };
+    let m = null;
+    // Automatisch: bekannter Coin (Name oder Kürzel exakt) wird als Krypto erkannt, sonst Aktie/ETF
+    if (type === 'auto') m = await findCoin(symbol, true).catch(() => null);
+    else if (type === 'cg') {
+      m = await findCoin(symbol);
+      if (!m) throw new Error(`Coin „${symbol}“ nicht gefunden.`);
     }
+    if (!m) m = { fmp: symbol.toUpperCase(), label: symbol.toUpperCase() };
     const list = moreFor(t);
     if (list.some(x => symKey(x) === symKey(m)) || (t.price && symKey(t.price) === symKey(m))) throw new Error(`${m.label} ist schon dabei.`);
     setMore(t, [...list, m]);
@@ -1359,6 +1392,8 @@ function init() {
       render();
       return;
     }
+    const retry = e.target.closest('[data-more-retry]')?.dataset.moreRetry;
+    if (retry) { delete morePrices[retry]; loadMore(allThemes().find(x => x.id === detailId)); renderDetail(); return; }
     const moreRemove = e.target.closest('[data-more-remove]')?.dataset.moreRemove;
     if (moreRemove != null) {
       const t = allThemes().find(x => x.id === detailId);
