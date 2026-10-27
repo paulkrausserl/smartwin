@@ -12,7 +12,7 @@
   <title>SmartWin Radar</title>
   <script>
     // Gewählten Modus vor dem ersten Zeichnen setzen
-    try { if (localStorage.getItem('rr:mode') === '"clean"') document.documentElement.dataset.mode = 'clean'; } catch { /* egal */ }
+    try { const m = JSON.parse(localStorage.getItem('rr:mode')); if (m === 'clean' || m === 'retro') document.documentElement.dataset.mode = m; } catch { /* egal */ }
   </script>
   <script src="https://cdn.tailwindcss.com/3.4.5"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -115,6 +115,69 @@
     [data-mode="clean"] #loadError { background: transparent !important; border-color: var(--line-2) !important; color: var(--text) !important; }
     [data-mode="clean"] .metric > summary:hover { background: transparent; }
 
+    /* Retro-Modus: klassisches Finanzportal um 2010. Weiß, Dunkelblau, Arial, Tabellenoptik, unterstrichene Links. */
+    :root[data-mode="retro"] {
+      --bg: #fff; --panel: #fff; --panel-2: #f4f6f9; --line: #dde3ea; --line-2: #a9b8c7;
+      --text: #222; --muted: #555; --faint: #7a7a7a; --accent: #003366; --accent-ink: #fff; --up: #008000; --down: #cc0000;
+      color-scheme: light;
+    }
+    [data-mode="retro"] body { background: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
+    [data-mode="retro"] .num { font-family: Arial, Helvetica, sans-serif; font-variant-numeric: tabular-nums; }
+    [data-mode="retro"] .text-white { color: #222 !important; }
+    [data-mode="retro"] .hover\:text-white:hover { color: #00449e !important; }
+    [data-mode="retro"] .text-amber-300 { color: #8a6d00 !important; }
+    /* Kopfzeile: dunkelblauer Balken über die ganze Breite */
+    [data-mode="retro"] header { background: #003366; box-shadow: 0 0 0 100vmax #003366; clip-path: inset(-100vmax -100vmax 0); padding: 6px 0; margin-top: -24px; padding-top: 18px; }
+    [data-mode="retro"] header .text-white { color: #fff !important; font: bold 22px Georgia, 'Times New Roman', serif !important; letter-spacing: .02em; }
+    [data-mode="retro"] header .muted { color: #c9d6e4; }
+    [data-mode="retro"] header .logo { display: none; }
+    [data-mode="retro"] header .btn { background: transparent; border-color: transparent; color: #fff; padding: .3rem .5rem; }
+    [data-mode="retro"] header .btn:hover { text-decoration: underline; background: transparent; }
+    [data-mode="retro"] .seg { border: 0; padding: 0; gap: 2px; }
+    [data-mode="retro"] .seg-item { border-radius: 0; color: #fff; font-weight: bold; padding: .45rem .9rem; }
+    [data-mode="retro"] .seg-item:hover { text-decoration: underline; color: #fff; }
+    [data-mode="retro"] .seg-item[aria-current="page"] { background: #fff; color: #003366; border-top: 3px solid #ff9900; padding-top: calc(.45rem - 3px); }
+    /* Kästen mit hellblauem Titelbalken */
+    [data-mode="retro"] .card { background: #fff; border: 1px solid #b5c2cf; border-radius: 0; box-shadow: none; padding: 12px !important; }
+    [data-mode="retro"] .card > :first-child:not(form):not(.grid):not(.gauge-box) { margin: -12px -12px 12px; padding: 5px 12px; background: #d9e2ec; border-bottom: 1px solid #a9b8c7; }
+    [data-mode="retro"] details.card > summary:first-child { margin-bottom: 0; }
+    [data-mode="retro"] details.card[open] > summary:first-child { margin-bottom: 12px; }
+    [data-mode="retro"] .eyebrow { color: #003366; font-size: 12.5px; font-weight: bold; letter-spacing: 0; text-transform: none; }
+    [data-mode="retro"] .inset { background: #f4f6f9; border-color: #d0d8e0; border-radius: 0; }
+    [data-mode="retro"] .btn { background: linear-gradient(#fff, #dcdcdc); border: 1px solid #8a8a8a; border-radius: 2px; color: #222; font-size: 12px; padding: .3rem .7rem; }
+    [data-mode="retro"] .btn:hover { background: linear-gradient(#fff, #cfcfcf); border-color: #666; }
+    [data-mode="retro"] .btn-primary { color: #003366; font-weight: bold; }
+    [data-mode="retro"] .btn-primary:hover { background: linear-gradient(#fff, #cfcfcf); }
+    [data-mode="retro"] .field { background: #fff; border: 1px solid #8a8a8a; border-radius: 0; color: #222; box-shadow: inset 1px 1px 2px rgba(0,0,0,.12); }
+    [data-mode="retro"] .field:focus { border-color: #003366; box-shadow: none; }
+    [data-mode="retro"] .chip { border: 0; border-radius: 0; padding: .1rem .25rem; color: #00449e; text-decoration: underline; font-size: 12.5px; }
+    [data-mode="retro"] .chip:hover { color: #002a66; }
+    [data-mode="retro"] .chip[aria-pressed="true"] { background: transparent; color: #222; font-weight: bold; text-decoration: none; }
+    [data-mode="retro"] .tabs { background: #e8e8e8; border: 1px solid #bbb; padding-top: 0; }
+    [data-mode="retro"] .tab { color: #003366; font-weight: bold; font-size: 12.5px; padding: .5rem .9rem; border: 0; border-right: 1px solid #ccc; margin: 0; }
+    [data-mode="retro"] .tab[aria-selected="true"] { background: #fff; border-top: 3px solid #ff9900; padding-top: calc(.5rem - 3px); }
+    [data-mode="retro"] .tab .count { background: #fff; border-color: #bbb; color: #555; }
+    [data-mode="retro"] #loadError { background: #fdecec !important; border-color: #e0a0a0 !important; color: #a00000 !important; border-radius: 0; }
+    [data-mode="retro"] #keyStats { border-radius: 0; }
+    [data-mode="retro"] #keyStats .eyebrow, [data-mode="retro"] .tabs .eyebrow { font-weight: normal; color: #666; font-size: 11px; }
+    /* Score als große grüne/rote Zahl statt Ring */
+    [data-mode="retro"] .gauge-box { width: auto; height: auto; margin: .75rem 0 .25rem; }
+    [data-mode="retro"] .gauge-box svg { display: none; }
+    [data-mode="retro"] .gauge-center { position: static; }
+    [data-mode="retro"] #totalScore { font: bold 64px Arial, sans-serif; }
+    [data-mode="retro"] #verdict { background: transparent !important; color: #222 !important; text-transform: none; letter-spacing: 0; font-size: 13px; padding: 0; margin-top: .25rem; }
+    [data-mode="retro"] .score-scale { background: linear-gradient(90deg, #cc0000, #e6b800 50%, #008000); border-radius: 0; height: 6px; }
+    [data-mode="retro"] .wrow { border-radius: 0; border-bottom: 1px solid #e2e2e2; }
+    [data-mode="retro"] .wrow:nth-child(even of .wrow) { background: #f4f6f9; }
+    [data-mode="retro"] .wrow.on { background: #fff8dc; box-shadow: none; }
+    [data-mode="retro"] .wrow [data-open] .text-white { color: #00449e !important; text-decoration: underline; }
+    [data-mode="retro"] tbody tr:nth-child(even) { background: #f4f6f9; }
+    [data-mode="retro"] .metric > summary:hover { background: #f4f6f9; }
+    [data-mode="retro"] #appVersion { background: #eee !important; border-color: #bbb !important; color: #444; border-radius: 0; }
+    [data-mode="retro"] dialog { border-radius: 0 !important; border: 1px solid #8a8a8a !important; }
+    [data-mode="retro"] dialog::backdrop { background: rgba(0, 0, 0, .35); backdrop-filter: none; }
+    [data-mode="retro"] input[type=range]::-webkit-slider-thumb { background: #fff; border-width: 3px; }
+
     .gauge-arc { transition: stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1), stroke .5s; }
     .bar-fill  { transition: width .6s cubic-bezier(.2,.8,.2,1), background-color .4s; }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
@@ -144,7 +207,7 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
           <span class="hidden lg:inline">So funktioniert's</span>
         </button>
-        <button id="modeBtn" type="button" class="btn" aria-pressed="false" title="Clean-Modus">
+        <button id="modeBtn" type="button" class="btn" aria-pressed="false" title="Ansicht wechseln">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
           <span id="modeLabel" class="hidden lg:inline">Clean</span>
         </button>
@@ -249,7 +312,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '2.9';
+const APP_VERSION = '3.0';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -533,8 +596,12 @@ async function loadAll(force = false) {
 /* ---------------------------------------------------------------
    Darstellung
 ---------------------------------------------------------------- */
-const phaseColor = ph => state.mode === 'clean' ? ({ early: '#fff', running: '#d0d0d0', hot: '#fff', cooling: '#8a8a8a', calm: '#5c5c5c' }[ph]) : PHASES[ph].color;
-const scoreColor = s => state.mode === 'clean' ? `hsl(0, 0%, ${Math.round(38 + clamp(s) * 0.62)}%)` : `hsl(${clamp(s) * 1.3}, 62%, 52%)`;
+// Retro-Modus (helles Finanzportal): kräftige Ampelfarben, die auf Weiß lesbar sind
+const RETRO_SCORE = s => (s >= 65 ? '#008000' : s >= 50 ? '#9a7d00' : s >= 35 ? '#d2691e' : '#cc0000');
+const MODES = ['standard', 'clean', 'retro'];
+const MODE_LABEL = { standard: 'Standard', clean: 'Clean', retro: 'Retro' };
+const phaseColor = ph => state.mode === 'retro' ? ({ early: '#008000', running: '#9a7d00', hot: '#cc0000', cooling: '#666666', calm: '#999999' }[ph]) : state.mode === 'clean' ? ({ early: '#fff', running: '#d0d0d0', hot: '#fff', cooling: '#8a8a8a', calm: '#5c5c5c' }[ph]) : PHASES[ph].color;
+const scoreColor = s => state.mode === 'retro' ? RETRO_SCORE(clamp(s)) : state.mode === 'clean' ? `hsl(0, 0%, ${Math.round(38 + clamp(s) * 0.62)}%)` : `hsl(${clamp(s) * 1.3}, 62%, 52%)`;
 function phaseBadge(ph) {
   if (!ph) return '<span class="faint text-xs">–</span>';
   const c = phaseColor(ph);
@@ -658,8 +725,8 @@ function renderDetail() {
     const vLine = line(vPts, 0, Math.max(...sv));
     const pIn = price.filter(p => p[0] >= views[0][0]);
     const pLine = pIn.length > 1 ? line(pIn.map(p => [p[0], p[1]]), Math.min(...pIn.map(p => p[1])), Math.max(...pIn.map(p => p[1]))) : '';
-    const attnColor = state.mode === 'clean' ? '#8a8a8a' : '#5ab0f0';
-    const priceColor = state.mode === 'clean' ? '#ffffff' : '#e7b34a';
+    const attnColor = state.mode === 'clean' ? '#8a8a8a' : state.mode === 'retro' ? '#e69500' : '#5ab0f0';
+    const priceColor = state.mode === 'clean' ? '#ffffff' : state.mode === 'retro' ? '#003366' : '#e7b34a';
     const baseY = pad + (1 - (r.a?.base || 0) / Math.max(...sv)) * (H - 2 * pad);
     chart = `
       <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs mb-2">
@@ -800,11 +867,11 @@ function renderHelp() {
    Modus, Vollbild, Init
 ---------------------------------------------------------------- */
 function applyMode() {
-  const clean = state.mode === 'clean';
-  document.documentElement.dataset.mode = clean ? 'clean' : '';
-  document.getElementById('modeLabel').textContent = clean ? 'Standard' : 'Clean';
-  document.getElementById('modeBtn').setAttribute('aria-pressed', String(clean));
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', clean ? '#000000' : '#0a0d13');
+  if (!MODES.includes(state.mode)) state.mode = 'standard';
+  document.documentElement.dataset.mode = state.mode === 'standard' ? '' : state.mode;
+  document.getElementById('modeLabel').textContent = MODE_LABEL[MODES[(MODES.indexOf(state.mode) + 1) % MODES.length]];
+  document.getElementById('modeBtn').setAttribute('aria-pressed', String(state.mode !== 'standard'));
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', { standard: '#0a0d13', clean: '#000000', retro: '#003366' }[state.mode]);
   render();
 }
 
@@ -864,7 +931,7 @@ function init() {
   }
   document.getElementById('helpBtn').addEventListener('click', () => { renderHelp(); document.getElementById('helpDialog').showModal(); });
   document.getElementById('modeBtn').addEventListener('click', () => {
-    state.mode = state.mode === 'clean' ? 'standard' : 'clean';
+    state.mode = MODES[(MODES.indexOf(state.mode) + 1) % MODES.length];
     store.set('rr:mode', state.mode);
     applyMode();
   });
