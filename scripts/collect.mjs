@@ -41,14 +41,20 @@ const slot = id => (out.themes[id] ||= {});
    deshalb großzügiger Abstand und bei „zu viele Anfragen“ oder Abbruch bis zu zweimal neu versuchen. --- */
 async function collectNews() {
   const yesterday = ymd(new Date(Date.now() - DAY_MS));
-  for (const t of THEMES) {
+  // Zeitgrenze, damit der ganze Lauf sicher fertig wird; Rest behält die Daten vom Vortag
+  const deadline = Date.now() + 18 * 60000;
+  let refused = 0;
+  // Themen ohne frische News zuerst, damit sich über die Tage alle füllen
+  const fresh = t => { const n = prev.themes?.[t.id]?.news; return n && !n.error && !n.stale; };
+  for (const t of [...THEMES].sort((a, b) => fresh(a) - fresh(b))) {
+    if (Date.now() > deadline || refused >= 4) { slot(t.id).news = keep(t.id, 'news', refused >= 4 ? 'GDELT sperrt den Sammler gerade' : 'Zeitgrenze erreicht'); continue; }
     try {
       const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
       Object.entries({ query: newsFor(t), mode: 'timelinevolraw', format: 'json', timespan: '1y' }).forEach(([k, v]) => url.searchParams.set(k, v));
       let body;
       for (let i = 0; body === undefined; i++) {
         try { body = await get(url, { text: true }); }
-        catch (e) { if (i === 2 || !/429|fetch failed|aborted|timeout/i.test(e.message)) throw e; await sleep(45000 * (i + 1)); }
+        catch (e) { if (i === 1 || !/429|fetch failed|aborted|timeout/i.test(e.message)) throw e; await sleep(30000); }
       }
       // gestern und heute sind bei GDELT noch unvollständig
       const data = (JSON.parse(body).timeline?.[0]?.data || []).filter(x => `${x.date.slice(0, 4)}-${x.date.slice(4, 6)}-${x.date.slice(6, 8)}` < yesterday);
@@ -56,7 +62,11 @@ async function collectNews() {
       const d = x => `${x.date.slice(0, 4)}-${x.date.slice(4, 6)}-${x.date.slice(6, 8)}`;
       // kompakt: Datum je Punkt, Artikel, Anteil an allen Artikeln in Promille
       slot(t.id).news = { d: data.map(d), v: data.map(x => x.value), p: data.map(x => (x.norm ? round((x.value / x.norm) * 1000, 4) : 0)) };
-    } catch (e) { slot(t.id).news = keep(t.id, 'news', e.message.startsWith('Unexpected') ? 'GDELT lieferte keine Daten' : /429/.test(e.message) ? 'GDELT bremst den Sammler' : e.message); }
+      refused = 0;
+    } catch (e) {
+      if (/429|fetch failed|aborted|timeout/i.test(e.message)) refused++;
+      slot(t.id).news = keep(t.id, 'news', e.message.startsWith('Unexpected') ? 'GDELT lieferte keine Daten' : /429/.test(e.message) ? 'GDELT bremst den Sammler' : e.message);
+    }
     await sleep(10000);
   }
   log('News fertig');
