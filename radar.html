@@ -312,12 +312,13 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '3.3';
+const APP_VERSION = '3.4';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
    `price`: optionaler Kurs als Stellvertreter (fmp = Aktie/ETF, cg = CoinGecko-ID).
    `scarcity`: kuratierter Hintergrund zur Knappheit.
+   `more`: weitere Kurse, die in der Detailansicht unter dem Chart stehen (lassen sich dort ändern).
    `tag`: Hashtag für Bluesky und Mastodon, `news`: Suchbegriff für die Nachrichten-Datenbank GDELT.
 ---------------------------------------------------------------- */
 const THEMES = [
@@ -346,7 +347,7 @@ const THEMES = [
   { id: 'robots', name: 'Humanoide Roboter', group: 'Technologie', wiki: 'Humanoid robot', price: { fmp: 'BOTZ', label: 'Robotik-ETF BOTZ' }, tag: 'humanoid', news: '"humanoid robot"' },
   { id: 'smr', name: 'Mini-Atomkraftwerke', group: 'Technologie', wiki: 'Small modular reactor', price: { fmp: 'SMR', label: 'NuScale' }, tag: 'smr', news: '"small modular reactor"' },
   { id: 'glp1', name: 'Abnehmspritzen', group: 'Technologie', wiki: 'Semaglutide', price: { fmp: 'NVO', label: 'Novo Nordisk' }, tag: 'ozempic', news: '(Ozempic OR Wegovy)' },
-  { id: 'space', name: 'Raumfahrt', group: 'Technologie', wiki: 'Rocket Lab', price: { fmp: 'RKLB', label: 'Rocket Lab' }, tag: 'rocketlab', news: '"Rocket Lab"' },
+  { id: 'space', name: 'Raumfahrt', group: 'Technologie', wiki: 'Rocket Lab', price: { fmp: 'RKLB', label: 'Rocket Lab' }, more: [{ fmp: 'SPCX', label: 'SpaceX' }], tag: 'rocketlab', news: '"Rocket Lab"' },
   { id: 'drones', name: 'Drohnen', group: 'Technologie', wiki: 'Unmanned aerial vehicle', tag: 'drones', news: 'drones' },
 ];
 const GROUPS = ['Alle', 'Sammelobjekte', 'Rohstoffe', 'Krypto', 'Technologie', 'Eigene'];
@@ -971,12 +972,16 @@ function renderDetail() {
   const open = t.price?.fmp ? `./?q=${encodeURIComponent(t.price.fmp)}` : t.price?.cg ? `crypto.html?q=${encodeURIComponent(t.price.cg)}` : null;
 
   const body = document.getElementById('detailBody');
+  // Eingabe im Kurs-Feld überlebt das Neuzeichnen, während im Hintergrund Daten nachkommen
+  const typed = document.getElementById('moreSymbol')?.value, typedType = document.getElementById('moreType')?.value;
+  const focused = document.activeElement?.id === 'moreSymbol';
   body.innerHTML = `
     <div class="flex flex-wrap items-center gap-3">
       ${phaseBadge(r.phase)}
       <span class="text-sm muted">${r.phase ? PHASES[r.phase].text : esc(r.d.viewsError || 'Noch keine Daten.')}</span>
     </div>
     <div>${chart}</div>
+    ${moreSection(t)}
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${stats}</dl>
     <div>
       <h3 class="eyebrow mb-2">Quellen im Vergleich</h3>
@@ -997,13 +1002,127 @@ function renderDetail() {
       ${open ? `<a class="btn btn-sm" href="${open}">${esc(t.price.label || 'Kurs')} analysieren</a>` : ''}
       ${t.group === 'Eigene' ? `<button type="button" class="btn btn-sm" data-remove="${esc(t.id)}">Thema entfernen</button>` : ''}
     </div>`;
+  if (typed) document.getElementById('moreSymbol').value = typed;
+  if (typedType) document.getElementById('moreType').value = typedType;
+  if (focused) document.getElementById('moreSymbol').focus();
 }
 
 function openDetail(id) {
   detailId = id;
   renderDetail();
+  loadMore(allThemes().find(x => x.id === id));
   const dlg = document.getElementById('detailDialog');
   if (!dlg.open) dlg.showModal();
+}
+
+/* ---------------------------------------------------------------
+   Weitere Kurse je Thema: unter dem Chart, selbst hinzufüg- und entfernbar.
+   Geladen wird erst beim Öffnen der Detailansicht, das schont das FMP-Tageslimit.
+---------------------------------------------------------------- */
+const moreKey = 'rr:radar:more';
+const moreFor = t => (store.get(moreKey) || {})[t.id] ?? t.more ?? [];
+const setMore = (t, list) => store.set(moreKey, { ...(store.get(moreKey) || {}), [t.id]: list });
+const symKey = m => (m.fmp ? `fmp:${m.fmp}` : `cg:${m.cg}`);
+const morePrices = {}; // symKey -> { t, series, error }
+
+async function loadMore(t) {
+  if (!t) return;
+  for (const m of moreFor(t)) {
+    const k = symKey(m);
+    if (morePrices[k] && !morePrices[k].loading) continue;
+    const c = store.get(`rr:rp1:${k}`);
+    if (c && Date.now() - c.t < CACHE_MS) { morePrices[k] = c; continue; }
+    morePrices[k] = { loading: true };
+    let entry;
+    try {
+      if (m.fmp && !state.apiKey) throw new Error('Für Aktienkurse den FMP-Key auf der Aktienseite eintragen');
+      entry = { t: Date.now(), series: m.fmp ? await loadFmp(m.fmp) : await loadCoin(m.cg) };
+      if (!entry.series.length) entry = { t: Date.now(), error: 'Keine Kursdaten gefunden' };
+      store.set(`rr:rp1:${k}`, entry);
+    } catch (e) {
+      entry = { t: Date.now(), error: e.name === 'TypeError' ? 'Keine Verbindung' : e.message };
+    }
+    morePrices[k] = entry;
+    if (detailId === t.id) renderDetail();
+  }
+}
+
+function moreSection(t) {
+  const list = moreFor(t);
+  const body = document.getElementById('detailBody');
+  body._minis = [];
+  const color = state.mode === 'clean' ? '#ffffff' : state.mode === 'retro' ? '#003366' : '#e7b34a';
+  const cards = list.map((m, i) => {
+    const k = symKey(m), d = morePrices[k];
+    const st = d?.series ? priceStats(d.series) : null;
+    const pts = d?.series ? d.series.slice(-365) : [];
+    const cur = m.cg ? '€' : '$';
+    let plot = `<p class="text-xs faint py-3">${d?.error ? esc(d.error) : 'Lädt …'}</p>`;
+    if (pts.length > 1) {
+      const W = 600, H = 70, lo = Math.min(...pts.map(x => x[1])), hi = Math.max(...pts.map(x => x[1]));
+      const y = v => 3 + (1 - (v - lo) / (hi - lo || 1)) * (H - 6);
+      const path = pts.map((x, j) => `${j ? 'L' : 'M'}${((j / (pts.length - 1)) * W).toFixed(1)},${y(x[1]).toFixed(1)}`).join('');
+      body._minis[i] = { pts, W, H, y, cur, label: m.label || m.fmp || m.cg };
+      plot = `<div data-plot data-mini="${i}" class="relative select-none mt-2" style="-webkit-touch-callout:none">
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full" style="height:70px" role="img" aria-label="Kursverlauf ${esc(m.label || '')}">
+          <path d="${path}L${W},${H}L0,${H}Z" fill="${color}" opacity=".08"/>
+          <path d="${path}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>
+        <div data-scrub-line hidden class="absolute pointer-events-none" style="top:0;bottom:0;width:1px;background:var(--muted)"></div>
+        <span data-scrub-dot="price" hidden class="absolute w-3 h-3 rounded-full pointer-events-none" style="background:${color};box-shadow:0 0 0 3px var(--panel)"></span>
+        <div data-scrub-tip hidden class="absolute pointer-events-none whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs leading-tight z-10"
+             style="top:-6px;transform:translateY(-100%);background:var(--panel-2);border:1px solid var(--line-2)"></div>
+      </div>
+      <div class="flex justify-between text-[11px] faint num mt-1"><span>${new Date(pts[0][0]).toLocaleDateString('de-DE')}</span><span>${new Date(pts.at(-1)[0]).toLocaleDateString('de-DE')}</span></div>`;
+    }
+    const href = m.fmp ? `./?q=${encodeURIComponent(m.fmp)}` : `crypto.html?q=${encodeURIComponent(m.cg)}`;
+    return `<div class="inset p-3">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <a href="${href}" class="text-sm font-medium text-white hover:underline">${esc(m.label || m.fmp || m.cg)}</a>
+          <span class="text-[11px] faint ml-1">${esc(m.fmp || m.cg)}</span>
+          ${st ? `<div class="num text-xs mt-0.5"><span class="text-white">${st.last < 1 ? num(st.last, 6) : f2(st.last)} ${cur}</span>
+            <span class="ml-2" style="color:${upDown(st.p30)}">${has(st.p30) ? pctTxt(st.p30) : '–'} 30 T.</span>
+            <span class="ml-2" style="color:${upDown(st.p90)}">${has(st.p90) ? pctTxt(st.p90) : '–'} 90 T.</span></div>` : ''}
+        </div>
+        <button type="button" class="btn btn-sm" data-more-remove="${i}" aria-label="${esc(m.label || '')} entfernen" title="Entfernen">✕</button>
+      </div>
+      ${plot}
+    </div>`;
+  }).join('');
+  return `<div>
+    <h3 class="eyebrow mb-2">Weitere Kurse</h3>
+    ${list.length ? `<div class="grid gap-3">${cards}</div>` : '<p class="text-sm faint">Noch keine weiteren Kurse.</p>'}
+    <form id="moreForm" class="flex flex-wrap gap-2 mt-3">
+      <input id="moreSymbol" class="field px-3 py-2 text-sm num" style="flex:1;min-width:140px;width:auto" placeholder="Kürzel, z. B. SPCX oder Solana" autocomplete="off" autocapitalize="characters" />
+      <select id="moreType" class="field px-3 py-2 text-sm" style="width:auto" aria-label="Art des Kurses"><option value="fmp">Aktie/ETF</option><option value="cg">Krypto</option></select>
+      <button type="submit" class="btn btn-sm">Kurs hinzufügen</button>
+    </form>
+    <p id="moreError" class="text-xs mt-1" style="color:var(--down)" hidden></p>
+  </div>`;
+}
+
+async function addMore(t, symbol, type) {
+  const err = document.getElementById('moreError');
+  err.hidden = true;
+  try {
+    let m;
+    if (type === 'cg') {
+      const s = await (await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(symbol)}`)).json();
+      const coin = (s.coins || []).sort((x, y) => (x.symbol?.toLowerCase() !== symbol.toLowerCase()) - (y.symbol?.toLowerCase() !== symbol.toLowerCase()) || (x.market_cap_rank ?? 1e9) - (y.market_cap_rank ?? 1e9))[0];
+      if (!coin) throw new Error(`Coin „${symbol}“ nicht gefunden.`);
+      m = { cg: coin.id, label: coin.name };
+    } else {
+      m = { fmp: symbol.toUpperCase(), label: symbol.toUpperCase() };
+    }
+    const list = moreFor(t);
+    if (list.some(x => symKey(x) === symKey(m)) || (t.price && symKey(t.price) === symKey(m))) throw new Error(`${m.label} ist schon dabei.`);
+    setMore(t, [...list, m]);
+    renderDetail();
+    await loadMore(t);
+  } catch (e) {
+    err.textContent = e.name === 'TypeError' ? 'Keine Verbindung zu CoinGecko.' : e.message;
+    err.hidden = false;
+  }
 }
 
 /* ---------------------------------------------------------------
@@ -1123,11 +1242,30 @@ function sourceCells(r) {
 function initDetailScrub() {
   const box = document.getElementById('detailBody');
   const HOLD_MS = 250;
-  let timer = null, active = false, start = null;
+  let timer = null, active = false, start = null, plot = null;
+
+  // Kleine Kurs-Charts unter dem Hauptchart
+  const showMini = (clientX, d) => {
+    const rect = plot.getBoundingClientRect();
+    const i = Math.round(clamp((clientX - rect.left) / rect.width, 0, 1) * (d.pts.length - 1));
+    const [date, close] = d.pts[i];
+    const px = (i / (d.pts.length - 1)) * rect.width;
+    const line = plot.querySelector('[data-scrub-line]'), dot = plot.querySelector('[data-scrub-dot]'), tip = plot.querySelector('[data-scrub-tip]');
+    line.hidden = dot.hidden = tip.hidden = false;
+    line.style.left = `${px}px`;
+    dot.style.left = `${px - 6}px`;
+    dot.style.top = `${d.y(close) * (rect.height / d.H) - 6}px`;
+    const diff = (close / d.pts[0][1] - 1) * 100;
+    tip.innerHTML = `<div class="num text-[15px] font-semibold text-white">${close < 1 ? num(close, 6) : f2(close)} ${d.cur}</div>
+      <div class="muted mt-0.5">${new Date(date).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })} · <span class="num" style="color:${upDown(diff)}">${pctTxt(diff)}</span></div>`;
+    tip.style.left = `${clamp(px - tip.offsetWidth / 2, 0, rect.width - tip.offsetWidth)}px`;
+  };
 
   const show = clientX => {
-    const d = box._scrub, plot = box.querySelector('[data-plot]');
-    if (!d || !plot) return;
+    if (!plot || !box.contains(plot)) return;
+    if (plot.dataset.mini != null) { const m = box._minis?.[plot.dataset.mini]; if (m) showMini(clientX, m); return; }
+    const d = box._scrub;
+    if (!d) return;
     const rect = plot.getBoundingClientRect();
     const i = Math.round(clamp((clientX - rect.left) / rect.width, 0, 1) * (d.views.length - 1));
     const [date, raw] = d.views[i];
@@ -1162,7 +1300,8 @@ function initDetailScrub() {
   const inPlot = e => e.target.closest?.('[data-plot]');
 
   box.addEventListener('touchstart', e => {
-    if (!box._scrub || e.touches.length !== 1 || !inPlot(e)) return;
+    if (e.touches.length !== 1 || !inPlot(e)) return;
+    plot = inPlot(e);
     start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     clearTimeout(timer);
     timer = setTimeout(() => { active = true; show(start.x); }, HOLD_MS);
@@ -1175,7 +1314,11 @@ function initDetailScrub() {
   box.addEventListener('touchend', hide);
   box.addEventListener('touchcancel', hide);
   box.addEventListener('contextmenu', e => { if (active) e.preventDefault(); });
-  box.addEventListener('mousemove', e => { if (box._scrub && inPlot(e)) show(e.clientX); else if (!active) hide(); });
+  box.addEventListener('mousemove', e => {
+    const hit = inPlot(e);
+    if (hit !== plot) { hide(); plot = hit; }
+    if (plot) show(e.clientX);
+  });
   box.addEventListener('mouseleave', hide);
 }
 
@@ -1216,6 +1359,13 @@ function init() {
       render();
       return;
     }
+    const moreRemove = e.target.closest('[data-more-remove]')?.dataset.moreRemove;
+    if (moreRemove != null) {
+      const t = allThemes().find(x => x.id === detailId);
+      setMore(t, moreFor(t).filter((_, i) => i !== Number(moreRemove)));
+      renderDetail();
+      return;
+    }
     const open = e.target.closest('[data-open]')?.dataset.open;
     if (open) { openDetail(open); return; }
     const group = e.target.closest('[data-group]')?.dataset.group;
@@ -1223,6 +1373,12 @@ function init() {
     const sort = e.target.closest('[data-sort]')?.dataset.sort;
     if (sort) { state.sort = sort; store.set('rr:radarSort', sort); render(); return; }
     if (e.target.id === 'reloadBtn') { loadAll(true); loadExtras(true).catch(() => {}); }
+  });
+  document.addEventListener('submit', e => {
+    if (e.target.id !== 'moreForm') return;
+    e.preventDefault();
+    const symbol = document.getElementById('moreSymbol').value.trim();
+    if (symbol) addMore(allThemes().find(x => x.id === detailId), symbol, document.getElementById('moreType').value);
   });
   document.getElementById('addForm').addEventListener('submit', e => {
     e.preventDefault();
