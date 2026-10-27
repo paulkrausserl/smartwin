@@ -307,46 +307,47 @@
          style="background:rgba(16,21,30,.9);border:1px solid var(--line-2);right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px))"></div>
 
     <footer class="text-center text-[11px] faint mt-10 pb-8 leading-relaxed">
-      Aufmerksamkeit: Aufrufe der englischen Wikipedia (Wikimedia). Kurse: Financial Modeling Prep und CoinGecko.<br />
+      Aufmerksamkeit: englische Wikipedia (Wikimedia), News (GDELT), Hashtags (Bluesky, Mastodon). Kurse: Financial Modeling Prep und CoinGecko.<br />
       Signale, keine Vorhersagen. Keine Anlageberatung.
     </footer>
   </div>
 <script>
-const APP_VERSION = '3.2';
+const APP_VERSION = '3.3';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
    `price`: optionaler Kurs als Stellvertreter (fmp = Aktie/ETF, cg = CoinGecko-ID).
    `scarcity`: kuratierter Hintergrund zur Knappheit.
+   `tag`: Hashtag für Bluesky und Mastodon, `news`: Suchbegriff für die Nachrichten-Datenbank GDELT.
 ---------------------------------------------------------------- */
 const THEMES = [
-  { id: 'pokemon', name: 'Pokémon-Karten', group: 'Sammelobjekte', wiki: 'Pokémon Trading Card Game', scarcity: 'Ältere Sets werden nicht nachgedruckt, gefragte Neuerscheinungen sind oft schnell vergriffen.' },
-  { id: 'onepiece', name: 'One-Piece-Karten', group: 'Sammelobjekte', wiki: 'One Piece Card Game' },
-  { id: 'mtg', name: 'Magic-Karten', group: 'Sammelobjekte', wiki: 'Magic: The Gathering', scarcity: 'Frühe Karten stehen auf der „Reserved List“ und werden nie nachgedruckt.' },
-  { id: 'labubu', name: 'Labubu', group: 'Sammelobjekte', wiki: 'Labubu', scarcity: 'Verkauf in Blindboxen und limitierten Drops.' },
-  { id: 'lego', name: 'LEGO', group: 'Sammelobjekte', wiki: 'Lego', scarcity: 'Sets werden nach einigen Jahren eingestellt und danach nur noch gebraucht gehandelt.' },
-  { id: 'rolex', name: 'Rolex', group: 'Sammelobjekte', wiki: 'Rolex', scarcity: 'Begrenzte Produktion, beliebte Modelle mit Wartelisten.' },
-  { id: 'whisky', name: 'Whisky', group: 'Sammelobjekte', wiki: 'Scotch whisky', scarcity: 'Alte Abfüllungen sind endlich, jede geöffnete Flasche verschwindet vom Markt.' },
-  { id: 'sneaker', name: 'Sneaker', group: 'Sammelobjekte', wiki: 'Sneaker collecting', scarcity: 'Limitierte Releases über Verlosungen.' },
-  { id: 'cards', name: 'Sammelkarten allgemein', group: 'Sammelobjekte', wiki: 'Trading card' },
-  { id: 'gold', name: 'Gold', group: 'Rohstoffe', wiki: 'Gold', price: { fmp: 'GLD', label: 'Gold-ETF GLD' }, scarcity: 'Die Fördermenge wächst nur um wenige Prozent pro Jahr.' },
-  { id: 'silver', name: 'Silber', group: 'Rohstoffe', wiki: 'Silver', price: { fmp: 'SLV', label: 'Silber-ETF SLV' }, scarcity: 'Wird überwiegend als Nebenprodukt anderer Minen gefördert, das Angebot reagiert kaum auf den Preis.' },
-  { id: 'uranium', name: 'Uran', group: 'Rohstoffe', wiki: 'Uranium', price: { fmp: 'URA', label: 'Uran-ETF URA' }, scarcity: 'Neue Minen brauchen viele Jahre bis zur Förderung.' },
-  { id: 'copper', name: 'Kupfer', group: 'Rohstoffe', wiki: 'Copper', price: { fmp: 'CPER', label: 'Kupfer-ETF CPER' }, scarcity: 'Stromnetze und E-Autos brauchen viel Kupfer, neue Minen kommen langsam.' },
-  { id: 'oil', name: 'Öl', group: 'Rohstoffe', wiki: 'Petroleum', price: { fmp: 'USO', label: 'Öl-ETF USO' } },
-  { id: 'cocoa', name: 'Kakao', group: 'Rohstoffe', wiki: 'Cocoa bean', scarcity: 'Die Ernte hängt an wenigen Anbauländern in Westafrika.' },
-  { id: 'bitcoin', name: 'Bitcoin', group: 'Krypto', wiki: 'Bitcoin', price: { cg: 'bitcoin', label: 'Bitcoin' }, scarcity: 'Höchstmenge 21 Mio. BTC, die Ausgabe halbiert sich etwa alle 4 Jahre.' },
-  { id: 'ethereum', name: 'Ethereum', group: 'Krypto', wiki: 'Ethereum', price: { cg: 'ethereum', label: 'Ethereum' } },
-  { id: 'solana', name: 'Solana', group: 'Krypto', wiki: 'Solana (blockchain platform)', price: { cg: 'solana', label: 'Solana' } },
-  { id: 'xrp', name: 'XRP', group: 'Krypto', wiki: 'Ripple Labs', price: { cg: 'ripple', label: 'XRP' } },
-  { id: 'meme', name: 'Memecoins', group: 'Krypto', wiki: 'Meme coin', price: { cg: 'dogecoin', label: 'Dogecoin' } },
-  { id: 'ai', name: 'Künstliche Intelligenz', group: 'Technologie', wiki: 'Artificial intelligence', price: { fmp: 'NVDA', label: 'Nvidia' } },
-  { id: 'quantum', name: 'Quantencomputer', group: 'Technologie', wiki: 'Quantum computing', price: { fmp: 'IONQ', label: 'IonQ' } },
-  { id: 'robots', name: 'Humanoide Roboter', group: 'Technologie', wiki: 'Humanoid robot', price: { fmp: 'BOTZ', label: 'Robotik-ETF BOTZ' } },
-  { id: 'smr', name: 'Mini-Atomkraftwerke', group: 'Technologie', wiki: 'Small modular reactor', price: { fmp: 'SMR', label: 'NuScale' } },
-  { id: 'glp1', name: 'Abnehmspritzen', group: 'Technologie', wiki: 'Semaglutide', price: { fmp: 'NVO', label: 'Novo Nordisk' } },
-  { id: 'space', name: 'Raumfahrt', group: 'Technologie', wiki: 'Rocket Lab', price: { fmp: 'RKLB', label: 'Rocket Lab' } },
-  { id: 'drones', name: 'Drohnen', group: 'Technologie', wiki: 'Unmanned aerial vehicle' },
+  { id: 'pokemon', name: 'Pokémon-Karten', group: 'Sammelobjekte', wiki: 'Pokémon Trading Card Game', scarcity: 'Ältere Sets werden nicht nachgedruckt, gefragte Neuerscheinungen sind oft schnell vergriffen.', tag: 'pokemontcg', news: '"Pokemon cards"' },
+  { id: 'onepiece', name: 'One-Piece-Karten', group: 'Sammelobjekte', wiki: 'One Piece Card Game', tag: 'onepiecetcg', news: '"One Piece card game"' },
+  { id: 'mtg', name: 'Magic-Karten', group: 'Sammelobjekte', wiki: 'Magic: The Gathering', scarcity: 'Frühe Karten stehen auf der „Reserved List“ und werden nie nachgedruckt.', tag: 'mtg', news: '"Magic The Gathering"' },
+  { id: 'labubu', name: 'Labubu', group: 'Sammelobjekte', wiki: 'Labubu', scarcity: 'Verkauf in Blindboxen und limitierten Drops.', tag: 'labubu', news: 'Labubu' },
+  { id: 'lego', name: 'LEGO', group: 'Sammelobjekte', wiki: 'Lego', scarcity: 'Sets werden nach einigen Jahren eingestellt und danach nur noch gebraucht gehandelt.', tag: 'lego', news: 'LEGO' },
+  { id: 'rolex', name: 'Rolex', group: 'Sammelobjekte', wiki: 'Rolex', scarcity: 'Begrenzte Produktion, beliebte Modelle mit Wartelisten.', tag: 'rolex', news: 'Rolex' },
+  { id: 'whisky', name: 'Whisky', group: 'Sammelobjekte', wiki: 'Scotch whisky', scarcity: 'Alte Abfüllungen sind endlich, jede geöffnete Flasche verschwindet vom Markt.', tag: 'whisky', news: 'whisky' },
+  { id: 'sneaker', name: 'Sneaker', group: 'Sammelobjekte', wiki: 'Sneaker collecting', scarcity: 'Limitierte Releases über Verlosungen.', tag: 'sneakers', news: 'sneakers' },
+  { id: 'cards', name: 'Sammelkarten allgemein', group: 'Sammelobjekte', wiki: 'Trading card', tag: 'tradingcards', news: '"trading cards"' },
+  { id: 'gold', name: 'Gold', group: 'Rohstoffe', wiki: 'Gold', price: { fmp: 'GLD', label: 'Gold-ETF GLD' }, scarcity: 'Die Fördermenge wächst nur um wenige Prozent pro Jahr.', tag: 'gold', news: '"gold price"' },
+  { id: 'silver', name: 'Silber', group: 'Rohstoffe', wiki: 'Silver', price: { fmp: 'SLV', label: 'Silber-ETF SLV' }, scarcity: 'Wird überwiegend als Nebenprodukt anderer Minen gefördert, das Angebot reagiert kaum auf den Preis.', tag: 'silver', news: '"silver price"' },
+  { id: 'uranium', name: 'Uran', group: 'Rohstoffe', wiki: 'Uranium', price: { fmp: 'URA', label: 'Uran-ETF URA' }, scarcity: 'Neue Minen brauchen viele Jahre bis zur Förderung.', tag: 'uranium', news: 'uranium' },
+  { id: 'copper', name: 'Kupfer', group: 'Rohstoffe', wiki: 'Copper', price: { fmp: 'CPER', label: 'Kupfer-ETF CPER' }, scarcity: 'Stromnetze und E-Autos brauchen viel Kupfer, neue Minen kommen langsam.', tag: 'copper', news: '"copper price"' },
+  { id: 'oil', name: 'Öl', group: 'Rohstoffe', wiki: 'Petroleum', price: { fmp: 'USO', label: 'Öl-ETF USO' }, tag: 'oil', news: '"oil price"' },
+  { id: 'cocoa', name: 'Kakao', group: 'Rohstoffe', wiki: 'Cocoa bean', scarcity: 'Die Ernte hängt an wenigen Anbauländern in Westafrika.', tag: 'cocoa', news: '"cocoa prices"' },
+  { id: 'bitcoin', name: 'Bitcoin', group: 'Krypto', wiki: 'Bitcoin', price: { cg: 'bitcoin', label: 'Bitcoin' }, scarcity: 'Höchstmenge 21 Mio. BTC, die Ausgabe halbiert sich etwa alle 4 Jahre.', tag: 'bitcoin', news: 'bitcoin' },
+  { id: 'ethereum', name: 'Ethereum', group: 'Krypto', wiki: 'Ethereum', price: { cg: 'ethereum', label: 'Ethereum' }, tag: 'ethereum', news: 'ethereum' },
+  { id: 'solana', name: 'Solana', group: 'Krypto', wiki: 'Solana (blockchain platform)', price: { cg: 'solana', label: 'Solana' }, tag: 'solana', news: 'solana' },
+  { id: 'xrp', name: 'XRP', group: 'Krypto', wiki: 'Ripple Labs', price: { cg: 'ripple', label: 'XRP' }, tag: 'xrp', news: 'XRP' },
+  { id: 'meme', name: 'Memecoins', group: 'Krypto', wiki: 'Meme coin', price: { cg: 'dogecoin', label: 'Dogecoin' }, tag: 'memecoin', news: 'memecoin' },
+  { id: 'ai', name: 'Künstliche Intelligenz', group: 'Technologie', wiki: 'Artificial intelligence', price: { fmp: 'NVDA', label: 'Nvidia' }, tag: 'ai', news: '"artificial intelligence"' },
+  { id: 'quantum', name: 'Quantencomputer', group: 'Technologie', wiki: 'Quantum computing', price: { fmp: 'IONQ', label: 'IonQ' }, tag: 'quantumcomputing', news: '"quantum computing"' },
+  { id: 'robots', name: 'Humanoide Roboter', group: 'Technologie', wiki: 'Humanoid robot', price: { fmp: 'BOTZ', label: 'Robotik-ETF BOTZ' }, tag: 'humanoid', news: '"humanoid robot"' },
+  { id: 'smr', name: 'Mini-Atomkraftwerke', group: 'Technologie', wiki: 'Small modular reactor', price: { fmp: 'SMR', label: 'NuScale' }, tag: 'smr', news: '"small modular reactor"' },
+  { id: 'glp1', name: 'Abnehmspritzen', group: 'Technologie', wiki: 'Semaglutide', price: { fmp: 'NVO', label: 'Novo Nordisk' }, tag: 'ozempic', news: '(Ozempic OR Wegovy)' },
+  { id: 'space', name: 'Raumfahrt', group: 'Technologie', wiki: 'Rocket Lab', price: { fmp: 'RKLB', label: 'Rocket Lab' }, tag: 'rocketlab', news: '"Rocket Lab"' },
+  { id: 'drones', name: 'Drohnen', group: 'Technologie', wiki: 'Unmanned aerial vehicle', tag: 'drones', news: 'drones' },
 ];
 const GROUPS = ['Alle', 'Sammelobjekte', 'Rohstoffe', 'Krypto', 'Technologie', 'Eigene'];
 
@@ -376,7 +377,7 @@ const pctTxt = v => `${v >= 0 ? '+' : ''}${Math.abs(v) >= 100 ? num(v, 0) : num(
 const smooth = (v, n = 7) => v.map((_, i) => mean(v.slice(Math.max(0, i - n + 1), i + 1)));
 
 const state = { mode: store.get('rr:mode') || 'standard', sort: store.get('rr:radarSort') || 'hype', group: 'Alle',
-  custom: store.get('rr:radar:custom') || [], data: {}, apiKey: store.get('rr:apiKey') || '' };
+  custom: store.get('rr:radar:custom') || [], data: {}, extra: {}, extraPending: 0, wikiPending: 0, apiKey: store.get('rr:apiKey') || '' };
 const allThemes = () => [...THEMES, ...state.custom];
 
 /* ---------------------------------------------------------------
@@ -452,6 +453,145 @@ async function loadCoin(id) {
 }
 
 /* ---------------------------------------------------------------
+   Weitere Quellen für Aufmerksamkeit (alle ohne Key):
+   News-Artikel (GDELT), Hashtag-Posts auf Bluesky und Mastodon
+---------------------------------------------------------------- */
+const tagFor = t => t.tag || t.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const newsFor = t => t.news || `"${(t.wiki || t.name).replace(/["()]/g, '')}"`;
+
+// GDELT zählt Nachrichtenartikel weltweit pro Tag. Erlaubt nur einen Abruf alle 5 Sekunden.
+async function loadNews(query) {
+  const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
+  Object.entries({ query, mode: 'timelinevolraw', format: 'json', timespan: '1y' }).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url);
+  if (res.status === 429) throw new Error('GDELT bremst gerade');
+  if (!res.ok) throw new Error(`GDELT antwortet mit ${res.status}`);
+  const text = await res.text();
+  let body;
+  try { body = JSON.parse(text); } catch { throw new Error(/limit/i.test(text) ? 'GDELT bremst gerade' : 'Suchbegriff passt nicht für GDELT'); }
+  const data = body.timeline?.[0]?.data || [];
+  // [Tag, Artikel, Anteil an allen Artikeln in Promille]: der Anteil gleicht Schwankungen im gesamten Nachrichtenaufkommen aus
+  return data.map(x => [`${x.date.slice(0, 4)}-${x.date.slice(4, 6)}-${x.date.slice(6, 8)}`, x.value, x.norm ? (x.value / x.norm) * 1000 : 0]);
+}
+
+function newsStats(series) {
+  if (!series || series.length < 60) return null;
+  const end = Date.parse(series.at(-1)[0]);
+  const recent = series.filter(x => end - Date.parse(x[0]) < 30 * DAY_MS), before = series.filter(x => end - Date.parse(x[0]) >= 30 * DAY_MS);
+  const base = median(before.map(x => x[2])), now = mean(recent.map(x => x[2]));
+  if (!base && !now) return null;
+  return { perDay: mean(recent.map(x => x[1])), ratio: (now + 1e-3) / (base + 1e-3) };
+}
+
+// Bluesky liefert keine Zählung, aber die neuesten 100 Posts mit Zeitstempel.
+// Aus der Zeitspanne, die sie abdecken, ergibt sich die Rate: Posts pro Tag heute, vor 1 und vor 3 Monaten.
+async function bskyRate(tag, at) {
+  const url = new URL('https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts');
+  const from = new Date(at - 14 * DAY_MS);
+  Object.entries({ q: `#${tag}`, sort: 'latest', limit: '100', until: new Date(at).toISOString(), since: from.toISOString() }).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url);
+  if (res.status === 401 || res.status === 403) throw Object.assign(new Error('Bluesky-Suche geht nur noch mit Anmeldung'), { blocked: true });
+  if (res.status === 429) throw new Error('Bluesky bremst gerade');
+  if (!res.ok) throw new Error(`Bluesky antwortet mit ${res.status}`);
+  const posts = (await res.json()).posts || [];
+  if (posts.length < 100) return posts.length / 14;
+  const oldest = Math.min(...posts.map(x => Date.parse(x.indexedAt || x.record?.createdAt)).filter(Number.isFinite));
+  return 100 / Math.max((at - oldest) / DAY_MS, 1 / 24);
+}
+async function loadBsky(tag) {
+  const now = Date.now();
+  const [r0, r1, r3] = [await bskyRate(tag, now), await bskyRate(tag, now - 30 * DAY_MS), await bskyRate(tag, now - 90 * DAY_MS)];
+  return { now: r0, m1: r1, m3: r3 };
+}
+const bskyStats = b => (b ? { perDay: b.now, ratio: (b.now + 0.1) / ((b.m1 + b.m3) / 2 + 0.1) } : null);
+
+// Mastodon zeigt die Nutzung eines Hashtags nur für die letzten 7 Tage.
+// Die Seite merkt sich jeden Abruf im Browser und baut so mit der Zeit einen eigenen Verlauf auf.
+const mastoKey = tag => `rr:mtag:${tag}`;
+async function loadMasto(tag) {
+  const res = await fetch(`https://mastodon.social/api/v1/tags/${encodeURIComponent(tag)}`);
+  if (res.status === 404) return store.get(mastoKey(tag)) || {};
+  if (res.status === 429) throw new Error('Mastodon bremst gerade');
+  if (!res.ok) throw new Error(`Mastodon antwortet mit ${res.status}`);
+  const hist = { ...(store.get(mastoKey(tag)) || {}) };
+  for (const h of (await res.json()).history || []) hist[ymd(new Date(Number(h.day) * 1000))] = Number(h.uses) || 0;
+  // höchstens ein Jahr aufheben
+  const keep = Object.keys(hist).sort().slice(-400);
+  const out = Object.fromEntries(keep.map(k => [k, hist[k]]));
+  store.set(mastoKey(tag), out);
+  return out;
+}
+function mastoStats(hist) {
+  if (!hist) return null;
+  const days = Object.keys(hist).sort().slice(0, -1); // heute ist noch nicht vorbei
+  if (days.length < 3) return null;
+  const v = days.map(d => hist[d]);
+  const perDay = mean(v.slice(-7));
+  // Vergleich erst, wenn genug eigener Verlauf gesammelt ist
+  const ratio = days.length >= 21 ? (perDay + 0.5) / (median(v.slice(0, -7)) + 0.5) : null;
+  return { perDay, ratio, days: days.length };
+}
+
+const extraKey = t => `rr:rx1:${t.id}`;
+async function loadExtras(force = false) {
+  const themes = allThemes();
+  const todo = { news: [], bsky: [], masto: [] };
+  for (const t of themes) {
+    const c = store.get(extraKey(t)) || {};
+    const x = state.extra[t.id] = { ...c };
+    for (const src of Object.keys(todo)) if (force || !x[src] || Date.now() - x[src].t > CACHE_MS) todo[src].push(t);
+  }
+  state.extraPending = todo.news.length + todo.bsky.length + todo.masto.length;
+  queueRender();
+  const save = (t, src, entry) => {
+    state.extra[t.id][src] = entry;
+    state.extraPending--;
+    renderStatus();
+    // Verbindungsfehler nicht cachen, damit der nächste Aufruf es erneut versucht
+    if (!entry.error || entry.keep) store.set(extraKey(t), Object.fromEntries(Object.entries(state.extra[t.id]).filter(([, e]) => !e.error || e.keep)));
+    queueRender();
+  };
+  const offline = e => e.name === 'TypeError';
+
+  const news = (async () => {
+    let down = null;
+    for (const [i, t] of todo.news.entries()) {
+      if (down) { save(t, 'news', { t: Date.now(), error: down }); continue; }
+      if (i) await new Promise(r => setTimeout(r, 5500));
+      try { save(t, 'news', { t: Date.now(), series: await loadNews(newsFor(t)) }); }
+      catch (e) {
+        if (offline(e)) down = 'Keine Verbindung zu GDELT';
+        save(t, 'news', { t: Date.now(), error: down || e.message, keep: e.message.startsWith('Suchbegriff') });
+      }
+    }
+  })();
+  const bsky = (async () => {
+    let down = null;
+    await pool(todo.bsky, 2, async t => {
+      if (down) return save(t, 'bsky', { t: Date.now(), error: down });
+      try { save(t, 'bsky', { t: Date.now(), rates: await loadBsky(tagFor(t)) }); }
+      catch (e) {
+        if (offline(e)) down = 'Keine Verbindung zu Bluesky';
+        else if (e.blocked) down = e.message;
+        save(t, 'bsky', { t: Date.now(), error: down || e.message });
+      }
+    });
+  })();
+  const masto = (async () => {
+    let down = null;
+    await pool(todo.masto, 3, async t => {
+      if (down) return save(t, 'masto', { t: Date.now(), error: down });
+      try { save(t, 'masto', { t: Date.now(), hist: await loadMasto(tagFor(t)) }); }
+      catch (e) {
+        if (offline(e)) down = 'Keine Verbindung zu Mastodon';
+        save(t, 'masto', { t: Date.now(), error: down || e.message, hist: store.get(mastoKey(tagFor(t))) });
+      }
+    });
+  })();
+  await Promise.all([news, bsky, masto]);
+}
+
+/* ---------------------------------------------------------------
    Kennzahlen und Phase
 ---------------------------------------------------------------- */
 // Einzelne Ausreißer-Tage (oft Bots oder Crawler) auf das Dreifache des Umfelds kappen.
@@ -493,9 +633,12 @@ function priceStats(series) {
   };
 }
 
-// Hype-Score: Aufmerksamkeit 45 %, Beschleunigung 20 %, Handelsvolumen 15 %, Preisdynamik 20 %. Fehlende Teile werden umverteilt.
-function hypeScore(a, p) {
+// Hype-Score: Aufmerksamkeit 45 %, Beschleunigung 20 %, Handelsvolumen 15 %, Preisdynamik 20 %, dazu die weiteren Quellen. Fehlende Teile werden umverteilt.
+// Weitere Quellen fließen mit ein, wenn es sie gibt: News 15 %, Bluesky 10 %, Mastodon 5 % (vor dem Umverteilen)
+function hypeScore(a, p, ext = {}) {
+  const src = (w, x) => [w, x?.ratio != null ? lin(Math.log2(x.ratio), -1, 2) : null];
   const parts = [
+    src(0.15, ext.news), src(0.10, ext.bsky), src(0.05, ext.masto),
     [0.45, a ? lin(Math.log2(a.ratio), -1, 2) : null],
     [0.20, a ? lin(Math.log2(a.accel), -0.5, 1) : null],
     [0.15, p?.volRatio ? lin(Math.log2(p.volRatio), -0.5, 1.5) : null],
@@ -526,8 +669,17 @@ function phaseFor(a, p) {
   return 'calm';
 }
 
-function signalsFor(t, a, p) {
+const SRC_NAMES = { wiki: 'Wikipedia', news: 'News', bsky: 'Bluesky', masto: 'Mastodon' };
+// Welche Quellen gerade einen Anstieg zeigen (mindestens 1,3× über normal)
+const risingSources = (a, ext) => Object.entries({ wiki: a, ...ext }).filter(([, x]) => x?.ratio != null && x.ratio >= 1.3).map(([k]) => k);
+
+function signalsFor(t, a, p, ext = {}) {
   const out = [];
+  if (ext.news?.ratio >= 1.5) out.push(`${num(ext.news.ratio, 1)}× so viele News-Artikel wie normal`);
+  if (ext.bsky?.ratio >= 1.5) out.push(`#${tagFor(t)} auf Bluesky ${num(ext.bsky.ratio, 1)}× häufiger als vor 1–3 Monaten`);
+  if (ext.masto?.ratio >= 1.5) out.push(`#${tagFor(t)} auf Mastodon ${num(ext.masto.ratio, 1)}× häufiger als sonst`);
+  const rising = risingSources(a, ext);
+  if (rising.length >= 2) out.unshift(`${rising.length} Quellen zeigen gleichzeitig einen Anstieg: ${rising.map(k => SRC_NAMES[k]).join(', ')}`);
   if (!a) return out;
   if (a.ratio >= 1.5) out.push(`Aufmerksamkeit ${num(a.ratio, 1)}× über dem Normalniveau`);
   if (a.accel >= 1.5) out.push(`Letzte 7 Tage ${pctTxt((a.accel - 1) * 100)} ggü. Monatsschnitt: springt gerade an`);
@@ -545,7 +697,9 @@ function compute(t) {
   const d = state.data[t.id] || {};
   const a = d.views ? attentionStats(d.views) : null;
   const p = d.price ? priceStats(d.price) : null;
-  return { t, d, a, p, hype: hypeScore(a, p), phase: phaseFor(a, p), signals: signalsFor(t, a, p) };
+  const x = state.extra[t.id] || {};
+  const ext = { news: newsStats(x.news?.series), bsky: bskyStats(x.bsky?.rates), masto: mastoStats(x.masto?.hist) };
+  return { t, d, a, p, x, ext, hype: hypeScore(a, p, ext), phase: phaseFor(a, p), signals: signalsFor(t, a, p, ext) };
 }
 
 /* ---------------------------------------------------------------
@@ -641,13 +795,25 @@ function spark(values, { w = 120, h = 32, color = 'var(--muted)', fill = false }
 }
 const attnSpark = (r, opts) => spark(r.d.views ? smooth(r.d.views.map(x => x[1])).slice(-120) : [], opts);
 const attnTxt = a => (a ? pctTxt((a.ratio - 1) * 100) : '–');
+// Kleine Buchstaben je Quelle, gefärbt nach Richtung
+function srcDots(r) {
+  const items = [['W', 'wiki', r.a], ['N', 'news', r.ext.news], ['B', 'bsky', r.ext.bsky], ['M', 'masto', r.ext.masto]];
+  return items.map(([l, k, x]) => {
+    const ratio = x?.ratio;
+    const color = ratio == null ? 'var(--faint)' : ratio >= 1.3 ? (state.mode === 'clean' ? 'var(--text)' : 'var(--up)') : ratio < 0.8 ? (state.mode === 'clean' ? 'var(--muted)' : 'var(--down)') : 'var(--muted)';
+    const tip = ratio == null ? `${SRC_NAMES[k]}: keine Daten` : `${SRC_NAMES[k]}: ${pctTxt((ratio - 1) * 100)} ggü. normal`;
+    return `<span class="num text-[11px] font-semibold px-[3px]" style="color:${color};opacity:${ratio == null ? 0.35 : 1}" title="${tip}">${l}</span>`;
+  }).join('');
+}
 const upDown = v => (!has(v) ? 'var(--faint)' : state.mode === 'clean' ? 'var(--text)' : v >= 0 ? 'var(--up)' : 'var(--down)');
 
-function renderStatus(pending) {
+function renderStatus(pending = state.wikiPending) {
+  state.wikiPending = pending;
   const el = document.getElementById('status');
+  const extra = state.extraPending > 0 ? ` · weitere Quellen: noch ${state.extraPending}` : '';
   el.innerHTML = pending
-    ? `Lade … noch ${pending} Thema${pending === 1 ? '' : 'en'}`
-    : `Stand ${new Date(Math.min(...allThemes().map(t => state.data[t.id]?.t || Date.now()))).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · <button type="button" id="reloadBtn" class="underline hover:text-white">aktualisieren</button>`;
+    ? `Lade … noch ${pending} Thema${pending === 1 ? '' : 'en'}${extra}`
+    : extra ? `Lade weitere Quellen: noch ${state.extraPending}` : `Stand ${new Date(Math.min(...allThemes().map(t => state.data[t.id]?.t || Date.now()))).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · <button type="button" id="reloadBtn" class="underline hover:text-white">aktualisieren</button>`;
 }
 
 const SORTS = [['hype', 'Hype-Score'], ['early', 'Frühsignal'], ['attn', 'Aufmerksamkeit'], ['price', 'Preis 30 T.'], ['name', 'Name']];
@@ -692,12 +858,13 @@ function render() {
 
   document.getElementById('themeBody').innerHTML = `
     <div class="overflow-x-auto -mx-1">
-      <table class="w-full text-sm" style="min-width:560px">
+      <table class="w-full text-sm" style="min-width:600px">
         <thead><tr class="text-left">
           <th class="eyebrow font-semibold py-2 px-1">Thema</th>
           <th class="eyebrow font-semibold py-2 px-1">Phase</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Hype</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Aufmerks.</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-center" title="W = Wikipedia, N = News, B = Bluesky, M = Mastodon">Quellen</th>
           <th class="eyebrow font-semibold py-2 px-1 hidden sm:table-cell">Verlauf 4 Mon.</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Preis 30 T.</th>
         </tr></thead>
@@ -710,12 +877,14 @@ function render() {
             <td class="py-2.5 px-1">${r.d.viewsError && !r.a ? `<span class="text-[11px] faint">${esc(r.d.viewsError)}</span>` : phaseBadge(r.phase)}</td>
             <td class="py-2.5 px-1 text-right num font-semibold" style="color:${r.hype == null ? 'var(--faint)' : scoreColor(r.hype)}">${r.hype ?? '–'}</td>
             <td class="py-2.5 px-1 text-right num" style="color:${r.a ? upDown(r.a.ratio - 1) : 'var(--faint)'}">${attnTxt(r.a)}</td>
+            <td class="py-2.5 px-1 text-center whitespace-nowrap">${srcDots(r)}</td>
             <td class="py-2.5 px-1 hidden sm:table-cell w-[130px]">${attnSpark(r, { w: 120, h: 28, color: r.phase ? phaseColor(r.phase) : 'var(--muted)' })}</td>
             <td class="py-2.5 px-1 text-right num" style="color:${upDown(r.p?.p30)}" title="${esc(r.d.priceError || '')}">${has(r.p?.p30) ? pctTxt(r.p.p30) : r.t.price ? '<span class="faint">n. v.</span>' : '<span class="faint">–</span>'}</td>
           </tr>`).join('')}</tbody>
       </table>
     </div>
-    <p class="text-[11px] faint mt-2">Aufmerksamkeit: Wikipedia-Aufrufe der letzten 30 Tage im Vergleich zum Normalniveau des Jahres davor. Antippen für Details.</p>`;
+    <p class="text-[11px] faint mt-2">Aufmerksamkeit: Wikipedia-Aufrufe der letzten 30 Tage im Vergleich zum Normalniveau des Jahres davor.
+      Quellen: <b>W</b>ikipedia, <b>N</b>ews, <b>B</b>luesky, <b>M</b>astodon; grün = steigt, rot = fällt, grau = normal, blass = keine Daten. Antippen für Details.</p>`;
 
   if (document.getElementById('detailDialog').open) renderDetail();
 }
@@ -746,20 +915,27 @@ function renderDetail() {
     const pIn = price.filter(p => p[0] >= views[0][0]);
     const pLo = Math.min(...pIn.map(p => p[1])), pHi = Math.max(...pIn.map(p => p[1]));
     const pLine = pIn.length > 1 ? line(pIn.map(p => [p[0], p[1]]), pLo, pHi) : '';
+    // News-Artikel pro Tag (GDELT), auf eigener Skala
+    const nIn = (r.x.news?.series || []).filter(n => n[0] >= views[0][0]);
+    const sn = smooth(nIn.map(n => n[1])), nHi = Math.max(1, ...sn);
+    const nLine = nIn.length > 1 ? line(nIn.map((n, i) => [n[0], sn[i]]), 0, nHi) : '';
     // Daten für das Nachfahren mit dem Finger
     const y = (v, lo, hi) => pad + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * pad), vHi = Math.max(...sv);
     document.getElementById('detailBody')._scrub = {
       W, H, views, sv, priceLabel: t.price?.label || '', currency: t.price?.cg ? '€' : t.price?.fmp ? '$' : '',
       priceAt: d => { if (pIn.length < 2) return null; let hit = null; for (const q of pIn) { if (q[0] > d) break; hit = q; } return hit; },
-      yAttn: v => y(v, 0, vHi), yPrice: v => y(v, pLo, pHi),
+      yAttn: v => y(v, 0, vHi), yPrice: v => y(v, pLo, pHi), yNews: v => y(v, 0, nHi),
+      newsAt: d => { let hit = null; nIn.forEach((n, i) => { if (n[0] <= d) hit = [n[0], n[1], sn[i]]; }); return nLine ? hit : null; },
     };
     const attnColor = state.mode === 'clean' ? '#8a8a8a' : state.mode === 'retro' ? '#e69500' : '#5ab0f0';
     const priceColor = state.mode === 'clean' ? '#ffffff' : state.mode === 'retro' ? '#003366' : '#e7b34a';
+    const newsColor = state.mode === 'clean' ? '#5c5c5c' : state.mode === 'retro' ? '#008000' : '#b48cf2';
     const baseY = pad + (1 - (r.a?.base || 0) / Math.max(...sv)) * (H - 2 * pad);
     chart = `
       <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs mb-2">
         <span class="flex items-center gap-2"><span class="w-3 h-1.5 rounded-sm" style="background:${attnColor}"></span>Wikipedia-Aufrufe (7-Tage-Schnitt)</span>
         ${pLine ? `<span class="flex items-center gap-2"><span class="w-3 h-0.5" style="background:${priceColor}"></span>Kurs ${esc(t.price.label || '')}</span>` : ''}
+        ${nLine ? `<span class="flex items-center gap-2"><span style="width:12px;border-top:2px dotted ${newsColor}"></span>News-Artikel (GDELT)</span>` : ''}
         ${r.a ? `<span class="flex items-center gap-2 faint"><span class="w-3 border-t border-dashed" style="border-color:var(--muted)"></span>Normalniveau</span>` : ''}
       </div>
       <div data-plot class="relative select-none" style="-webkit-touch-callout:none">
@@ -767,10 +943,12 @@ function renderDetail() {
         <path d="${vLine}L${W},${H}L0,${H}Z" fill="${attnColor}" opacity=".14"/>
         <path d="${vLine}" fill="none" stroke="${attnColor}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
         ${r.a ? `<line x1="0" x2="${W}" y1="${baseY}" y2="${baseY}" stroke="var(--muted)" stroke-dasharray="5 5" stroke-width="1" vector-effect="non-scaling-stroke"/>` : ''}
+        ${nLine ? `<path d="${nLine}" fill="none" stroke="${newsColor}" stroke-width="1.6" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>` : ''}
         ${pLine ? `<path d="${pLine}" fill="none" stroke="${priceColor}" stroke-width="1.8" vector-effect="non-scaling-stroke"/>` : ''}
       </svg>
       <div data-scrub-line hidden class="absolute pointer-events-none" style="top:0;bottom:0;width:1px;background:var(--muted)"></div>
       <span data-scrub-dot="attn" hidden class="absolute w-3 h-3 rounded-full pointer-events-none" style="background:${attnColor};box-shadow:0 0 0 3px var(--panel)"></span>
+      <span data-scrub-dot="news" hidden class="absolute w-3 h-3 rounded-full pointer-events-none" style="background:${newsColor};box-shadow:0 0 0 3px var(--panel)"></span>
       <span data-scrub-dot="price" hidden class="absolute w-3 h-3 rounded-full pointer-events-none" style="background:${priceColor};box-shadow:0 0 0 3px var(--panel)"></span>
       <div data-scrub-tip hidden class="absolute pointer-events-none whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs leading-tight z-10"
            style="top:-6px;transform:translateY(-100%);background:var(--panel-2);border:1px solid var(--line-2)"></div>
@@ -800,6 +978,10 @@ function renderDetail() {
     </div>
     <div>${chart}</div>
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${stats}</dl>
+    <div>
+      <h3 class="eyebrow mb-2">Quellen im Vergleich</h3>
+      <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${sourceCells(r)}</dl>
+    </div>
     <div>
       <h3 class="eyebrow mb-2">Signale</h3>
       ${r.signals.length ? `<ul class="space-y-1.5 text-sm">${r.signals.map(s => `<li class="flex gap-2"><span class="faint">•</span><span>${esc(s)}</span></li>`).join('')}</ul>` : '<p class="text-sm faint">Keine auffälligen Signale.</p>'}
@@ -856,6 +1038,7 @@ async function addTheme(name, symbol, type) {
     document.getElementById('addForm').reset();
     state.group = 'Eigene';
     await loadAll();
+    loadExtras().catch(() => {});
   } catch (e) {
     err.textContent = e.message.startsWith('Failed') || e.name === 'TypeError' ? 'Keine Verbindung zu Wikipedia. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.' : e.message;
     err.hidden = false;
@@ -873,12 +1056,14 @@ function renderHelp() {
     <section>
       <h3 class="font-semibold text-white mb-1">Die Idee</h3>
       <p class="muted">Preise steigen meist in dieser Reihenfolge: erst wächst die Aufmerksamkeit, dann der Handel, dann der Preis, am Ende kommt die Überhitzung.
-        Das Radar misst die Aufmerksamkeit über die täglichen Aufrufe der englischen Wikipedia und legt sie neben Kurs und Handelsvolumen, wo es die gibt.</p>
+        Das Radar misst die Aufmerksamkeit über die täglichen Aufrufe der englischen Wikipedia und legt sie neben Kurs und Handelsvolumen, wo es die gibt.
+        Zur Bestätigung kommen drei weitere Quellen dazu: News-Artikel weltweit (GDELT) und wie oft der Hashtag auf Bluesky und Mastodon gepostet wird.</p>
     </section>
     <section>
       <h3 class="font-semibold text-white mb-2">Phasen</h3>
       <ul class="space-y-2">${Object.entries(PHASES).map(([k, ph]) => `<li class="flex items-start gap-3">${phaseBadge(k)}<span class="muted">${ph.text}</span></li>`).join('')}</ul>
-      <p class="text-xs faint mt-2">„Steigt deutlich“ heißt: Aufrufe der letzten 30 Tage mindestens 1,5× so hoch wie normal, oder die letzten 7 Tage mindestens 1,5× über dem Monatsschnitt.
+      <p class="text-xs faint mt-2">„Steigt deutlich“ heißt: Aufrufe der letzten 30 Tage mindestens 1,5× so hoch wie normal, und das in mindestens 3 der letzten 4 Wochen.
+        „Etabliert“: normalerweise über ${num(ESTABLISHED_VIEWS, 0)} Aufrufe am Tag. Einzelne Ausreißer-Tage (oft Bots) werden gekappt.
         „Preis reagiert“ heißt: mehr als +10 % in 30 Tagen. „Überhitzt“: mehr als +30 % in 30 oder +60 % in 90 Tagen bei nachlassender Aufmerksamkeit.</p>
     </section>
     <section>
@@ -888,12 +1073,15 @@ function renderHelp() {
         <li class="inset px-3 py-2"><b class="text-white">Beschleunigung, 20 %:</b> <span class="muted">letzte 7 Tage ggü. 30 Tagen. −30 % = 0, verdoppelt = 100.</span></li>
         <li class="inset px-3 py-2"><b class="text-white">Handelsvolumen, 15 %:</b> <span class="muted">30 Tage ggü. normal. −30 % = 0, knapp 3× = 100.</span></li>
         <li class="inset px-3 py-2"><b class="text-white">Preisdynamik, 20 %:</b> <span class="muted">Kurs 30 Tage. −15 % = 0, +30 % = 100.</span></li>
+        <li class="inset px-3 py-2"><b class="text-white">Weitere Quellen, 30 %:</b> <span class="muted">News 15 %, Bluesky 10 %, Mastodon 5 %. Jeweils ggü. normal, halbiert = 0, vervierfacht = 100.</span></li>
       </ul>
-      <p class="text-xs faint mt-2">Ohne Kurs zählen nur Aufmerksamkeit und Beschleunigung. „Frühsignal“ sortiert nach hoher Aufmerksamkeit bei noch wenig Preisbewegung.</p>
+      <p class="text-xs faint mt-2">Fehlt ein Teil, werden die anderen hochgerechnet. „Frühsignal“ sortiert nach hoher Aufmerksamkeit bei noch wenig Preisbewegung.</p>
     </section>
     <section>
       <h3 class="font-semibold text-white mb-1">Grenzen</h3>
-      <p class="muted">Google Trends, TikTok, Instagram und Reddit haben keine frei nutzbare Schnittstelle. Hype, der nur auf Social Media läuft, taucht hier erst auf, wenn er Wikipedia erreicht.
+      <p class="muted">Google Trends, TikTok, Instagram, X und Reddit haben keine frei nutzbare Schnittstelle. Bluesky und Mastodon sind kleiner, zeigen aber echte Hashtag-Nutzung.
+        Bluesky wird geschätzt: aus der Zeitspanne der letzten 100 Posts, heute im Vergleich zu vor 1 und 3 Monaten. Mastodon liefert nur 7 Tage, den längeren Verlauf sammelt die Seite selbst in deinem Browser.
+        GDELT erlaubt nur einen Abruf alle 5 Sekunden, die News laden beim ersten Mal deshalb ein paar Minuten.
         Bei Sammelobjekten gibt es keinen frei verfügbaren Kurs, Knappheit ist dort ein kuratierter Hintergrund. Kurse von Firmen und ETFs sind Stellvertreter für ein Thema, nicht das Thema selbst.
         Die Phasen sind Signale, keine Vorhersagen: Viele Hypes verpuffen.</p>
     </section>`;
@@ -909,6 +1097,26 @@ function applyMode() {
   document.getElementById('modeBtn').setAttribute('aria-pressed', String(state.mode !== 'standard'));
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', { standard: '#0a0d13', clean: '#000000', retro: '#003366' }[state.mode]);
   render();
+}
+
+// Je Quelle: Menge pro Tag und Veränderung ggü. normal, oder warum es keine Daten gibt
+function sourceCells(r) {
+  const tag = `#${tagFor(r.t)}`;
+  const pending = src => (state.extraPending > 0 && !r.x[src] ? 'lädt …' : null);
+  const cellFor = (label, sub, stat, unit, error, note) => {
+    const ratio = stat?.ratio;
+    const val = stat ? `${num(stat.perDay, stat.perDay < 10 ? 1 : 0)} ${unit}` : `<span class="text-xs faint">${esc(error || 'keine Daten')}</span>`;
+    const chg = ratio != null ? `<span style="color:${upDown(ratio - 1)}">${pctTxt((ratio - 1) * 100)}</span> ggü. normal` : note ? esc(note) : '';
+    return `<div class="px-4 py-3" style="background:var(--panel)"><dt class="eyebrow">${label}</dt><dd class="text-[11px] faint truncate">${esc(sub)}</dd>
+      <dd class="num text-[15px] mt-1">${val}</dd><dd class="text-[11px] faint mt-0.5 num">${chg}</dd></div>`;
+  };
+  const m = r.ext.masto;
+  return [
+    cellFor('Wikipedia', r.d.title || '–', r.a && { perDay: r.a.last30, ratio: r.a.ratio }, 'Aufrufe/Tag', r.d.viewsError),
+    cellFor('News', newsFor(r.t).replace(/"/g, ''), r.ext.news, 'Artikel/Tag', pending('news') || r.x.news?.error),
+    cellFor('Bluesky', tag, r.ext.bsky, 'Posts/Tag', pending('bsky') || r.x.bsky?.error),
+    cellFor('Mastodon', tag, m, 'Posts/Tag', pending('masto') || r.x.masto?.error, m && m.ratio == null ? `Verlauf wird gesammelt (${m.days} von 21 Tagen)` : null),
+  ].join('');
 }
 
 // Im Detail-Chart mit dem Finger entlangfahren: kurz gedrückt halten, dann zeigt die Linie Aufrufe und Kurs am Tag
@@ -935,10 +1143,14 @@ function initDetailScrub() {
     const p = d.priceAt(date);
     dotP.hidden = !p;
     if (p) { dotP.style.left = `${px - 6}px`; dotP.style.top = `${d.yPrice(p[1]) * sy - 6}px`; }
+    const n = d.newsAt(date), dotN = plot.querySelector('[data-scrub-dot="news"]');
+    dotN.hidden = !n;
+    if (n) { dotN.style.left = `${px - 6}px`; dotN.style.top = `${d.yNews(n[2]) * sy - 6}px`; }
     const day = new Date(date).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
     tip.innerHTML = `<div class="muted">${day}</div>
       <div class="num text-[15px] font-semibold text-white mt-0.5">${num(raw, 0)} Aufrufe</div>
       <div class="faint">Wochenschnitt ${num(d.sv[i], 0)}</div>
+      ${n ? `<div class="num mt-0.5">News: ${num(n[1], 0)} Artikel</div>` : ''}
       ${p ? `<div class="num mt-0.5">Kurs ${esc(d.priceLabel)}: ${p[1] < 1 ? num(p[1], 6) : f2(p[1])} ${d.currency}</div>` : ''}`;
     tip.style.left = `${clamp(px - tip.offsetWidth / 2, 0, rect.width - tip.offsetWidth)}px`;
   };
@@ -998,6 +1210,7 @@ function init() {
       state.custom = state.custom.filter(t => t.id !== remove);
       store.set('rr:radar:custom', state.custom);
       store.del(`rr:rv1:${remove}`);
+      store.del(`rr:rx1:${remove}`);
       if (!state.custom.length && state.group === 'Eigene') state.group = 'Alle';
       document.getElementById('detailDialog').close();
       render();
@@ -1009,7 +1222,7 @@ function init() {
     if (group) { state.group = group; render(); return; }
     const sort = e.target.closest('[data-sort]')?.dataset.sort;
     if (sort) { state.sort = sort; store.set('rr:radarSort', sort); render(); return; }
-    if (e.target.id === 'reloadBtn') loadAll(true);
+    if (e.target.id === 'reloadBtn') { loadAll(true); loadExtras(true).catch(() => {}); }
   });
   document.getElementById('addForm').addEventListener('submit', e => {
     e.preventDefault();
@@ -1030,6 +1243,7 @@ function init() {
   initFullscreen();
   initDetailScrub();
   applyMode();
+  loadExtras().catch(() => {});
   loadAll().catch(() => {
     document.getElementById('status').textContent = 'Keine Verbindung. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.';
   });
