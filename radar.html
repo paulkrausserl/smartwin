@@ -65,6 +65,7 @@
     .seg-item { font-size: .8125rem; padding: .4rem .8rem; border-radius: .55rem; color: var(--muted); transition: color .15s, background .15s; }
     .seg-item:hover { color: var(--text); }
     .seg-item[aria-current="page"] { background: var(--text); color: var(--bg); font-weight: 600; }
+    [hidden] { display: none !important; } /* sonst gewinnt z. B. .btn { display: inline-flex } */
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .metric > summary { list-style: none; cursor: pointer; }
@@ -248,7 +249,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '2.8';
+const APP_VERSION = '2.9';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).

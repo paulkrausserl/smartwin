@@ -65,6 +65,16 @@
     .seg-item { font-size: .8125rem; padding: .4rem .8rem; border-radius: .55rem; color: var(--muted); transition: color .15s, background .15s; }
     .seg-item:hover { color: var(--text); }
     .seg-item[aria-current="page"] { background: var(--text); color: var(--bg); font-weight: 600; }
+    /* Split-View: links Suche und Watchlist, rechts die Analyse. Unter 1024 px untereinander. */
+    .split { display: grid; gap: 1.5rem; }
+    @media (min-width: 1024px) {
+      .split { grid-template-columns: 320px minmax(0, 1fr); align-items: start; }
+      .side { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; scrollbar-width: thin; }
+    }
+    @media (max-width: 1023px) { .wlist { max-height: 340px; overflow-y: auto; } }
+    .wrow { display: flex; align-items: center; gap: .6rem; padding: .55rem .6rem; border-radius: .6rem; }
+    .wrow:hover { background: rgba(255, 255, 255, .02); }
+    .wrow.on { background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line-2); }
     /* Bereichs-Tabs unter der Suche, bleiben beim Scrollen oben */
     .tabs { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: .25rem; background: var(--bg);
             border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; padding-top: env(safe-area-inset-top, 0px); }
@@ -73,6 +83,7 @@
     .tab:hover { color: var(--text); }
     .tab[aria-selected="true"] { color: var(--text); border-color: var(--accent); font-weight: 600; }
     .tab .count { font-size: 11px; margin-left: .35rem; padding: 0 .4rem; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line-2); color: var(--muted); }
+    [hidden] { display: none !important; } /* sonst gewinnt z. B. .btn { display: inline-flex } */
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .metric > summary { list-style: none; cursor: pointer; }
@@ -165,44 +176,50 @@
       </p>
     </header>
 
-    <!-- Suche -->
-    <section class="card p-4 sm:p-5 mb-6">
-      <form id="searchForm" class="flex flex-col sm:flex-row gap-3" autocomplete="off">
-        <div class="relative flex-1 min-w-0">
-          <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 faint" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <label for="searchInput" class="sr-only">Kryptowährung oder Kürzel</label>
-          <input id="searchInput" list="stockList" type="text" placeholder="Coin oder Kürzel, z. B. „Bitcoin“ oder „SOL“"
-                 class="field pl-11 pr-4 py-3 text-[15px]" />
-          <datalist id="stockList"></datalist>
-        </div>
-        <button id="analyseBtn" type="submit" class="btn btn-primary justify-center px-6 py-3 text-[15px]">Analysieren</button>
-      </form>
-      <div class="flex flex-wrap items-center gap-2 mt-4">
-        <span class="eyebrow mr-1">Schnellauswahl</span>
-        <div id="quickPicks" class="flex flex-wrap gap-2"></div>
-      </div>
-      <div id="altHits" hidden class="flex flex-wrap items-center gap-2 mt-3"></div>
-      <p id="loadError" hidden class="text-sm mt-3 px-3 py-2 rounded-lg" style="color:#ffb4b4;background:rgba(240,99,99,.08);border:1px solid rgba(240,99,99,.25)"></p>
+    <div class="split">
+      <!-- Links: Suche und Watchlist, bleiben beim Scrollen stehen -->
+      <aside class="side space-y-4">
+        <!-- Suche -->
+        <section class="card p-4">
+          <form id="searchForm" class="flex flex-col gap-3" autocomplete="off">
+            <div class="relative flex-1 min-w-0">
+              <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 faint" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <label for="searchInput" class="sr-only">Kryptowährung oder Kürzel</label>
+              <input id="searchInput" list="stockList" type="text" placeholder="Coin oder Kürzel, z. B. „Bitcoin“ oder „SOL“"
+                     class="field pl-11 pr-4 py-3 text-[15px]" />
+              <datalist id="stockList"></datalist>
+            </div>
+            <button id="analyseBtn" type="submit" class="btn btn-primary justify-center px-6 py-2.5 text-[15px]">Analysieren</button>
+          </form>
+          <div class="flex flex-wrap items-center gap-2 mt-3">
+            <div id="quickPicks" class="flex flex-wrap gap-2"></div>
+          </div>
+          <div id="altHits" hidden class="flex flex-wrap items-center gap-2 mt-3"></div>
+          <p id="loadError" hidden class="text-sm mt-3 px-3 py-2 rounded-lg" style="color:#ffb4b4;background:rgba(240,99,99,.08);border:1px solid rgba(240,99,99,.25)"></p>
 
-      <!-- Datenquelle -->
-      <p class="text-xs faint mt-4 pt-4 leading-relaxed" style="border-top:1px solid var(--line)">
-        Datenquelle: <span id="sourceStatus" class="font-semibold"></span> · ohne Key · Beträge in Euro
-        <span class="hidden sm:inline">· 6 Stunden zwischengespeichert</span>
-      </p>
-    </section>
+          <!-- Datenquelle -->
+          <p class="text-xs faint mt-4 pt-4 leading-relaxed" style="border-top:1px solid var(--line)">
+            Datenquelle: <span id="sourceStatus" class="font-semibold"></span> · ohne Key · Beträge in Euro
+            <span class="hidden sm:inline">· 6 Stunden zwischengespeichert</span>
+          </p>
+        </section>
 
-    <!-- Tabs: Überblick | Kennzahlen | Gewichtung | Watchlist -->
-    <div id="tabs" class="tabs mb-6" role="tablist" aria-label="Ansicht">
-      <button type="button" class="tab" role="tab" data-tab="overview" aria-selected="true">Überblick</button>
-      <button type="button" class="tab" role="tab" data-tab="metrics" aria-selected="false">Kennzahlen</button>
-      <button type="button" class="tab" role="tab" data-tab="weights" aria-selected="false">Gewichtung</button>
-      <button type="button" class="tab" role="tab" data-tab="watch" aria-selected="false">Watchlist<span id="watchTabCount" class="count num" hidden></span></button>
-      <span id="tabStock" class="ml-auto pl-3 text-xs muted whitespace-nowrap num"></span>
-    </div>
+        <section id="watchCard" class="card p-4">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-baseline gap-2">
+              <h2 class="eyebrow">Watchlist</h2>
+              <span id="watchCount" class="text-xs faint num"></span>
+            </div>
+            <button id="editWatch" type="button" class="text-xs muted hover:text-white" hidden>Bearbeiten</button>
+          </div>
+          <div id="watchSort" class="flex flex-wrap gap-1.5 mt-3"></div>
+          <div id="watchBody" class="wlist mt-2"></div>
+          <button id="compareBtn" type="button" class="btn btn-sm w-full justify-center mt-3" hidden disabled>Vergleichen</button>
+        </section>
+      </aside>
 
-    <div data-panel="overview" class="space-y-6">
-      <!-- Coin-Kopf mit Kennzahlenleiste -->
-      <section class="card p-5 sm:p-6">
+      <!-- Rechts: Analyse -->
+      <main class="min-w-0 space-y-5">
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
@@ -221,26 +238,15 @@
             <div id="stockChange" class="num text-sm mt-0.5"></div>
           </div>
         </div>
-        <div class="mt-5">
-          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <div id="rangeBtns" class="flex gap-1.5"></div>
-            <span id="rangeChange" class="num text-xs muted"></span>
-          </div>
-          <div id="priceChart" class="relative select-none" style="-webkit-touch-callout:none;-webkit-user-select:none"></div>
-        </div>
-        <dl id="keyStats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px mt-5 rounded-xl overflow-hidden"
-            style="background:var(--line);border:1px solid var(--line)"></dl>
-        <div id="warnings" class="mt-4"></div>
-      </section>
 
-      <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <!-- Gesamtscore -->
-        <section class="card p-5 sm:p-6 lg:col-span-4 flex flex-col">
-          <div class="flex items-center justify-between">
-            <h2 class="eyebrow">Gesamtscore</h2>
-            <span class="text-xs faint">0–100</span>
-          </div>
-          <div class="gauge-box relative mx-auto my-5 w-52 h-52">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- Gesamtscore mit den vier Bereichen -->
+          <section class="card p-5 lg:col-span-4 flex flex-col">
+            <div class="flex items-center justify-between">
+              <h2 class="eyebrow">Gesamtscore</h2>
+              <span class="text-xs faint">0–100</span>
+            </div>
+          <div class="gauge-box relative mx-auto my-4 w-52 h-52">
             <svg viewBox="0 0 200 200" class="w-full h-full -rotate-90" aria-hidden="true">
               <circle cx="100" cy="100" r="84" fill="none" stroke="var(--line)" stroke-width="12" />
               <circle id="gaugeArc" class="gauge-arc" cx="100" cy="100" r="84" fill="none" stroke="#3ecf8e"
@@ -259,33 +265,32 @@
               <span>Hohes Risiko</span><span>Neutral</span><span>Exzellent</span>
             </div>
           </div>
-          <p id="summary" class="text-sm muted mt-4 leading-relaxed"></p>
-          <div class="grid grid-cols-2 gap-3 mt-5">
-            <div>
-              <h3 class="eyebrow mb-2" style="color:var(--up)">Stärken</h3>
-              <ul id="strengths" class="space-y-1.5 text-sm"></ul>
-            </div>
-            <div>
-              <h3 class="eyebrow mb-2" style="color:var(--down)">Schwächen</h3>
-              <ul id="weaknesses" class="space-y-1.5 text-sm"></ul>
-            </div>
+            <div id="subScores" class="space-y-3 mt-5"></div>
+          </section>
+          <!-- Kursverlauf -->
+          <section class="card p-5 lg:col-span-8 min-w-0">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div id="rangeBtns" class="flex gap-1.5"></div>
+            <span id="rangeChange" class="num text-xs muted"></span>
           </div>
+          <div id="priceChart" class="relative select-none" style="-webkit-touch-callout:none;-webkit-user-select:none"></div>
+                  </section>
+        </div>
+        <section>
+        <dl id="keyStats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px rounded-xl overflow-hidden"
+            style="background:var(--line);border:1px solid var(--line)"></dl>
+        <div id="warnings" class="mt-4"></div>
         </section>
-        <!-- Teilbereiche -->
-        <section class="card p-5 sm:p-6 lg:col-span-8">
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="eyebrow">Teilbereiche</h2>
-            <span class="text-xs faint">Score · Gewicht · Beitrag zum Gesamtscore</span>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-            <div class="relative h-72"><canvas id="radarChart" aria-label="Radar-Diagramm der vier Teilbereiche" role="img"></canvas></div>
-            <div id="subScores" class="space-y-4"></div>
-          </div>
-        </section>
-      </main>
-    </div>
 
-    <div data-panel="metrics" hidden>
+        <!-- Tabs: Kennzahlen | Teilbereiche | Gewichtung -->
+        <div id="tabs" class="tabs" role="tablist" aria-label="Details">
+          <button type="button" class="tab" role="tab" data-tab="metrics" aria-selected="true">Kennzahlen</button>
+          <button type="button" class="tab" role="tab" data-tab="parts" aria-selected="false">Teilbereiche</button>
+          <button type="button" class="tab" role="tab" data-tab="weights" aria-selected="false">Gewichtung</button>
+          <span id="tabStock" class="ml-auto pl-3 text-xs muted whitespace-nowrap num"></span>
+        </div>
+
+        <div data-panel="metrics">
         <!-- Kennzahlen im Detail -->
         <section class="card p-5 sm:p-6">
           <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -313,12 +318,33 @@
             </div>
           </details>
         </section>
-    </div>
+        </div>
 
-    <div data-panel="weights" hidden>
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div data-panel="parts" hidden>
+          <section class="card p-5 sm:p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              <div class="relative h-72"><canvas id="radarChart" aria-label="Radar-Diagramm der vier Teilbereiche" role="img"></canvas></div>
+              <div>
+          <p id="summary" class="text-sm muted leading-relaxed"></p>
+          <div class="grid grid-cols-2 gap-3 mt-5">
+            <div>
+              <h3 class="eyebrow mb-2" style="color:var(--up)">Stärken</h3>
+              <ul id="strengths" class="space-y-1.5 text-sm"></ul>
+            </div>
+            <div>
+              <h3 class="eyebrow mb-2" style="color:var(--down)">Schwächen</h3>
+              <ul id="weaknesses" class="space-y-1.5 text-sm"></ul>
+            </div>
+          </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div data-panel="weights" hidden>
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
         <!-- Gewichtung -->
-        <section class="card p-5 sm:p-6 lg:col-span-4 self-start">
+        <section class="card p-5 sm:p-6 md:col-span-5 self-start">
           <div class="flex items-center justify-between mb-1">
             <h2 class="eyebrow">Gewichtung</h2>
             <button id="resetWeights" type="button" class="text-xs muted hover:text-white transition">Zurücksetzen</button>
@@ -333,29 +359,13 @@
         </section>
 
         <!-- Vorschau: Wirkung der Gewichtung sofort sehen -->
-        <section class="card p-5 sm:p-6 lg:col-span-8 self-start">
+        <section class="card p-5 sm:p-6 md:col-span-7 self-start">
           <h2 class="eyebrow mb-4">Wirkung auf den Score</h2>
           <div id="weightsPreview"></div>
         </section>
-      </div>
-    </div>
-
-    <div data-panel="watch" hidden>
-      <!-- Watchlist mit Ranking -->
-      <section id="watchCard" class="card p-4 sm:p-5">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex items-baseline gap-2">
-            <h2 class="eyebrow">Watchlist</h2>
-            <span id="watchCount" class="text-xs faint num"></span>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-xs faint">Sortieren</span>
-            <div id="watchSort" class="flex gap-1.5"></div>
-            <button id="compareBtn" type="button" class="btn btn-sm" disabled>Vergleichen</button>
           </div>
         </div>
-        <div id="watchBody" class="mt-3"></div>
-      </section>
+      </main>
     </div>
 
     <!-- Vergleich -->
@@ -426,7 +436,7 @@ for (const c of STOCKS) {
   c.capped = c.maxSupply != null;
 }
 const QUICK = ['Bitcoin', 'Ethereum', 'Solana', 'XRP'];
-const APP_VERSION = '2.8';
+const APP_VERSION = '2.9';
 
 /* ---------------------------------------------------------------
    Scoring-Logik
@@ -1334,7 +1344,6 @@ async function selectStock(query, id) {
   document.getElementById('searchInput').value = stock.name;
   markQuick(stock);
   syncWatch(stock);
-  if (state.tab === 'watch') setTab('overview');
   render();
 }
 
@@ -1347,7 +1356,7 @@ function setTab(tab) {
   store.set('rr:ctab', tab);
   document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
   document.querySelectorAll('[data-panel]').forEach(el => { el.hidden = el.dataset.panel !== tab; });
-  if (tab === 'overview') radar?.resize(); // war versteckt, kennt seine Größe noch nicht
+  if (tab === 'parts') radar?.resize(); // war versteckt, kennt seine Größe noch nicht
 }
 
 // Name und Score im Tab-Balken, damit man in jedem Tab weiß, worum es geht; dazu die Gewichtungs-Vorschau
@@ -1374,7 +1383,8 @@ function initTabs() {
     const tab = e.target.closest('[data-tab]')?.dataset.tab;
     if (tab) setTab(tab);
   });
-  setTab(store.get('rr:ctab') || 'overview');
+  const saved = store.get('rr:ctab');
+  setTab(['metrics', 'parts', 'weights'].includes(saved) ? saved : 'metrics');
 }
 
 /* ---------------------------------------------------------------
@@ -1574,12 +1584,11 @@ function openEntry(id) {
   setLoading(false);
   setError('');
   state.stock = snapshot(entry.stock);
-  setTab('overview');
   document.getElementById('searchInput').value = state.stock.name;
   renderHits([], state.stock.cgId);
   markQuick(state.stock);
   render();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.getElementById('stockName').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 const SORTS = [['score', 'Score'], ['change', '24 h'], ['name', 'Name']];
@@ -1594,21 +1603,23 @@ function renderWatchBtn() {
 }
 
 function renderWatchlist() {
-  document.getElementById('watchSort').innerHTML = SORTS
-    .map(([k, l]) => `<button type="button" class="chip" data-sort="${k}" aria-pressed="${state.watchSort === k}">${l}</button>`).join('');
+  document.getElementById('watchSort').innerHTML = state.watch.length > 1 ? SORTS
+    .map(([k, l]) => `<button type="button" class="chip" data-sort="${k}" aria-pressed="${state.watchSort === k}">${l}</button>`).join('') : '';
   const body = document.getElementById('watchBody');
   const cmp = document.getElementById('compareBtn');
+  const edit = document.getElementById('editWatch');
+  if (!state.watch.length) state.watchEdit = false;
   const flagged = state.watch.filter(e => warningsFor(e.stock).length).length;
   document.getElementById('watchCount').textContent = state.watch.length
-    ? `${state.watch.length} Coin${state.watch.length === 1 ? '' : 's'}${flagged ? ` · ${flagged} mit Warnsignalen` : ''}` : '';
-  const wc = document.getElementById('watchTabCount');
-  wc.textContent = state.watch.length;
-  wc.hidden = !state.watch.length;
+    ? `${state.watch.length}${flagged ? ` · ${flagged} mit Warnsignalen` : ''}` : '';
+  edit.hidden = !state.watch.length;
+  edit.textContent = state.watchEdit ? 'Fertig' : 'Bearbeiten';
+  cmp.hidden = !state.watchEdit;
   cmp.disabled = state.compare.size < 2;
-  cmp.textContent = `Vergleichen${state.compare.size ? ` (${state.compare.size})` : ''}`;
+  cmp.textContent = state.compare.size < 2 ? '2–4 auswählen zum Vergleichen' : `${state.compare.size} vergleichen`;
 
   if (!state.watch.length) {
-    body.innerHTML = `<p class="text-sm faint py-2">Noch leer. Tippe bei einem Coin auf <b class="muted">Merken</b>, dann erscheint sie hier mit Score und Rang.</p>`;
+    body.innerHTML = `<p class="text-sm faint py-2">Noch leer. Tippe bei einem Coin auf <b class="muted">Merken</b>, dann erscheint er hier mit Score und Rang.</p>`;
     return;
   }
   const rows = state.watch.map(e => ({ e, sc: computeScore(e.stock), warn: warningsFor(e.stock) }));
@@ -1617,59 +1628,27 @@ function renderWatchlist() {
     : b.sc.total - a.sc.total);
   const full = state.compare.size >= MAX_COMPARE;
   const current = state.stock ? stockId(state.stock) : null;
+  const clean = state.mode === 'clean';
 
-  body.innerHTML = `
-    <div class="overflow-x-auto -mx-1">
-      <table class="w-full text-sm" style="min-width:560px">
-        <thead><tr class="text-left">
-          <th class="eyebrow font-semibold py-2 px-1 w-8">#</th>
-          <th class="eyebrow font-semibold py-2 px-1">Coin</th>
-          <th class="eyebrow font-semibold py-2 px-1">Score</th>
-          ${CATEGORIES.map(c => `<th class="eyebrow font-semibold py-2 px-1 text-right hidden md:table-cell" title="${c.label}">${c.short.slice(0, 4)}.</th>`).join('')}
-          <th class="eyebrow font-semibold py-2 px-1 text-right">Kurs</th>
-          <th class="eyebrow font-semibold py-2 px-1 text-right">24 h</th>
-          <th class="eyebrow font-semibold py-2 px-1 text-center" title="Warnsignale">!</th>
-          <th class="eyebrow font-semibold py-2 px-1 text-center">Vgl.</th>
-          <th class="py-2 px-1"><span class="sr-only">Entfernen</span></th>
-        </tr></thead>
-        <tbody>${rows.map(({ e, sc, warn }, i) => {
-          const s = e.stock, chk = state.compare.has(e.id);
-          const up = (s.changePct ?? 0) >= 0;
-          return `<tr style="border-top:1px solid var(--line)${e.id === current ? ';background:rgba(255,255,255,.025)' : ''}">
-            <td class="num faint py-2.5 px-1">${i + 1}</td>
-            <td class="py-2.5 px-1 max-w-[220px]">
-              <button type="button" data-open="${esc(e.id)}" class="text-left w-full">
-                <span class="block truncate text-white">${esc(s.name)}</span>
-                <span class="block text-[11px] faint num">${esc(s.ticker)} · ${s.live ? `Stand ${new Date(e.saved).toLocaleDateString('de-DE')}` : s.simulated ? 'simuliert' : 'Demo'}</span>
-              </button>
-            </td>
-            <td class="py-2.5 px-1">
-              <span class="flex items-center gap-2">
-                <span class="num font-semibold w-7 text-right" style="color:${scoreColor(sc.total)}">${sc.total}</span>
-                <span class="w-16 h-1 rounded-full overflow-hidden hidden sm:block" style="background:var(--line-2)"><span class="block h-full" style="width:${sc.total}%;background:${scoreColor(sc.total)}"></span></span>
-              </span>
-            </td>
-            ${CATEGORIES.map(c => `<td class="num text-right py-2.5 px-1 hidden md:table-cell muted">${sc.subs[c.key].score ?? '–'}</td>`).join('')}
-            <td class="num text-right py-2.5 px-1">${has(s.price) ? price(s.price) : '<span class="faint">–</span>'}</td>
-            <td class="num text-right py-2.5 px-1" style="color:${has(s.changePct) ? (state.mode === 'clean' ? 'var(--muted)' : up ? 'var(--up)' : 'var(--down)') : 'var(--faint)'}">${has(s.changePct) ? `${up ? '+' : ''}${f2(s.changePct)} %` : '–'}</td>
-            <td class="text-center py-2.5 px-1">${warn.length
-              ? `<button type="button" data-warn="${esc(e.id)}" aria-expanded="${state.watchWarn.has(e.id)}"
-                   class="num text-xs min-w-[28px] px-1.5 py-1 rounded-md" style="${warnStyle(warn.some(w => w.level === 'hoch') ? 'hoch' : 'mittel')}"
-                   aria-label="${warn.length} Warnsignale für ${esc(s.name)} ${state.watchWarn.has(e.id) ? 'ausblenden' : 'anzeigen'}">${warn.length}</button>`
-              : '<span class="faint">–</span>'}</td>
-            <td class="text-center py-2.5 px-1">
-              <input type="checkbox" data-compare="${esc(e.id)}" ${chk ? 'checked' : ''} ${!chk && full ? 'disabled' : ''}
-                     aria-label="${esc(s.name)} vergleichen" class="w-4 h-4 align-middle" style="accent-color:${state.mode === 'clean' ? '#fff' : 'var(--accent)'}">
-            </td>
-            <td class="text-right py-2.5 px-1">
-              <button type="button" data-remove="${esc(e.id)}" class="faint hover:text-white px-1" aria-label="${esc(s.name)} entfernen">✕</button>
-            </td>
-          </tr>${warn.length && state.watchWarn.has(e.id) ? `
-          <tr><td></td><td colspan="11" class="pb-3 pt-0 px-1"><ul class="flex flex-wrap gap-2">${warnChips(warn)}</ul></td></tr>` : ''}`;
-        }).join('')}</tbody>
-      </table>
-    </div>
-    <p class="text-[11px] faint mt-2">Ranking mit deiner aktuellen Gewichtung. Antippen öffnet den gespeicherten Stand ohne neuen Abruf. Für aktuelle Daten den Coin neu suchen.</p>`;
+  body.innerHTML = rows.map(({ e, sc, warn }, i) => {
+    const s = e.stock, chk = state.compare.has(e.id), up = (s.changePct ?? 0) >= 0;
+    const open = state.watchWarn.has(e.id);
+    return `<div class="wrow${e.id === current ? ' on' : ''}">
+      ${state.watchEdit
+        ? `<input type="checkbox" data-compare="${esc(e.id)}" ${chk ? 'checked' : ''} ${!chk && full ? 'disabled' : ''} aria-label="${esc(s.name)} vergleichen"
+             class="w-4 h-4 shrink-0" style="accent-color:${clean ? '#fff' : 'var(--accent)'}">`
+        : `<span class="num text-xs faint w-4 shrink-0">${i + 1}</span>`}
+      <button type="button" data-open="${esc(e.id)}" class="flex-1 min-w-0 text-left">
+        <span class="block truncate text-sm text-white">${esc(s.name)}</span>
+        <span class="block text-[11px] faint num truncate">${esc(s.ticker)}${has(s.price) ? ` · ${price(s.price)}` : ''}${has(s.changePct)
+          ? ` · <span style="color:${clean ? 'var(--muted)' : up ? 'var(--up)' : 'var(--down)'}">${up ? '+' : ''}${f2(s.changePct)} %</span>` : ''}</span>
+      </button>
+      ${warn.length ? `<button type="button" data-warn="${esc(e.id)}" aria-expanded="${open}" class="num text-[11px] px-1.5 py-0.5 rounded-md shrink-0"
+          style="${warnStyle(warn.some(w => w.level === 'hoch') ? 'hoch' : 'mittel')}" aria-label="${warn.length} Warnsignale für ${esc(s.name)}">${warn.length}!</button>` : ''}
+      <span class="num text-sm font-semibold w-7 text-right shrink-0" style="color:${scoreColor(sc.total)}">${sc.total}</span>
+      ${state.watchEdit ? `<button type="button" data-remove="${esc(e.id)}" class="faint hover:text-white px-1 shrink-0" aria-label="${esc(s.name)} entfernen">✕</button>` : ''}
+    </div>${warn.length && open ? `<ul class="flex flex-wrap gap-1.5 px-2 pb-2">${warnChips(warn)}</ul>` : ''}`;
+  }).join('') + `<p class="text-[11px] faint mt-2 px-1">Rang nach deiner Gewichtung. Antippen öffnet den gespeicherten Stand, für aktuelle Daten neu suchen.</p>`;
 }
 
 /* ---------------------------------------------------------------
@@ -1767,6 +1746,7 @@ function renderCompare() {
 
 function initWatch() {
   document.getElementById('watchBtn').addEventListener('click', toggleWatch);
+  document.getElementById('editWatch').addEventListener('click', () => { state.watchEdit = !state.watchEdit; renderWatchlist(); });
   document.getElementById('watchSort').addEventListener('click', e => {
     const k = e.target.closest('[data-sort]')?.dataset.sort;
     if (!k) return;
