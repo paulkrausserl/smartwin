@@ -307,31 +307,31 @@
          style="background:rgba(16,21,30,.9);border:1px solid var(--line-2);right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px))"></div>
 
     <footer class="text-center text-[11px] faint mt-10 pb-8 leading-relaxed">
-      Aufmerksamkeit: englische Wikipedia (Wikimedia), News (GDELT), Hashtags (Bluesky, Mastodon). Kurse: Financial Modeling Prep und CoinGecko.<br />
+      Aufmerksamkeit: englische Wikipedia (Wikimedia), Google Trends, News (GDELT), Hashtags (Bluesky, Mastodon). Kurse: Financial Modeling Prep, CoinGecko, Cardmarket.<br />
       Signale, keine Vorhersagen. Keine Anlageberatung.
     </footer>
   </div>
 <script>
-const APP_VERSION = '3.6';
+const APP_VERSION = '3.7';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
-   `price`: optionaler Kurs als Stellvertreter (fmp = Aktie/ETF, cg = CoinGecko-ID).
+   `price`: optionaler Kurs als Stellvertreter (fmp = Aktie/ETF, cg = CoinGecko-ID, idx = Kartenpreis-Index vom Sammler).
    `scarcity`: kuratierter Hintergrund zur Knappheit.
    `more`: weitere Kurse, die in der Detailansicht unter dem Chart stehen (lassen sich dort ändern).
    `tag`: Hashtag für Bluesky und Mastodon, `news`: Suchbegriff für die Nachrichten-Datenbank GDELT.
 ---------------------------------------------------------------- */
 const THEMES = [
-  { id: 'pokemon', name: 'Pokémon-Karten', group: 'Sammelobjekte', wiki: 'Pokémon Trading Card Game', scarcity: 'Ältere Sets werden nicht nachgedruckt, gefragte Neuerscheinungen sind oft schnell vergriffen.', tag: 'pokemontcg', news: '"Pokemon cards"' },
+  { id: 'pokemon', name: 'Pokémon-Karten', group: 'Sammelobjekte', wiki: 'Pokémon Trading Card Game', scarcity: 'Ältere Sets werden nicht nachgedruckt, gefragte Neuerscheinungen sind oft schnell vergriffen.', price: { idx: 'pokemon', label: 'Kartenpreis-Index' }, tag: 'pokemontcg', news: '"Pokemon cards"' },
   { id: 'onepiece', name: 'One-Piece-Karten', group: 'Sammelobjekte', wiki: 'One Piece Card Game', tag: 'onepiecetcg', news: '"One Piece card game"' },
-  { id: 'mtg', name: 'Magic-Karten', group: 'Sammelobjekte', wiki: 'Magic: The Gathering', scarcity: 'Frühe Karten stehen auf der „Reserved List“ und werden nie nachgedruckt.', tag: 'mtg', news: '"Magic The Gathering"' },
+  { id: 'mtg', name: 'Magic-Karten', group: 'Sammelobjekte', wiki: 'Magic: The Gathering', scarcity: 'Frühe Karten stehen auf der „Reserved List“ und werden nie nachgedruckt.', price: { idx: 'mtg', label: 'Kartenpreis-Index' }, tag: 'mtg', news: '"Magic The Gathering"' },
   { id: 'labubu', name: 'Labubu', group: 'Sammelobjekte', wiki: 'Labubu', scarcity: 'Verkauf in Blindboxen und limitierten Drops.', tag: 'labubu', news: 'Labubu' },
   { id: 'lego', name: 'LEGO', group: 'Sammelobjekte', wiki: 'Lego', scarcity: 'Sets werden nach einigen Jahren eingestellt und danach nur noch gebraucht gehandelt.', tag: 'lego', news: 'LEGO' },
   { id: 'rolex', name: 'Rolex', group: 'Sammelobjekte', wiki: 'Rolex', scarcity: 'Begrenzte Produktion, beliebte Modelle mit Wartelisten.', tag: 'rolex', news: 'Rolex' },
   { id: 'whisky', name: 'Whisky', group: 'Sammelobjekte', wiki: 'Scotch whisky', scarcity: 'Alte Abfüllungen sind endlich, jede geöffnete Flasche verschwindet vom Markt.', tag: 'whisky', news: 'whisky' },
   { id: 'sneaker', name: 'Sneaker', group: 'Sammelobjekte', wiki: 'Sneaker collecting', scarcity: 'Limitierte Releases über Verlosungen.', tag: 'sneakers', news: 'sneakers' },
   { id: 'cards', name: 'Sammelkarten allgemein', group: 'Sammelobjekte', wiki: 'Trading card', tag: 'tradingcards', news: '"trading cards"' },
-  { id: 'yugioh', name: 'Yu-Gi-Oh!-Karten', group: 'Sammelobjekte', wiki: 'Yu-Gi-Oh! Trading Card Game', tag: 'yugioh', news: '"Yu-Gi-Oh" cards' },
+  { id: 'yugioh', name: 'Yu-Gi-Oh!-Karten', group: 'Sammelobjekte', wiki: 'Yu-Gi-Oh! Trading Card Game', price: { idx: 'yugioh', label: 'Kartenpreis-Index' }, tag: 'yugioh', news: '"Yu-Gi-Oh" cards' },
   { id: 'lorcana', name: 'Lorcana-Karten', group: 'Sammelobjekte', wiki: 'Disney Lorcana', scarcity: 'Begehrte Sets sind kurz nach Erscheinen oft ausverkauft.', tag: 'lorcana', news: 'Lorcana' },
   { id: 'sportscards', name: 'Sportkarten', group: 'Sammelobjekte', wiki: 'Baseball card', scarcity: 'Rookie-Karten und nummerierte Parallels gibt es nur in kleiner Auflage.', tag: 'sportscards', news: '"sports cards"' },
   { id: 'funko', name: 'Funko Pops', group: 'Sammelobjekte', wiki: 'Funko', price: { fmp: 'FNKO', label: 'Funko' }, scarcity: 'Limitierte Editionen und „vaulted“ Figuren werden nicht mehr produziert.', tag: 'funkopop', news: '"Funko Pop"' },
@@ -406,7 +406,7 @@ const pctTxt = v => `${v >= 0 ? '+' : ''}${Math.abs(v) >= 100 ? num(v, 0) : num(
 // gleitender 7-Tage-Schnitt, damit Wochenenden und Einzelspitzen die Kurve nicht zerreißen
 const smooth = (v, n = 7) => v.map((_, i) => mean(v.slice(Math.max(0, i - n + 1), i + 1)));
 
-const state = { mode: store.get('rr:mode') || 'standard', sort: store.get('rr:radarSort') || 'hype', group: 'Alle',
+const state = { collected: null, mode: store.get('rr:mode') || 'standard', sort: store.get('rr:radarSort') || 'hype', group: 'Alle',
   custom: store.get('rr:radar:custom') || [], data: {}, extra: {}, extraPending: 0, wikiPending: 0, apiKey: store.get('rr:apiKey') || '' };
 const allThemes = () => [...THEMES, ...state.custom];
 
@@ -562,6 +562,42 @@ function mastoStats(hist) {
   return { perDay, ratio, days: days.length };
 }
 
+/* ---------------------------------------------------------------
+   Daten vom täglichen Sammler (GitHub Action, scripts/collect.mjs).
+   Liegen sie vor, lädt die Seite News, Hashtags und Google Trends nicht mehr selbst.
+---------------------------------------------------------------- */
+const COLLECTED_URLS = ['https://raw.githubusercontent.com/paulkrausserl/smartwin/main/data/radar.json', './data/radar.json'];
+async function loadCollected() {
+  for (const url of COLLECTED_URLS) {
+    try {
+      const res = await fetch(`${url}?h=${Math.floor(Date.now() / 36e5)}`, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const body = await res.json();
+      // älter als 3 Tage: lieber live laden
+      if (Date.now() - Date.parse(body.updated) < 3 * DAY_MS) { state.collected = body; return; }
+    } catch { /* nächste Adresse */ }
+  }
+}
+// Sammler-Format in das Format der Live-Abrufe umwandeln
+function fromCollected(src, c) {
+  if (!c || c.error) return null;
+  const t = Date.parse(state.collected.updated);
+  if (src === 'news') return { t, series: c.d.map((d, i) => [d, c.v[i], c.p[i]]) };
+  if (src === 'trends') return { t, series: c.d.map((d, i) => [d, c.v[i]]), kw: c.kw };
+  if (src === 'bsky') return { t, rates: { now: c.now, m1: c.m1, m3: c.m3 } };
+  if (src === 'masto') return { t, hist: c.hist };
+  return null;
+}
+const cardIndex = idx => state.collected?.cards?.[idx] || null;
+
+// Google Trends: wöchentliche Werte 0–100; letzte 4 Wochen ggü. Median davor
+function trendsStats(series) {
+  if (!series || series.length < 12) return null;
+  const v = series.map(x => x[1]);
+  const now = mean(v.slice(-4)), base = median(v.slice(0, -4));
+  return { perDay: now, ratio: (now + 1) / (base + 1) };
+}
+
 const extraKey = t => `rr:rx1:${t.id}`;
 async function loadExtras(force = false) {
   const themes = allThemes();
@@ -569,7 +605,13 @@ async function loadExtras(force = false) {
   for (const t of themes) {
     const c = store.get(extraKey(t)) || {};
     const x = state.extra[t.id] = { ...c };
-    for (const src of Object.keys(todo)) if (force || !x[src] || Date.now() - x[src].t > CACHE_MS) todo[src].push(t);
+    const col = state.collected?.themes?.[t.id];
+    if (col) {
+      x.trends = fromCollected('trends', col.trends) || { error: col.trends?.error || 'keine Daten' };
+      // Sammler-Daten haben Vorrang; fehlt dort eine Quelle, lädt die Seite sie selbst
+      for (const src of Object.keys(todo)) { const v = fromCollected(src, col[src]); if (v) x[src] = v; }
+    } else if (!x.trends) x.trends = { error: state.collected ? 'Nur für die festen Themen' : 'Sammler-Daten nicht erreichbar' };
+    for (const src of Object.keys(todo)) if (!(col && fromCollected(src, col[src])) && (force || !x[src] || Date.now() - x[src].t > CACHE_MS)) todo[src].push(t);
   }
   state.extraPending = todo.news.length + todo.bsky.length + todo.masto.length;
   queueRender();
@@ -664,11 +706,11 @@ function priceStats(series) {
 }
 
 // Hype-Score: Aufmerksamkeit 45 %, Beschleunigung 20 %, Handelsvolumen 15 %, Preisdynamik 20 %, dazu die weiteren Quellen. Fehlende Teile werden umverteilt.
-// Weitere Quellen fließen mit ein, wenn es sie gibt: News 15 %, Bluesky 10 %, Mastodon 5 % (vor dem Umverteilen)
+// Weitere Quellen fließen mit ein, wenn es sie gibt: News 15 %, Google Trends 15 %, Bluesky 10 %, Mastodon 5 % (vor dem Umverteilen)
 function hypeScore(a, p, ext = {}) {
   const src = (w, x) => [w, x?.ratio != null ? lin(Math.log2(x.ratio), -1, 2) : null];
   const parts = [
-    src(0.15, ext.news), src(0.10, ext.bsky), src(0.05, ext.masto),
+    src(0.15, ext.news), src(0.15, ext.trends), src(0.10, ext.bsky), src(0.05, ext.masto),
     [0.45, a ? lin(Math.log2(a.ratio), -1, 2) : null],
     [0.20, a ? lin(Math.log2(a.accel), -0.5, 1) : null],
     [0.15, p?.volRatio ? lin(Math.log2(p.volRatio), -0.5, 1.5) : null],
@@ -699,12 +741,13 @@ function phaseFor(a, p) {
   return 'calm';
 }
 
-const SRC_NAMES = { wiki: 'Wikipedia', news: 'News', bsky: 'Bluesky', masto: 'Mastodon' };
+const SRC_NAMES = { wiki: 'Wikipedia', trends: 'Google', news: 'News', bsky: 'Bluesky', masto: 'Mastodon' };
 // Welche Quellen gerade einen Anstieg zeigen (mindestens 1,3× über normal)
 const risingSources = (a, ext) => Object.entries({ wiki: a, ...ext }).filter(([, x]) => x?.ratio != null && x.ratio >= 1.3).map(([k]) => k);
 
 function signalsFor(t, a, p, ext = {}) {
   const out = [];
+  if (ext.trends?.ratio >= 1.5) out.push(`Google-Suchen ${num(ext.trends.ratio, 1)}× so häufig wie normal`);
   if (ext.news?.ratio >= 1.5) out.push(`${num(ext.news.ratio, 1)}× so viele News-Artikel wie normal`);
   if (ext.bsky?.ratio >= 1.5) out.push(`#${tagFor(t)} auf Bluesky ${num(ext.bsky.ratio, 1)}× häufiger als vor 1–3 Monaten`);
   if (ext.masto?.ratio >= 1.5) out.push(`#${tagFor(t)} auf Mastodon ${num(ext.masto.ratio, 1)}× häufiger als sonst`);
@@ -714,7 +757,7 @@ function signalsFor(t, a, p, ext = {}) {
   if (a.ratio >= 1.5) out.push(`Aufmerksamkeit ${num(a.ratio, 1)}× über dem Normalniveau`);
   if (a.accel >= 1.5) out.push(`Letzte 7 Tage ${pctTxt((a.accel - 1) * 100)} ggü. Monatsschnitt: springt gerade an`);
   if (p?.volRatio >= 1.5) out.push(`Handelsvolumen ${num(p.volRatio, 1)}× über normal`);
-  if (p && p.fromHigh > -3) out.push('Kurs nahe am 1-Jahres-Hoch');
+  if (p && has(p.fromHigh) && p.fromHigh > -3) out.push('Kurs nahe am 1-Jahres-Hoch');
   if (a.established) out.push(`Sehr bekanntes Thema (normal ${num(a.base, 0)} Aufrufe am Tag): Anstiege sind eher News als ein Frühsignal`);
   else if (a.ratio >= 1.5 && a.sustained && p && has(p.p30) && p.p30 < 10) out.push('Aufmerksamkeit steigt seit Wochen, Preis noch nicht: mögliches Frühsignal');
   else if ((a.ratio >= 1.5 || a.accel >= 1.5) && !a.sustained) out.push('Nur ein kurzer Ausschlag, noch kein anhaltender Anstieg');
@@ -726,10 +769,14 @@ function signalsFor(t, a, p, ext = {}) {
 function compute(t) {
   const d = state.data[t.id] || {};
   const a = d.views ? attentionStats(d.views) : null;
-  const p = d.price ? priceStats(d.price) : null;
+  const card = t.price?.idx ? cardIndex(t.price.idx) : null;
+  const priceSeries = t.price?.idx ? card?.series || null : d.price;
+  let p = priceSeries ? priceStats(priceSeries) : null;
+  // Kartenindex noch zu kurz für einen Verlauf: Cardmarket-Trend (gestern ggü. 30-Tage-Schnitt) als 30-Tage-Wert
+  if (!p && card) p = { last: card.series.at(-1)[1], p30: card.momentum ? (card.momentum - 1) * 100 : null, p90: null, fromHigh: null, volRatio: null, synthetic: true };
   const x = state.extra[t.id] || {};
-  const ext = { news: newsStats(x.news?.series), bsky: bskyStats(x.bsky?.rates), masto: mastoStats(x.masto?.hist) };
-  return { t, d, a, p, x, ext, hype: hypeScore(a, p, ext), phase: phaseFor(a, p), signals: signalsFor(t, a, p, ext) };
+  const ext = { news: newsStats(x.news?.series), trends: trendsStats(x.trends?.series), bsky: bskyStats(x.bsky?.rates), masto: mastoStats(x.masto?.hist) };
+  return { t, d, a, p, x, ext, card, priceSeries, hype: hypeScore(a, p, ext), phase: phaseFor(a, p), signals: signalsFor(t, a, p, ext) };
 }
 
 /* ---------------------------------------------------------------
@@ -750,7 +797,7 @@ async function loadAll(force = false) {
   for (const t of themes) {
     const c = store.get(cacheKey(t));
     // Kurs fehlt im Cache: neu laden, außer er ist im Gratis-Tarif gesperrt oder es gibt (noch) keinen Key
-    const priceOk = c && (!t.price || c.price || /Gratis-Tarif/.test(c.priceError || '') || (t.price.fmp && !state.apiKey));
+    const priceOk = c && (!t.price || t.price.idx || c.price || /Gratis-Tarif/.test(c.priceError || '') || (t.price.fmp && !state.apiKey));
     if (!force && c && Date.now() - c.t < CACHE_MS && priceOk) state.data[t.id] = c;
     else todo.push(t);
   }
@@ -827,7 +874,7 @@ const attnSpark = (r, opts) => spark(r.d.views ? smooth(r.d.views.map(x => x[1])
 const attnTxt = a => (a ? pctTxt((a.ratio - 1) * 100) : '–');
 // Kleine Buchstaben je Quelle, gefärbt nach Richtung
 function srcDots(r) {
-  const items = [['W', 'wiki', r.a], ['N', 'news', r.ext.news], ['B', 'bsky', r.ext.bsky], ['M', 'masto', r.ext.masto]];
+  const items = [['W', 'wiki', r.a], ['G', 'trends', r.ext.trends], ['N', 'news', r.ext.news], ['B', 'bsky', r.ext.bsky], ['M', 'masto', r.ext.masto]];
   return items.map(([l, k, x]) => {
     const ratio = x?.ratio;
     const color = ratio == null ? 'var(--faint)' : ratio >= 1.3 ? (state.mode === 'clean' ? 'var(--text)' : 'var(--up)') : ratio < 0.8 ? (state.mode === 'clean' ? 'var(--muted)' : 'var(--down)') : 'var(--muted)';
@@ -843,7 +890,7 @@ function renderStatus(pending = state.wikiPending) {
   const extra = state.extraPending > 0 ? ` · weitere Quellen: noch ${state.extraPending}` : '';
   el.innerHTML = pending
     ? `Lade … noch ${pending} Thema${pending === 1 ? '' : 'en'}${extra}`
-    : extra ? `Lade weitere Quellen: noch ${state.extraPending}` : `Stand ${new Date(Math.min(...allThemes().map(t => state.data[t.id]?.t || Date.now()))).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · <button type="button" id="reloadBtn" class="underline hover:text-white">aktualisieren</button>`;
+    : extra ? `Lade weitere Quellen: noch ${state.extraPending}` : `${state.collected ? `Sammler ${new Date(state.collected.updated).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · ` : ''}Stand ${new Date(Math.min(...allThemes().map(t => state.data[t.id]?.t || Date.now()))).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })} · <button type="button" id="reloadBtn" class="underline hover:text-white">aktualisieren</button>`;
 }
 
 const SORTS = [['hype', 'Hype-Score'], ['early', 'Frühsignal'], ['attn', 'Aufmerksamkeit'], ['price', 'Preis 30 T.'], ['name', 'Name']];
@@ -894,7 +941,7 @@ function render() {
           <th class="eyebrow font-semibold py-2 px-1">Phase</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Hype</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Aufmerks.</th>
-          <th class="eyebrow font-semibold py-2 px-1 text-center" title="W = Wikipedia, N = News, B = Bluesky, M = Mastodon">Quellen</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-center" title="W = Wikipedia, G = Google Trends, N = News, B = Bluesky, M = Mastodon">Quellen</th>
           <th class="eyebrow font-semibold py-2 px-1 hidden sm:table-cell">Verlauf 4 Mon.</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Preis 30 T.</th>
         </tr></thead>
@@ -914,7 +961,7 @@ function render() {
       </table>
     </div>
     <p class="text-[11px] faint mt-2">Aufmerksamkeit: Wikipedia-Aufrufe der letzten 30 Tage im Vergleich zum Normalniveau des Jahres davor.
-      Quellen: <b>W</b>ikipedia, <b>N</b>ews, <b>B</b>luesky, <b>M</b>astodon; grün = steigt, rot = fällt, grau = normal, blass = keine Daten. Antippen für Details.</p>`;
+      Quellen: <b>W</b>ikipedia, <b>G</b>oogle Trends, <b>N</b>ews, <b>B</b>luesky, <b>M</b>astodon; grün = steigt, rot = fällt, grau = normal, blass = keine Daten. Antippen für Details.</p>`;
 
   if (document.getElementById('detailDialog').open) renderDetail();
 }
@@ -931,7 +978,7 @@ function renderDetail() {
   document.getElementById('detailSub').textContent = [t.group, r.d.title ? `Wikipedia: ${r.d.title}` : null, t.price ? `Kurs: ${t.price.label || t.price.fmp || t.price.cg}` : null].filter(Boolean).join(' · ');
 
   const views = r.d.views || [];
-  const price = r.d.price || [];
+  const price = r.priceSeries || [];
   let chart = '<p class="text-sm faint">Keine Aufrufzahlen verfügbar.</p>';
   document.getElementById('detailBody')._scrub = null;
   if (views.length > 1) {
@@ -952,7 +999,7 @@ function renderDetail() {
     // Daten für das Nachfahren mit dem Finger
     const y = (v, lo, hi) => pad + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * pad), vHi = Math.max(...sv);
     document.getElementById('detailBody')._scrub = {
-      W, H, views, sv, priceLabel: t.price?.label || '', currency: t.price?.cg ? '€' : t.price?.fmp ? '$' : '',
+      W, H, views, sv, priceLabel: t.price?.label || '', currency: t.price?.cg ? '€' : t.price?.fmp ? '$' : t.price?.idx ? 'Pkt.' : '',
       priceAt: d => { if (pIn.length < 2) return null; let hit = null; for (const q of pIn) { if (q[0] > d) break; hit = q; } return hit; },
       yAttn: v => y(v, 0, vHi), yPrice: v => y(v, pLo, pHi), yNews: v => y(v, 0, nHi),
       newsAt: d => { let hit = null; nIn.forEach((n, i) => { if (n[0] <= d) hit = [n[0], n[1], sn[i]]; }); return nLine ? hit : null; },
@@ -1014,7 +1061,7 @@ function renderDetail() {
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${stats}</dl>
     <div>
       <h3 class="eyebrow mb-2">Quellen im Vergleich</h3>
-      <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${sourceCells(r)}</dl>
+      <dl class="grid grid-cols-2 sm:grid-cols-3 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${sourceCells(r)}</dl>
     </div>
     <div>
       <h3 class="eyebrow mb-2">Signale</h3>
@@ -1026,6 +1073,7 @@ function renderDetail() {
       ${t.scarcity ? '<p class="text-[11px] faint mt-1">Kuratierter Hintergrund, keine Live-Messung.</p>' : ''}
     </div>
     ${r.d.priceError ? `<p class="text-xs faint">Kurs: ${esc(r.d.priceError)}</p>` : ''}
+    ${t.price?.idx ? cardBlock(r) : ''}
     <div class="flex flex-wrap gap-2">
       ${r.d.title ? `<a class="btn btn-sm" href="https://en.wikipedia.org/wiki/${encodeURIComponent(r.d.title.replace(/ /g, '_'))}" target="_blank" rel="noopener">Wikipedia-Artikel</a>` : ''}
       ${open ? `<a class="btn btn-sm" href="${open}">${esc(t.price.label || 'Kurs')} analysieren</a>` : ''}
@@ -1044,6 +1092,22 @@ function openDetail(id) {
   if (!dlg.open) dlg.showModal();
 }
 
+// Kartenpreis-Index vom Sammler: was drinsteckt und wie er sich bewegt
+function cardBlock(r) {
+  const c = r.card;
+  if (!c) return `<div><h3 class="eyebrow mb-2">Kartenpreise</h3><p class="text-sm faint">${state.collected ? 'Der Sammler hat noch keine Kartenpreise geliefert.' : 'Sammler-Daten nicht erreichbar.'}</p></div>`;
+  const days = c.series.length;
+  return `<div>
+    <h3 class="eyebrow mb-2">Kartenpreise (Cardmarket)</h3>
+    <div class="inset px-4 py-3 text-sm space-y-1">
+      <div><span class="muted">Korb:</span> ${esc(c.label)}, ${c.n} Karten, typischer Preis ${f2(c.typical)} €</div>
+      ${c.momentum ? `<div><span class="muted">Trend:</span> <span class="num" style="color:${upDown(c.momentum - 1)}">${pctTxt((c.momentum - 1) * 100)}</span> <span class="faint">(gestern ggü. 30-Tage-Schnitt, Mittel über alle Karten)</span></div>` : ''}
+      <div><span class="muted">Index:</span> <span class="num">${num(c.series.at(-1)[1], 1)}</span> <span class="faint">(Start 100, ${days < 30 ? `Verlauf wird gesammelt, ${days} von 30 Tagen` : `seit ${new Date(c.series[0][0]).toLocaleDateString('de-DE')}`})</span></div>
+    </div>
+    <p class="text-[11px] faint mt-1">Täglich vom Sammler erfasst. Der Index zeigt die mittlere Preisänderung der Karten im Korb.</p>
+  </div>`;
+}
+
 /* ---------------------------------------------------------------
    Weitere Kurse je Thema: unter dem Chart, selbst hinzufüg- und entfernbar.
    Geladen wird erst beim Öffnen der Detailansicht, das schont das FMP-Tageslimit.
@@ -1051,7 +1115,7 @@ function openDetail(id) {
 const moreKey = 'rr:radar:more';
 const moreFor = t => (store.get(moreKey) || {})[t.id] ?? t.more ?? [];
 const setMore = (t, list) => store.set(moreKey, { ...(store.get(moreKey) || {}), [t.id]: list });
-const symKey = m => (m.fmp ? `fmp:${m.fmp}` : `cg:${m.cg}`);
+const symKey = m => (m.fmp ? `fmp:${m.fmp}` : m.cg ? `cg:${m.cg}` : `idx:${m.idx}`);
 const morePrices = {}; // symKey -> { t, series, error }
 
 // Coin per Name oder Kürzel finden. `strict`: nur bei exaktem Treffer unter den größten 500 Coins
@@ -1254,15 +1318,16 @@ function renderHelp() {
         <li class="inset px-3 py-2"><b class="text-white">Beschleunigung, 20 %:</b> <span class="muted">letzte 7 Tage ggü. 30 Tagen. −30 % = 0, verdoppelt = 100.</span></li>
         <li class="inset px-3 py-2"><b class="text-white">Handelsvolumen, 15 %:</b> <span class="muted">30 Tage ggü. normal. −30 % = 0, knapp 3× = 100.</span></li>
         <li class="inset px-3 py-2"><b class="text-white">Preisdynamik, 20 %:</b> <span class="muted">Kurs 30 Tage. −15 % = 0, +30 % = 100.</span></li>
-        <li class="inset px-3 py-2"><b class="text-white">Weitere Quellen, 30 %:</b> <span class="muted">News 15 %, Bluesky 10 %, Mastodon 5 %. Jeweils ggü. normal, halbiert = 0, vervierfacht = 100.</span></li>
+        <li class="inset px-3 py-2"><b class="text-white">Weitere Quellen, 45 %:</b> <span class="muted">News 15 %, Google Trends 15 %, Bluesky 10 %, Mastodon 5 %. Jeweils ggü. normal, halbiert = 0, vervierfacht = 100.</span></li>
       </ul>
       <p class="text-xs faint mt-2">Fehlt ein Teil, werden die anderen hochgerechnet. „Frühsignal“ sortiert nach hoher Aufmerksamkeit bei noch wenig Preisbewegung.</p>
     </section>
     <section>
       <h3 class="font-semibold text-white mb-1">Grenzen</h3>
-      <p class="muted">Google Trends, TikTok, Instagram, X und Reddit haben keine frei nutzbare Schnittstelle. Bluesky und Mastodon sind kleiner, zeigen aber echte Hashtag-Nutzung.
+      <p class="muted">TikTok, Instagram, X und Reddit haben keine frei nutzbare Schnittstelle. Google Trends holt der Sammler über eine inoffizielle Schnittstelle, das kann ausfallen. Bluesky und Mastodon sind kleiner, zeigen aber echte Hashtag-Nutzung.
         Bluesky wird geschätzt: aus der Zeitspanne der letzten 100 Posts, heute im Vergleich zu vor 1 und 3 Monaten. Mastodon liefert nur 7 Tage, den längeren Verlauf sammelt die Seite selbst in deinem Browser.
-        GDELT erlaubt nur einen Abruf alle 5 Sekunden, die News laden beim ersten Mal deshalb ein paar Minuten.
+        Ein Sammler auf GitHub holt jeden Morgen News, Google Trends, Hashtags und Kartenpreise ab und speichert sie. Die Seite liest diese Datei und lädt nur selbst nach, was dort fehlt.
+        Kartenpreise: Cardmarket-Preise der wertvollsten Pokémon-, Magic- und Yu-Gi-Oh!-Karten, als Index (Start 100).
         Bei Sammelobjekten gibt es keinen frei verfügbaren Kurs, Knappheit ist dort ein kuratierter Hintergrund. Kurse von Firmen und ETFs sind Stellvertreter für ein Thema, nicht das Thema selbst.
         Die Phasen sind Signale, keine Vorhersagen: Viele Hypes verpuffen.</p>
     </section>`;
@@ -1294,6 +1359,7 @@ function sourceCells(r) {
   const m = r.ext.masto;
   return [
     cellFor('Wikipedia', r.d.title || '–', r.a && { perDay: r.a.last30, ratio: r.a.ratio }, 'Aufrufe/Tag', r.d.viewsError),
+    cellFor('Google Trends', r.x.trends?.kw || '–', r.ext.trends, 'von 100', r.x.trends?.error),
     cellFor('News', newsFor(r.t).replace(/"/g, ''), r.ext.news, 'Artikel/Tag', pending('news') || r.x.news?.error),
     cellFor('Bluesky', tag, r.ext.bsky, 'Posts/Tag', pending('bsky') || r.x.bsky?.error),
     cellFor('Mastodon', tag, m, 'Posts/Tag', pending('masto') || r.x.masto?.error, m && m.ratio == null ? `Verlauf wird gesammelt (${m.days} von 21 Tagen)` : null),
@@ -1463,7 +1529,7 @@ function init() {
   initFullscreen();
   initDetailScrub();
   applyMode();
-  loadExtras().catch(() => {});
+  loadCollected().finally(() => { loadExtras().catch(() => {}); queueRender(); });
   loadAll().catch(() => {
     document.getElementById('status').textContent = 'Keine Verbindung. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.';
   });
