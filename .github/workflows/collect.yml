@@ -1,0 +1,36 @@
+# Sammelt jeden Morgen die Radar-Daten (News, Google Trends, Hashtags, Kartenpreise) und speichert sie in data/radar.json.
+# Manuell starten: Actions → „Radar-Daten sammeln“ → Run workflow.
+name: Radar-Daten sammeln
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Daten sammeln
+        run: node scripts/collect.mjs
+      - name: Speichern
+        run: |
+          git config user.name 'smartwin-sammler'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/radar.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Radar-Daten $(date -u +%F)"
+          git pull --rebase origin main
+          git push
