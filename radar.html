@@ -312,7 +312,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '3.5';
+const APP_VERSION = '3.6';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -331,17 +331,43 @@ const THEMES = [
   { id: 'whisky', name: 'Whisky', group: 'Sammelobjekte', wiki: 'Scotch whisky', scarcity: 'Alte Abfüllungen sind endlich, jede geöffnete Flasche verschwindet vom Markt.', tag: 'whisky', news: 'whisky' },
   { id: 'sneaker', name: 'Sneaker', group: 'Sammelobjekte', wiki: 'Sneaker collecting', scarcity: 'Limitierte Releases über Verlosungen.', tag: 'sneakers', news: 'sneakers' },
   { id: 'cards', name: 'Sammelkarten allgemein', group: 'Sammelobjekte', wiki: 'Trading card', tag: 'tradingcards', news: '"trading cards"' },
+  { id: 'yugioh', name: 'Yu-Gi-Oh!-Karten', group: 'Sammelobjekte', wiki: 'Yu-Gi-Oh! Trading Card Game', tag: 'yugioh', news: '"Yu-Gi-Oh" cards' },
+  { id: 'lorcana', name: 'Lorcana-Karten', group: 'Sammelobjekte', wiki: 'Disney Lorcana', scarcity: 'Begehrte Sets sind kurz nach Erscheinen oft ausverkauft.', tag: 'lorcana', news: 'Lorcana' },
+  { id: 'sportscards', name: 'Sportkarten', group: 'Sammelobjekte', wiki: 'Baseball card', scarcity: 'Rookie-Karten und nummerierte Parallels gibt es nur in kleiner Auflage.', tag: 'sportscards', news: '"sports cards"' },
+  { id: 'funko', name: 'Funko Pops', group: 'Sammelobjekte', wiki: 'Funko', price: { fmp: 'FNKO', label: 'Funko' }, scarcity: 'Limitierte Editionen und „vaulted“ Figuren werden nicht mehr produziert.', tag: 'funkopop', news: '"Funko Pop"' },
+  { id: 'sonnyangel', name: 'Sonny Angels', group: 'Sammelobjekte', wiki: 'Sonny Angel', scarcity: 'Verkauf in Blindboxen mit seltenen „Secret“-Figuren.', tag: 'sonnyangel', news: '"Sonny Angel"' },
+  { id: 'jellycat', name: 'Jellycat', group: 'Sammelobjekte', wiki: 'Jellycat', scarcity: 'Einzelne Designs werden „retired“ und danach nur noch gebraucht gehandelt.', tag: 'jellycat', news: 'Jellycat' },
+  { id: 'hotwheels', name: 'Hot Wheels', group: 'Sammelobjekte', wiki: 'Hot Wheels', price: { fmp: 'MAT', label: 'Mattel' }, scarcity: 'Seltene „Treasure Hunts“ werden nur in kleiner Stückzahl beigemischt.', tag: 'hotwheels', news: '"Hot Wheels"' },
+  { id: 'retrogames', name: 'Retro-Videospiele', group: 'Sammelobjekte', wiki: 'Retrogaming', scarcity: 'Originale Module und versiegelte Spiele werden nicht mehr hergestellt.', tag: 'retrogaming', news: '"retro games"' },
+  { id: 'vinyl', name: 'Vinyl-Platten', group: 'Sammelobjekte', wiki: 'Phonograph record', scarcity: 'Limitierte Pressungen und Erstauflagen.', tag: 'vinyl', news: '"vinyl records"' },
+  { id: 'comics', name: 'Comics', group: 'Sammelobjekte', wiki: 'Comic book collecting', scarcity: 'Erstausgaben in gutem Zustand sind selten, bewertete Exemplare noch seltener.', tag: 'comicbooks', news: '"comic book" collecting' },
+  { id: 'coins', name: 'Münzen', group: 'Sammelobjekte', wiki: 'Coin collecting', scarcity: 'Kleine Prägeauflagen und Fehlprägungen.', tag: 'numismatics', news: '"coin collecting"' },
+  { id: 'birkin', name: 'Hermès Birkin', group: 'Sammelobjekte', wiki: 'Birkin bag', scarcity: 'Hermès verkauft die Tasche nur an ausgewählte Kunden, die Produktion ist bewusst knapp.', tag: 'birkin', news: '"Birkin bag"' },
+  { id: 'wine', name: 'Wein als Anlage', group: 'Sammelobjekte', wiki: 'Wine as investment', scarcity: 'Jeder Jahrgang ist endlich, getrunkene Flaschen verschwinden vom Markt.', tag: 'finewine', news: '"fine wine"' },
+  { id: 'matcha', name: 'Matcha', group: 'Lifestyle', wiki: 'Matcha', scarcity: 'Hochwertiger Matcha kommt aus wenigen Regionen Japans, die Produktion wächst nur langsam. 2024/25 gab es Lieferengpässe.', tag: 'matcha', news: 'matcha' },
+  { id: 'dubaichoc', name: 'Dubai-Schokolade', group: 'Lifestyle', wiki: 'Dubai chocolate', scarcity: 'Der Trend hat Pistazien knapper und teurer gemacht.', tag: 'dubaichocolate', news: '"Dubai chocolate"' },
+  { id: 'smartglasses', name: 'Smart Glasses', group: 'Lifestyle', wiki: 'Smartglasses', tag: 'smartglasses', news: '"smart glasses"' },
+  { id: 'padel', name: 'Padel', group: 'Lifestyle', wiki: 'Padel', tag: 'padel', news: 'padel' },
+  { id: 'pickleball', name: 'Pickleball', group: 'Lifestyle', wiki: 'Pickleball', tag: 'pickleball', news: 'pickleball' },
   { id: 'gold', name: 'Gold', group: 'Rohstoffe', wiki: 'Gold', price: { fmp: 'GLD', label: 'Gold-ETF GLD' }, scarcity: 'Die Fördermenge wächst nur um wenige Prozent pro Jahr.', tag: 'gold', news: '"gold price"' },
   { id: 'silver', name: 'Silber', group: 'Rohstoffe', wiki: 'Silver', price: { fmp: 'SLV', label: 'Silber-ETF SLV' }, scarcity: 'Wird überwiegend als Nebenprodukt anderer Minen gefördert, das Angebot reagiert kaum auf den Preis.', tag: 'silver', news: '"silver price"' },
   { id: 'uranium', name: 'Uran', group: 'Rohstoffe', wiki: 'Uranium', price: { fmp: 'URA', label: 'Uran-ETF URA' }, scarcity: 'Neue Minen brauchen viele Jahre bis zur Förderung.', tag: 'uranium', news: 'uranium' },
   { id: 'copper', name: 'Kupfer', group: 'Rohstoffe', wiki: 'Copper', price: { fmp: 'CPER', label: 'Kupfer-ETF CPER' }, scarcity: 'Stromnetze und E-Autos brauchen viel Kupfer, neue Minen kommen langsam.', tag: 'copper', news: '"copper price"' },
   { id: 'oil', name: 'Öl', group: 'Rohstoffe', wiki: 'Petroleum', price: { fmp: 'USO', label: 'Öl-ETF USO' }, tag: 'oil', news: '"oil price"' },
   { id: 'cocoa', name: 'Kakao', group: 'Rohstoffe', wiki: 'Cocoa bean', scarcity: 'Die Ernte hängt an wenigen Anbauländern in Westafrika.', tag: 'cocoa', news: '"cocoa prices"' },
+  { id: 'coffee', name: 'Kaffee', group: 'Rohstoffe', wiki: 'Coffee bean', scarcity: 'Die Ernte konzentriert sich auf Brasilien und Vietnam, Wetter schlägt direkt auf den Preis durch.', tag: 'coffee', news: '"coffee prices"' },
+  { id: 'oliveoil', name: 'Olivenöl', group: 'Rohstoffe', wiki: 'Olive oil', scarcity: 'Dürren in Südeuropa haben die Ernten 2022–2024 stark einbrechen lassen.', tag: 'oliveoil', news: '"olive oil prices"' },
+  { id: 'vanilla', name: 'Vanille', group: 'Rohstoffe', wiki: 'Vanilla', scarcity: 'Kommt größtenteils aus Madagaskar, wird von Hand bestäubt und ist wetteranfällig.', tag: 'vanilla', news: '"vanilla prices"' },
+  { id: 'platinum', name: 'Platin', group: 'Rohstoffe', wiki: 'Platinum', price: { fmp: 'PPLT', label: 'Platin-ETF PPLT' }, scarcity: 'Der Großteil der Förderung kommt aus Südafrika.', tag: 'platinum', news: '"platinum price"' },
+  { id: 'lithium', name: 'Lithium', group: 'Rohstoffe', wiki: 'Lithium', price: { fmp: 'LIT', label: 'Lithium-ETF LIT' }, tag: 'lithium', news: 'lithium' },
+  { id: 'rareearth', name: 'Seltene Erden', group: 'Rohstoffe', wiki: 'Rare-earth element', price: { fmp: 'REMX', label: 'Seltene-Erden-ETF REMX' }, scarcity: 'Förderung und Verarbeitung liegen überwiegend in China, Exportbeschränkungen sind jederzeit möglich.', tag: 'rareearths', news: '"rare earths"' },
   { id: 'bitcoin', name: 'Bitcoin', group: 'Krypto', wiki: 'Bitcoin', price: { cg: 'bitcoin', label: 'Bitcoin' }, scarcity: 'Höchstmenge 21 Mio. BTC, die Ausgabe halbiert sich etwa alle 4 Jahre.', tag: 'bitcoin', news: 'bitcoin' },
   { id: 'ethereum', name: 'Ethereum', group: 'Krypto', wiki: 'Ethereum', price: { cg: 'ethereum', label: 'Ethereum' }, tag: 'ethereum', news: 'ethereum' },
   { id: 'solana', name: 'Solana', group: 'Krypto', wiki: 'Solana (blockchain platform)', price: { cg: 'solana', label: 'Solana' }, tag: 'solana', news: 'solana' },
   { id: 'xrp', name: 'XRP', group: 'Krypto', wiki: 'Ripple Labs', price: { cg: 'ripple', label: 'XRP' }, tag: 'xrp', news: 'XRP' },
   { id: 'meme', name: 'Memecoins', group: 'Krypto', wiki: 'Meme coin', price: { cg: 'dogecoin', label: 'Dogecoin' }, tag: 'memecoin', news: 'memecoin' },
+  { id: 'pengu', name: 'Pudgy Penguins', group: 'Krypto', wiki: 'Pudgy Penguins', price: { cg: 'pudgy-penguins', label: 'PENGU' }, tag: 'pudgypenguins', news: '"Pudgy Penguins"' },
+  { id: 'hype', name: 'Hyperliquid', group: 'Krypto', wiki: 'Hyperliquid', price: { cg: 'hyperliquid', label: 'HYPE' }, tag: 'hyperliquid', news: 'Hyperliquid' },
   { id: 'ai', name: 'Künstliche Intelligenz', group: 'Technologie', wiki: 'Artificial intelligence', price: { fmp: 'NVDA', label: 'Nvidia' }, tag: 'ai', news: '"artificial intelligence"' },
   { id: 'quantum', name: 'Quantencomputer', group: 'Technologie', wiki: 'Quantum computing', price: { fmp: 'IONQ', label: 'IonQ' }, tag: 'quantumcomputing', news: '"quantum computing"' },
   { id: 'robots', name: 'Humanoide Roboter', group: 'Technologie', wiki: 'Humanoid robot', price: { fmp: 'BOTZ', label: 'Robotik-ETF BOTZ' }, tag: 'humanoid', news: '"humanoid robot"' },
@@ -349,8 +375,11 @@ const THEMES = [
   { id: 'glp1', name: 'Abnehmspritzen', group: 'Technologie', wiki: 'Semaglutide', price: { fmp: 'NVO', label: 'Novo Nordisk' }, tag: 'ozempic', news: '(Ozempic OR Wegovy)' },
   { id: 'space', name: 'Raumfahrt', group: 'Technologie', wiki: 'Rocket Lab', price: { fmp: 'RKLB', label: 'Rocket Lab' }, more: [{ fmp: 'SPCX', label: 'SpaceX' }], tag: 'rocketlab', news: '"Rocket Lab"' },
   { id: 'drones', name: 'Drohnen', group: 'Technologie', wiki: 'Unmanned aerial vehicle', tag: 'drones', news: 'drones' },
+  { id: 'evtol', name: 'Flugtaxis', group: 'Technologie', wiki: 'Electric vertical take-off and landing', price: { fmp: 'JOBY', label: 'Joby Aviation' }, tag: 'evtol', news: 'eVTOL' },
+  { id: 'ssb', name: 'Festkörperakkus', group: 'Technologie', wiki: 'Solid-state battery', price: { fmp: 'QS', label: 'QuantumScape' }, tag: 'solidstatebattery', news: '"solid-state battery"' },
+  { id: 'nuclearfusion', name: 'Kernfusion', group: 'Technologie', wiki: 'Fusion power', tag: 'fusionenergy', news: '"fusion energy"' },
 ];
-const GROUPS = ['Alle', 'Sammelobjekte', 'Rohstoffe', 'Krypto', 'Technologie', 'Eigene'];
+const GROUPS = ['Alle', 'Sammelobjekte', 'Lifestyle', 'Rohstoffe', 'Krypto', 'Technologie', 'Eigene'];
 
 /* ---------------------------------------------------------------
    Helfer
