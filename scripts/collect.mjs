@@ -37,20 +37,27 @@ const keep = (id, src, error) => {
 };
 const slot = id => (out.themes[id] ||= {});
 
-/* --- News: GDELT, ein Abruf alle 5 Sekunden ----------------------------------- */
+/* --- News: GDELT. Offiziell ein Abruf alle 5 Sekunden, GitHub-Server teilen sich aber IP-Adressen,
+   deshalb großzügiger Abstand und bei „zu viele Anfragen“ oder Abbruch bis zu zweimal neu versuchen. --- */
 async function collectNews() {
+  const yesterday = ymd(new Date(Date.now() - DAY_MS));
   for (const t of THEMES) {
     try {
       const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
       Object.entries({ query: newsFor(t), mode: 'timelinevolraw', format: 'json', timespan: '1y' }).forEach(([k, v]) => url.searchParams.set(k, v));
-      const body = await get(url, { text: true });
-      const data = JSON.parse(body).timeline?.[0]?.data || [];
+      let body;
+      for (let i = 0; body === undefined; i++) {
+        try { body = await get(url, { text: true }); }
+        catch (e) { if (i === 2 || !/429|fetch failed|aborted|timeout/i.test(e.message)) throw e; await sleep(45000 * (i + 1)); }
+      }
+      // gestern und heute sind bei GDELT noch unvollständig
+      const data = (JSON.parse(body).timeline?.[0]?.data || []).filter(x => `${x.date.slice(0, 4)}-${x.date.slice(4, 6)}-${x.date.slice(6, 8)}` < yesterday);
       if (!data.length) throw new Error('keine Treffer');
       const d = x => `${x.date.slice(0, 4)}-${x.date.slice(4, 6)}-${x.date.slice(6, 8)}`;
       // kompakt: Datum je Punkt, Artikel, Anteil an allen Artikeln in Promille
       slot(t.id).news = { d: data.map(d), v: data.map(x => x.value), p: data.map(x => (x.norm ? round((x.value / x.norm) * 1000, 4) : 0)) };
-    } catch (e) { slot(t.id).news = keep(t.id, 'news', e.message.startsWith('Unexpected') ? 'GDELT lieferte keine Daten' : e.message); }
-    await sleep(5500);
+    } catch (e) { slot(t.id).news = keep(t.id, 'news', e.message.startsWith('Unexpected') ? 'GDELT lieferte keine Daten' : /429/.test(e.message) ? 'GDELT bremst den Sammler' : e.message); }
+    await sleep(10000);
   }
   log('News fertig');
 }
