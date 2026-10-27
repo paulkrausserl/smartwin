@@ -312,12 +312,12 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '3.7';
+const APP_VERSION = '3.8';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
    `price`: optionaler Kurs als Stellvertreter (fmp = Aktie/ETF, cg = CoinGecko-ID, idx = Kartenpreis-Index vom Sammler).
-   `scarcity`: kuratierter Hintergrund zur Knappheit.
+   `scarcity`: kuratierter Hintergrund zur Knappheit, `driver`: bei Ländern, was den Markt gerade treibt.
    `more`: weitere Kurse, die in der Detailansicht unter dem Chart stehen (lassen sich dort ändern).
    `tag`: Hashtag für Bluesky und Mastodon, `news`: Suchbegriff für die Nachrichten-Datenbank GDELT.
 ---------------------------------------------------------------- */
@@ -378,8 +378,25 @@ const THEMES = [
   { id: 'evtol', name: 'Flugtaxis', group: 'Technologie', wiki: 'Electric vertical take-off and landing', price: { fmp: 'JOBY', label: 'Joby Aviation' }, tag: 'evtol', news: 'eVTOL' },
   { id: 'ssb', name: 'Festkörperakkus', group: 'Technologie', wiki: 'Solid-state battery', price: { fmp: 'QS', label: 'QuantumScape' }, tag: 'solidstatebattery', news: '"solid-state battery"' },
   { id: 'nuclearfusion', name: 'Kernfusion', group: 'Technologie', wiki: 'Fusion power', tag: 'fusionenergy', news: '"fusion energy"' },
+  { id: 'em', name: 'Schwellenländer gesamt', group: 'Länder', wiki: 'Emerging market', price: { fmp: 'EEM', label: 'iShares MSCI Emerging Markets' }, driver: 'Vergleichsmaßstab für alle Länder in dieser Gruppe.', tag: 'emergingmarkets', news: '"emerging markets" stocks' },
+  { id: 'korea', name: 'Südkorea', group: 'Länder', wiki: 'KOSPI', price: { fmp: 'EWY', label: 'Südkorea-ETF EWY' }, driver: 'Speicherchips für KI-Rechenzentren (SK Hynix, Samsung), dazu Werften, Rüstung und Kernkraft.', tag: 'kospi', news: 'KOSPI' },
+  { id: 'taiwan', name: 'Taiwan', group: 'Länder', wiki: 'TAIEX', price: { fmp: 'EWT', label: 'Taiwan-ETF EWT' }, driver: 'TSMC fertigt den Großteil der KI-Chips, viele Server-Zulieferer sitzen hier. Politisches Risiko durch China.', tag: 'taiwanstocks', news: 'TAIEX' },
+  { id: 'india', name: 'Indien', group: 'Länder', wiki: 'NIFTY 50', price: { fmp: 'INDA', label: 'Indien-ETF INDA' }, driver: 'Junge Bevölkerung, Produktion wandert aus China ab, starker Inlandskonsum.', tag: 'nifty50', news: '"Nifty 50"' },
+  { id: 'china', name: 'China', group: 'Länder', wiki: 'SSE Composite Index', price: { fmp: 'MCHI', label: 'China-ETF MCHI' }, driver: 'Eigene KI-Modelle und Chips, Konjunkturprogramme. Risiko durch Handelsstreit und Regulierung.', tag: 'chinastocks', news: '"Chinese stocks"' },
+  { id: 'vietnam', name: 'Vietnam', group: 'Länder', wiki: 'VN-Index', price: { fmp: 'VNM', label: 'Vietnam-ETF VNM' }, driver: 'Produktion wandert aus China ab, Hoffnung auf Aufnahme in große Schwellenländer-Indizes.', tag: 'vnindex', news: '"VN-Index"' },
+  { id: 'indonesia', name: 'Indonesien', group: 'Länder', wiki: 'IDX Composite', price: { fmp: 'EIDO', label: 'Indonesien-ETF EIDO' }, driver: 'Nickel für Batterien, große junge Bevölkerung.', tag: 'idx', news: '"Indonesia stocks"' },
+  { id: 'thailand', name: 'Thailand', group: 'Länder', wiki: 'SET Index', price: { fmp: 'THD', label: 'Thailand-ETF THD' }, driver: 'Tourismus, Autoindustrie und Elektronik-Zulieferer.', tag: 'setindex', news: '"SET index" Thailand' },
+  { id: 'malaysia', name: 'Malaysia', group: 'Länder', wiki: 'FTSE Bursa Malaysia KLCI', price: { fmp: 'EWM', label: 'Malaysia-ETF EWM' }, driver: 'Neue Rechenzentren für KI und Chip-Verpackung (Back-End der Halbleiterfertigung).', tag: 'klci', news: '"Bursa Malaysia"' },
+  { id: 'philippines', name: 'Philippinen', group: 'Länder', wiki: 'PSE Composite Index', price: { fmp: 'EPHE', label: 'Philippinen-ETF EPHE' }, tag: 'psei', news: '"Philippine stocks"' },
+  { id: 'brazil', name: 'Brasilien', group: 'Länder', wiki: 'Ibovespa', price: { fmp: 'EWZ', label: 'Brasilien-ETF EWZ' }, driver: 'Rohstoffe und Agrar, hohe Zinsen.', tag: 'ibovespa', news: 'Ibovespa' },
+  { id: 'mexico', name: 'Mexiko', group: 'Länder', wiki: 'S&P/BMV IPC', price: { fmp: 'EWW', label: 'Mexiko-ETF EWW' }, driver: 'Produktion wandert aus Asien näher an die USA („Nearshoring“), abhängig von US-Zöllen.', tag: 'mexicostocks', news: '"Mexican stocks"' },
+  { id: 'argentina', name: 'Argentinien', group: 'Länder', wiki: 'S&P Merval', price: { fmp: 'ARGT', label: 'Argentinien-ETF ARGT' }, driver: 'Wirtschaftsreformen, Lithium und Schiefergas (Vaca Muerta). Sehr schwankungsanfällig.', tag: 'merval', news: 'Merval' },
+  { id: 'southafrica', name: 'Südafrika', group: 'Länder', wiki: 'FTSE/JSE Top 40 Index', price: { fmp: 'EZA', label: 'Südafrika-ETF EZA' }, driver: 'Gold, Platin und andere Rohstoffe.', tag: 'jse', news: '"Johannesburg Stock Exchange"' },
+  { id: 'turkey', name: 'Türkei', group: 'Länder', wiki: 'BIST 100', price: { fmp: 'TUR', label: 'Türkei-ETF TUR' }, driver: 'Hohe Inflation und schwache Lira, Kurse in Dollar oft deutlich schwächer als in Lira.', tag: 'bist100', news: '"Borsa Istanbul"' },
+  { id: 'saudi', name: 'Saudi-Arabien', group: 'Länder', wiki: 'Saudi Exchange', price: { fmp: 'KSA', label: 'Saudi-ETF KSA' }, driver: 'Ölpreis, Umbau der Wirtschaft (Vision 2030), Investitionen in KI-Rechenzentren.', tag: 'tadawul', news: 'Tadawul' },
+  { id: 'poland', name: 'Polen', group: 'Länder', wiki: 'WIG20', price: { fmp: 'EPOL', label: 'Polen-ETF EPOL' }, driver: 'Starkes Wachstum, Banken, Rüstungsausgaben.', tag: 'wig20', news: '"Warsaw Stock Exchange"' },
 ];
-const GROUPS = ['Alle', 'Sammelobjekte', 'Lifestyle', 'Rohstoffe', 'Krypto', 'Technologie', 'Eigene'];
+const GROUPS = ['Alle', 'Sammelobjekte', 'Lifestyle', 'Rohstoffe', 'Krypto', 'Technologie', 'Länder', 'Eigene'];
 
 /* ---------------------------------------------------------------
    Helfer
@@ -610,7 +627,7 @@ async function loadExtras(force = false) {
       x.trends = fromCollected('trends', col.trends) || { error: col.trends?.error || 'keine Daten' };
       // Sammler-Daten haben Vorrang; fehlt dort eine Quelle, lädt die Seite sie selbst
       for (const src of Object.keys(todo)) { const v = fromCollected(src, col[src]); if (v) x[src] = v; }
-    } else if (!x.trends) x.trends = { error: state.collected ? 'Nur für die festen Themen' : 'Sammler-Daten nicht erreichbar' };
+    } else if (!x.trends) x.trends = { error: !state.collected ? 'Sammler-Daten nicht erreichbar' : t.group === 'Eigene' ? 'Nur für die festen Themen' : 'Kommt mit dem nächsten Sammler-Lauf' };
     for (const src of Object.keys(todo)) if (!(col && fromCollected(src, col[src])) && (force || !x[src] || Date.now() - x[src].t > CACHE_MS)) todo[src].push(t);
   }
   state.extraPending = todo.news.length + todo.bsky.length + todo.masto.length;
@@ -763,6 +780,9 @@ function signalsFor(t, a, p, ext = {}) {
   else if ((a.ratio >= 1.5 || a.accel >= 1.5) && !a.sustained) out.push('Nur ein kurzer Ausschlag, noch kein anhaltender Anstieg');
   if (p && has(p.p90) && p.p90 > 60 && a.accel < 0.8) out.push(`Kurs ${pctTxt(p.p90)} in 90 Tagen bei nachlassender Aufmerksamkeit: Vorsicht`);
   if (a.ratio < 0.6) out.push('Deutlich weniger Interesse als üblich');
+  if (has(p?.rel90) && p.rel90 >= 10) out.push(`Schlägt den Schwellenländer-Schnitt in 90 Tagen um ${num(p.rel90, 0)} Prozentpunkte`);
+  if (has(p?.rel90) && p.rel90 <= -10) out.push(`Hinkt dem Schwellenländer-Schnitt in 90 Tagen um ${num(-p.rel90, 0)} Prozentpunkte hinterher`);
+  if (has(p?.rel30) && has(p?.rel90) && p.rel30 >= 5 && p.rel90 < 5) out.push('Dreht gerade nach oben: im letzten Monat besser als die anderen Schwellenländer');
   return out;
 }
 
@@ -774,6 +794,9 @@ function compute(t) {
   let p = priceSeries ? priceStats(priceSeries) : null;
   // Kartenindex noch zu kurz für einen Verlauf: Cardmarket-Trend (gestern ggü. 30-Tage-Schnitt) als 30-Tage-Wert
   if (!p && card) p = { last: card.series.at(-1)[1], p30: card.momentum ? (card.momentum - 1) * 100 : null, p90: null, fromHigh: null, volRatio: null, synthetic: true };
+  // Länder: Abstand zum Schwellenländer-Schnitt (EEM) in Prozentpunkten
+  const bench = t.group === 'Länder' && t.id !== 'em' && state.data.em?.price ? priceStats(state.data.em.price) : null;
+  if (p && bench) { p.rel30 = has(p.p30) && has(bench.p30) ? p.p30 - bench.p30 : null; p.rel90 = has(p.p90) && has(bench.p90) ? p.p90 - bench.p90 : null; }
   const x = state.extra[t.id] || {};
   const ext = { news: newsStats(x.news?.series), trends: trendsStats(x.trends?.series), bsky: bskyStats(x.bsky?.rates), masto: mastoStats(x.masto?.hist) };
   return { t, d, a, p, x, ext, card, priceSeries, hype: hypeScore(a, p, ext), phase: phaseFor(a, p), signals: signalsFor(t, a, p, ext) };
@@ -1043,7 +1066,9 @@ function renderDetail() {
     cell('7 T. ggü. 30 T.', a ? pctTxt((a.accel - 1) * 100) : '–', a ? upDown(a.accel - 1) : null),
     cell('Preis 30 T.', has(p?.p30) ? pctTxt(p.p30) : '–', upDown(p?.p30)),
     cell('Preis 90 T.', has(p?.p90) ? pctTxt(p.p90) : '–', upDown(p?.p90)),
-    cell('Volumen ggü. normal', p?.volRatio ? `${num(p.volRatio, 1)}×` : '–'),
+    t.group === 'Länder' && t.id !== 'em'
+      ? cell('ggü. Schwellenländer 90 T.', has(p?.rel90) ? `${p.rel90 >= 0 ? '+' : '−'}${num(Math.abs(p.rel90), 1)} Pkt.` : '–', upDown(p?.rel90))
+      : cell('Volumen ggü. normal', p?.volRatio ? `${num(p.volRatio, 1)}×` : '–'),
   ].join('');
   const open = t.price?.fmp ? `./?q=${encodeURIComponent(t.price.fmp)}` : t.price?.cg ? `crypto.html?q=${encodeURIComponent(t.price.cg)}` : null;
 
@@ -1068,9 +1093,9 @@ function renderDetail() {
       ${r.signals.length ? `<ul class="space-y-1.5 text-sm">${r.signals.map(s => `<li class="flex gap-2"><span class="faint">•</span><span>${esc(s)}</span></li>`).join('')}</ul>` : '<p class="text-sm faint">Keine auffälligen Signale.</p>'}
     </div>
     <div>
-      <h3 class="eyebrow mb-2">Knappheit</h3>
-      <p class="text-sm ${t.scarcity ? '' : 'faint'}">${t.scarcity ? esc(t.scarcity) : 'Kein Hintergrund hinterlegt.'}</p>
-      ${t.scarcity ? '<p class="text-[11px] faint mt-1">Kuratierter Hintergrund, keine Live-Messung.</p>' : ''}
+      <h3 class="eyebrow mb-2">${t.driver ? 'Treiber' : 'Knappheit'}</h3>
+      <p class="text-sm ${t.scarcity || t.driver ? '' : 'faint'}">${esc(t.driver || t.scarcity || 'Kein Hintergrund hinterlegt.')}</p>
+      ${t.scarcity || t.driver ? '<p class="text-[11px] faint mt-1">Kuratierter Hintergrund, keine Live-Messung.</p>' : ''}
     </div>
     ${r.d.priceError ? `<p class="text-xs faint">Kurs: ${esc(r.d.priceError)}</p>` : ''}
     ${t.price?.idx ? cardBlock(r) : ''}
