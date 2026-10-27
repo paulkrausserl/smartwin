@@ -312,7 +312,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.2';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -734,6 +734,7 @@ function renderDetail() {
   const views = r.d.views || [];
   const price = r.d.price || [];
   let chart = '<p class="text-sm faint">Keine Aufrufzahlen verfügbar.</p>';
+  document.getElementById('detailBody')._scrub = null;
   if (views.length > 1) {
     const W = 1000, H = 240, pad = 8;
     const t0 = Date.parse(views[0][0]), t1 = Date.parse(views.at(-1)[0]);
@@ -743,7 +744,15 @@ function renderDetail() {
     const vPts = views.map((v, i) => [v[0], sv[i]]);
     const vLine = line(vPts, 0, Math.max(...sv));
     const pIn = price.filter(p => p[0] >= views[0][0]);
-    const pLine = pIn.length > 1 ? line(pIn.map(p => [p[0], p[1]]), Math.min(...pIn.map(p => p[1])), Math.max(...pIn.map(p => p[1]))) : '';
+    const pLo = Math.min(...pIn.map(p => p[1])), pHi = Math.max(...pIn.map(p => p[1]));
+    const pLine = pIn.length > 1 ? line(pIn.map(p => [p[0], p[1]]), pLo, pHi) : '';
+    // Daten für das Nachfahren mit dem Finger
+    const y = (v, lo, hi) => pad + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * pad), vHi = Math.max(...sv);
+    document.getElementById('detailBody')._scrub = {
+      W, H, views, sv, priceLabel: t.price?.label || '', currency: t.price?.cg ? '€' : t.price?.fmp ? '$' : '',
+      priceAt: d => { if (pIn.length < 2) return null; let hit = null; for (const q of pIn) { if (q[0] > d) break; hit = q; } return hit; },
+      yAttn: v => y(v, 0, vHi), yPrice: v => y(v, pLo, pHi),
+    };
     const attnColor = state.mode === 'clean' ? '#8a8a8a' : state.mode === 'retro' ? '#e69500' : '#5ab0f0';
     const priceColor = state.mode === 'clean' ? '#ffffff' : state.mode === 'retro' ? '#003366' : '#e7b34a';
     const baseY = pad + (1 - (r.a?.base || 0) / Math.max(...sv)) * (H - 2 * pad);
@@ -753,12 +762,19 @@ function renderDetail() {
         ${pLine ? `<span class="flex items-center gap-2"><span class="w-3 h-0.5" style="background:${priceColor}"></span>Kurs ${esc(t.price.label || '')}</span>` : ''}
         ${r.a ? `<span class="flex items-center gap-2 faint"><span class="w-3 border-t border-dashed" style="border-color:var(--muted)"></span>Normalniveau</span>` : ''}
       </div>
+      <div data-plot class="relative select-none" style="-webkit-touch-callout:none">
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full" style="height:clamp(160px, 26vw, 260px)" role="img" aria-label="Aufmerksamkeit und Kurs im letzten Jahr">
         <path d="${vLine}L${W},${H}L0,${H}Z" fill="${attnColor}" opacity=".14"/>
         <path d="${vLine}" fill="none" stroke="${attnColor}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
         ${r.a ? `<line x1="0" x2="${W}" y1="${baseY}" y2="${baseY}" stroke="var(--muted)" stroke-dasharray="5 5" stroke-width="1" vector-effect="non-scaling-stroke"/>` : ''}
         ${pLine ? `<path d="${pLine}" fill="none" stroke="${priceColor}" stroke-width="1.8" vector-effect="non-scaling-stroke"/>` : ''}
       </svg>
+      <div data-scrub-line hidden class="absolute pointer-events-none" style="top:0;bottom:0;width:1px;background:var(--muted)"></div>
+      <span data-scrub-dot="attn" hidden class="absolute w-3 h-3 rounded-full pointer-events-none" style="background:${attnColor};box-shadow:0 0 0 3px var(--panel)"></span>
+      <span data-scrub-dot="price" hidden class="absolute w-3 h-3 rounded-full pointer-events-none" style="background:${priceColor};box-shadow:0 0 0 3px var(--panel)"></span>
+      <div data-scrub-tip hidden class="absolute pointer-events-none whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs leading-tight z-10"
+           style="top:-6px;transform:translateY(-100%);background:var(--panel-2);border:1px solid var(--line-2)"></div>
+      </div>
       <div class="flex justify-between text-[11px] faint num mt-1"><span>${new Date(t0).toLocaleDateString('de-DE')}</span><span>${new Date(t1).toLocaleDateString('de-DE')}</span></div>`;
   }
 
@@ -776,7 +792,8 @@ function renderDetail() {
   ].join('');
   const open = t.price?.fmp ? `./?q=${encodeURIComponent(t.price.fmp)}` : t.price?.cg ? `crypto.html?q=${encodeURIComponent(t.price.cg)}` : null;
 
-  document.getElementById('detailBody').innerHTML = `
+  const body = document.getElementById('detailBody');
+  body.innerHTML = `
     <div class="flex flex-wrap items-center gap-3">
       ${phaseBadge(r.phase)}
       <span class="text-sm muted">${r.phase ? PHASES[r.phase].text : esc(r.d.viewsError || 'Noch keine Daten.')}</span>
@@ -894,6 +911,62 @@ function applyMode() {
   render();
 }
 
+// Im Detail-Chart mit dem Finger entlangfahren: kurz gedrückt halten, dann zeigt die Linie Aufrufe und Kurs am Tag
+function initDetailScrub() {
+  const box = document.getElementById('detailBody');
+  const HOLD_MS = 250;
+  let timer = null, active = false, start = null;
+
+  const show = clientX => {
+    const d = box._scrub, plot = box.querySelector('[data-plot]');
+    if (!d || !plot) return;
+    const rect = plot.getBoundingClientRect();
+    const i = Math.round(clamp((clientX - rect.left) / rect.width, 0, 1) * (d.views.length - 1));
+    const [date, raw] = d.views[i];
+    const t0 = Date.parse(d.views[0][0]), t1 = Date.parse(d.views.at(-1)[0]);
+    const px = ((Date.parse(date) - t0) / (t1 - t0 || 1)) * rect.width;
+    const sy = rect.height / d.H;
+    const line = plot.querySelector('[data-scrub-line]'), tip = plot.querySelector('[data-scrub-tip]');
+    const dotA = plot.querySelector('[data-scrub-dot="attn"]'), dotP = plot.querySelector('[data-scrub-dot="price"]');
+    line.hidden = dotA.hidden = tip.hidden = false;
+    line.style.left = `${px}px`;
+    dotA.style.left = `${px - 6}px`;
+    dotA.style.top = `${d.yAttn(d.sv[i]) * sy - 6}px`;
+    const p = d.priceAt(date);
+    dotP.hidden = !p;
+    if (p) { dotP.style.left = `${px - 6}px`; dotP.style.top = `${d.yPrice(p[1]) * sy - 6}px`; }
+    const day = new Date(date).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+    tip.innerHTML = `<div class="muted">${day}</div>
+      <div class="num text-[15px] font-semibold text-white mt-0.5">${num(raw, 0)} Aufrufe</div>
+      <div class="faint">Wochenschnitt ${num(d.sv[i], 0)}</div>
+      ${p ? `<div class="num mt-0.5">Kurs ${esc(d.priceLabel)}: ${p[1] < 1 ? num(p[1], 6) : f2(p[1])} ${d.currency}</div>` : ''}`;
+    tip.style.left = `${clamp(px - tip.offsetWidth / 2, 0, rect.width - tip.offsetWidth)}px`;
+  };
+  const hide = () => {
+    active = false;
+    clearTimeout(timer);
+    box.querySelectorAll('[data-scrub-line],[data-scrub-dot],[data-scrub-tip]').forEach(el => { el.hidden = true; });
+  };
+  const inPlot = e => e.target.closest?.('[data-plot]');
+
+  box.addEventListener('touchstart', e => {
+    if (!box._scrub || e.touches.length !== 1 || !inPlot(e)) return;
+    start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    clearTimeout(timer);
+    timer = setTimeout(() => { active = true; show(start.x); }, HOLD_MS);
+  }, { passive: true });
+  box.addEventListener('touchmove', e => {
+    const t = e.touches[0];
+    if (active) { e.preventDefault(); show(t.clientX); return; } // Dialog scrollt währenddessen nicht
+    if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > 10) clearTimeout(timer); // normales Wischen
+  }, { passive: false });
+  box.addEventListener('touchend', hide);
+  box.addEventListener('touchcancel', hide);
+  box.addEventListener('contextmenu', e => { if (active) e.preventDefault(); });
+  box.addEventListener('mousemove', e => { if (box._scrub && inPlot(e)) show(e.clientX); else if (!active) hide(); });
+  box.addEventListener('mouseleave', hide);
+}
+
 function initFullscreen() {
   const root = document.documentElement;
   const btn = document.getElementById('fullscreenBtn');
@@ -955,6 +1028,7 @@ function init() {
     applyMode();
   });
   initFullscreen();
+  initDetailScrub();
   applyMode();
   loadAll().catch(() => {
     document.getElementById('status').textContent = 'Keine Verbindung. In der claude.ai-Ansicht sind Live-Daten gesperrt, öffne die Seite über GitHub Pages.';
