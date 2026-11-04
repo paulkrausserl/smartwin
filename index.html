@@ -364,6 +364,7 @@
         <div id="tabs" class="tabs" role="tablist" aria-label="Details">
           <button type="button" class="tab" role="tab" data-tab="metrics" aria-selected="true">Kennzahlen</button>
           <button type="button" class="tab" role="tab" data-tab="parts" aria-selected="false">Teilbereiche</button>
+          <button type="button" class="tab" role="tab" data-tab="valuation" aria-selected="false">Bewertung</button>
           <button type="button" class="tab" role="tab" data-tab="weights" aria-selected="false">Gewichtung</button>
           <span id="tabStock" class="ml-auto pl-3 text-xs muted whitespace-nowrap num"></span>
         </div>
@@ -416,6 +417,21 @@
           </div>
               </div>
             </div>
+          </section>
+        </div>
+
+        <div data-panel="valuation" hidden>
+          <section class="card p-5 sm:p-6">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 class="eyebrow">KGV über 5 Jahre</h2>
+                <p class="text-xs faint mt-1">Kurs ÷ Gewinn je Aktie des zuletzt gemeldeten Geschäftsjahres</p>
+              </div>
+              <span id="peVerdict"></span>
+            </div>
+            <div id="peChart" class="mt-4 select-none" style="-webkit-touch-callout:none"></div>
+            <dl id="peStats" class="grid grid-cols-2 md:grid-cols-4 gap-px rounded-xl overflow-hidden mt-4" style="background:var(--line);border:1px solid var(--line)"></dl>
+            <p id="peNote" class="text-xs muted mt-3"></p>
           </section>
         </div>
 
@@ -511,7 +527,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '3.8';
+const APP_VERSION = '3.9';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -1234,6 +1250,7 @@ function render() {
   renderWeights();
   renderWatchlist(); // Ranking folgt der Gewichtung
   renderTabExtras(s, total, verdict, subs, eff);
+  if (state.tab === 'valuation') renderPe(s);
 }
 
 // Kursverlauf als schlichte Linie; Zeitraum über die Buttons darüber
@@ -1276,6 +1293,127 @@ async function loadMax(s) {
   }
   maxLoading.delete(s);
   if (state.stock === s && state.range === 'Max') renderChart(s);
+  if (state.stock === s && state.tab === 'valuation') renderPe(s);
+}
+
+/* ---------------------------------------------------------------
+   Bewertung: KGV-Verlauf über 5 Jahre
+   Tageskurs ÷ Gewinn je Aktie (verwässert) des Geschäftsjahres, das an dem Tag zuletzt gemeldet war.
+   Gewinne laden erst beim Öffnen des Tabs, 24 h zwischengespeichert.
+---------------------------------------------------------------- */
+const EPS_KEY = s => `rr:eps1:${s.ticker}`;
+// Mehrere gleichzeitige Aufrufe warten auf denselben Abruf
+function loadEps(s) {
+  if (s.eps || s.epsError) return Promise.resolve();
+  const cached = store.get(EPS_KEY(s));
+  if (cached && Date.now() - cached.t < DAY_MS) { s.eps = cached.eps; s.epsCurrency = cached.currency; return Promise.resolve(); }
+  return (s.epsLoading ||= fetchEps(s));
+}
+async function fetchEps(s) {
+  try {
+    const rows = await fmp('income-statement', { symbol: s.ticker, period: 'annual', limit: 5 });
+    // Wirksam ab dem Tag der Veröffentlichung; fehlt der, etwa 2 Monate nach Geschäftsjahresende
+    const eps = (Array.isArray(rows) ? rows : [])
+      .map(r => [r.filingDate || r.acceptedDate?.slice(0, 10) || new Date(Date.parse(r.date) + 60 * DAY_MS).toISOString().slice(0, 10), finite(r.epsDiluted ?? r.epsdiluted ?? r.eps), r.date])
+      .filter(([d, e]) => d && e != null)
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    if (!eps.length) throw fmpError('api', 'FMP liefert für diese Aktie keine Gewinne je Aktie.');
+    s.eps = eps;
+    s.epsCurrency = first(rows)?.reportedCurrency || null;
+    store.set(EPS_KEY(s), { t: Date.now(), eps, currency: s.epsCurrency });
+  } catch (e) {
+    s.epsError = e.message;
+  }
+}
+
+// Aus Kursen und Jahresgewinnen die tägliche KGV-Reihe; Tage mit Verlust fallen heraus
+function peSeries(prices, eps) {
+  const out = [];
+  let j = -1;
+  for (const [d, c] of prices) {
+    while (j + 1 < eps.length && eps[j + 1][0] <= d) j++;
+    if (j >= 0 && eps[j][1] > 0) out.push([d, c / eps[j][1], c, eps[j][1]]);
+  }
+  return out;
+}
+const quantile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(q * (sorted.length - 1))))];
+
+async function renderPe(s) {
+  const chart = document.getElementById('peChart'), statsEl = document.getElementById('peStats');
+  const note = document.getElementById('peNote'), verdictEl = document.getElementById('peVerdict');
+  const msg = text => { chart._scrub = null; chart._peKey = null; chart.innerHTML = `<p class="text-sm faint py-6">${text}</p>`; statsEl.innerHTML = ''; note.textContent = ''; verdictEl.innerHTML = ''; };
+  if (!s.live) return msg('Den KGV-Verlauf gibt es nur mit Live-Daten. Trag dafür unter „Datenquelle“ deinen FMP-Key ein.');
+  if (!s.historyMax && !s.maxError) { msg('Lade Kurse und Gewinne der letzten 5 Jahre …'); loadMax(s); }
+  if (!s.eps && !s.epsError) { msg('Lade Kurse und Gewinne der letzten 5 Jahre …'); await loadEps(s); }
+  if (state.stock !== s || state.tab !== 'valuation') return;
+  if (s.epsError) return msg(esc(s.epsError));
+  if (s.maxError) return msg(esc(s.maxError));
+  if (!s.historyMax) return; // loadMax ruft renderPe nach dem Laden erneut auf
+  if (s.epsCurrency && s.currency && s.epsCurrency !== s.currency) {
+    return msg(`Die Gewinne werden in ${esc(s.epsCurrency)} gemeldet, der Kurs ist in ${esc(s.currency)}. Ein KGV daraus wäre verzerrt.`);
+  }
+  // Schon gezeichnet (z. B. erneuter Aufruf aus render()): nicht neu aufbauen, sonst bricht das Nachfahren ab
+  const key = `${s.ticker}|${state.mode}|${s.price}|${s.historyMax.length}|${s.eps.length}`;
+  if (chart._peKey === key && chart.querySelector('[data-plot]')) return;
+  chart._peKey = key;
+  const pts = peSeries(s.historyMax, s.eps);
+  if (pts.length < 60) return msg('Zu wenige Jahre mit Gewinn für einen KGV-Verlauf. Bei Verlusten gibt es kein sinnvolles KGV.');
+
+  const vals = pts.map(p => p[1]);
+  const sorted = [...vals].sort((a, b) => a - b);
+  const med = quantile(sorted, 0.5), lo = quantile(sorted, 0.2), hi = quantile(sorted, 0.8);
+  const lastEps = s.eps.at(-1)[1];
+  const cur = lastEps > 0 ? s.price / lastEps : null;
+  const pctile = cur == null ? null : Math.round((vals.filter(v => v < cur).length / vals.length) * 100);
+
+  const W = 1000, H = 230, pad = 8;
+  const min = Math.min(...vals, cur ?? Infinity) * 0.95, max = Math.max(...vals, cur ?? 0) * 1.05;
+  const y = v => pad + (1 - (v - min) / (max - min || 1)) * (H - 2 * pad);
+  const xy = vals.map((v, i) => [(i / (vals.length - 1)) * W, y(v)]);
+  const line = xy.map(([x, yy], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${yy.toFixed(1)}`).join('');
+  const color = state.mode === 'clean' ? '#ffffff' : state.mode === 'retro' ? '#003366' : '#5ab0f0';
+  const band = state.mode === 'clean' ? 'rgba(255,255,255,.06)' : state.mode === 'retro' ? 'rgba(0,128,0,.08)' : 'rgba(62,207,142,.08)';
+  const cur$ = s.currency ? ` ${s.currency}` : '';
+  const fmtDay = d => new Date(d).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+  chart._scrub = {
+    pts, xy, W, H, color,
+    tip: i => `<div class="num text-[15px] font-semibold text-white">KGV ${num(pts[i][1], 1)}</div>
+      <div class="muted mt-0.5">${fmtDay(pts[i][0])} · Kurs ${f2(pts[i][2])}${cur$}</div>
+      <div class="faint">Gewinn je Aktie ${f2(pts[i][3])}${cur$}</div>`,
+  };
+  const [lx, ly] = xy.at(-1);
+  const fmtMonth = d => new Date(d).toLocaleDateString('de-DE', { month: 'short', year: 'numeric' });
+  chart.innerHTML = `
+    <div class="relative" data-plot>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full" style="height:clamp(160px, 26vw, 260px)" role="img" aria-label="KGV-Verlauf über 5 Jahre">
+      <rect x="0" y="${y(hi)}" width="${W}" height="${y(lo) - y(hi)}" fill="${band}"/>
+      <line x1="0" x2="${W}" y1="${y(med)}" y2="${y(med)}" stroke="var(--muted)" stroke-dasharray="5 5" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="1.7" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    </svg>
+    <span data-end class="absolute w-2 h-2 rounded-full" style="left:calc(${(lx / W) * 100}% - 4px);top:calc(${(ly / H) * 100}% - 4px);background:${color}"></span>
+    <div data-scrub-line hidden class="absolute pointer-events-none" style="top:0;bottom:0;width:1px;background:var(--muted)"></div>
+    <span data-scrub-dot hidden class="absolute w-3 h-3 rounded-full pointer-events-none" style="background:${color};box-shadow:0 0 0 3px var(--panel)"></span>
+    <div data-scrub-tip hidden class="absolute pointer-events-none whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs leading-tight z-10"
+         style="top:-6px;transform:translateY(-100%);background:var(--panel-2);border:1px solid var(--line-2)"></div>
+    </div>
+    <div class="flex justify-between text-[11px] faint num mt-1"><span>${fmtMonth(pts[0][0])}</span><span>${fmtMonth(pts.at(-1)[0])}</span></div>`;
+
+  // Unter dem üblichen Bereich (unterste 20 % der Tage) = günstig, darüber (oberste 20 %) = teuer
+  const [vText, vColor] = cur == null ? ['Verlust im letzten Jahr', 'var(--muted)']
+    : cur < lo ? ['Historisch günstig', state.mode === 'clean' ? '#ffffff' : 'var(--up)']
+    : cur > hi ? ['Historisch teuer', state.mode === 'clean' ? '#ffffff' : 'var(--down)']
+    : ['Im normalen Bereich', state.mode === 'clean' ? '#b0b0b0' : state.mode === 'retro' ? '#9a7d00' : '#f2c46d'];
+  verdictEl.innerHTML = `<span class="inline-flex text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md whitespace-nowrap" style="color:${vColor};border:1px solid currentColor">${vText}</span>`;
+  const cell = (label, value) => `<div class="px-4 py-3" style="background:var(--panel)"><dt class="eyebrow">${label}</dt><dd class="num text-[15px] mt-1">${value}</dd></div>`;
+  statsEl.innerHTML = [
+    cell('KGV heute', cur == null ? '–' : num(cur, 1)),
+    cell('Median 5 J.', num(med, 1)),
+    cell('Üblicher Bereich', `${num(lo, 1)} – ${num(hi, 1)}`),
+    cell('Teurer als', pctile == null ? '–' : `${pctile} % der Tage`),
+  ].join('');
+  const growth = s.eps.length >= 2 && s.eps[0][1] > 0 ? (Math.pow(lastEps / s.eps[0][1], 1 / (s.eps.length - 1)) - 1) * 100 : null;
+  note.innerHTML = `Grüner Bereich = mittlere 60 % aller Tage, gestrichelt = Median. Mit dem Finger nachfahren zeigt KGV, Kurs und Gewinn am Tag.
+    ${growth != null ? `<br>Gewinn je Aktie ${growth >= 0 ? 'wuchs' : 'schrumpfte'} zuletzt um ${num(Math.abs(growth), 1)} % pro Jahr. Ein niedriges KGV ist nur günstig, wenn der Gewinn nicht wegbricht.` : ''}`;
 }
 
 const RANGES = [['1M', 22], ['3M', 64], ['6M', 128], ['1J', 260], ['Max', Infinity]];
@@ -1333,8 +1471,8 @@ function renderChart(s) {
 
 // Mit dem Finger über den Chart fahren: kurz gedrückt halten, dann zeigt die Linie Kurs und Datum.
 // Mit der Maus reicht Darüberfahren. Ein schneller Wisch scrollt weiter normal.
-function initScrub() {
-  const box = document.getElementById('priceChart');
+function initScrub(boxId = 'priceChart') {
+  const box = document.getElementById(boxId);
   const HOLD_MS = 250;
   let timer = null, active = false, start = null;
 
@@ -1349,7 +1487,16 @@ function initScrub() {
     const px = (x / d.W) * rect.width, py = (y / d.H) * rect.height;
     const line = plot.querySelector('[data-scrub-line]'), dot = plot.querySelector('[data-scrub-dot]'), tip = plot.querySelector('[data-scrub-tip]');
     line.hidden = dot.hidden = tip.hidden = false;
-    plot.querySelector('[data-end]').hidden = true;
+    const end = plot.querySelector('[data-end]');
+    if (end) end.hidden = true;
+    if (d.tip) {
+      tip.innerHTML = d.tip(i);
+      line.style.left = `${px}px`;
+      dot.style.left = `${px - 6}px`;
+      dot.style.top = `${py - 6}px`;
+      tip.style.left = `${clamp(px - tip.offsetWidth / 2, 0, rect.width - tip.offsetWidth)}px`;
+      return;
+    }
     line.style.left = `${px}px`;
     dot.style.left = `${px - 6}px`;
     dot.style.top = `${py - 6}px`;
@@ -1558,6 +1705,7 @@ function setTab(tab) {
   document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
   document.querySelectorAll('[data-panel]').forEach(el => { el.hidden = el.dataset.panel !== tab; });
   if (tab === 'parts') radar?.resize(); // war versteckt, kennt seine Größe noch nicht
+  if (tab === 'valuation' && state.stock) renderPe(state.stock);
 }
 
 // Name und Score im Tab-Balken, damit man in jedem Tab weiß, worum es geht; dazu die Gewichtungs-Vorschau
@@ -1585,7 +1733,7 @@ function initTabs() {
     if (tab) setTab(tab);
   });
   const saved = store.get('rr:tab');
-  setTab(['metrics', 'parts', 'weights'].includes(saved) ? saved : 'metrics');
+  setTab(['metrics', 'parts', 'valuation', 'weights'].includes(saved) ? saved : 'metrics');
 }
 
 /* ---------------------------------------------------------------
@@ -1706,6 +1854,7 @@ function init() {
 
   initFullscreen();
   initScrub();
+  initScrub('peChart');
   initCriteria();
   // Aufruf aus dem Radar: ?q=Ticker bzw. CoinGecko-ID
   const q = new URLSearchParams(location.search).get('q');
@@ -1779,7 +1928,7 @@ function renderWarnings(s) {
 ---------------------------------------------------------------- */
 const MAX_COMPARE = 4;
 const stockId = s => (s.live ? 'L:' : s.simulated ? 'S:' : 'D:') + (s.simulated ? s.name : s.ticker);
-const snapshot = s => JSON.parse(JSON.stringify(s, (k, v) => (['historyMax', 'maxNote', 'maxError'].includes(k) ? undefined : v)));
+const snapshot = s => JSON.parse(JSON.stringify(s, (k, v) => (['historyMax', 'maxNote', 'maxError', 'eps', 'epsError', 'epsLoading'].includes(k) ? undefined : v)));
 const isWatched = s => state.watch.some(e => e.id === stockId(s));
 const saveWatch = () => store.set('rr:watch', state.watch);
 
