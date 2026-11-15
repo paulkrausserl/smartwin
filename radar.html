@@ -12,12 +12,12 @@
   <title>SmartWin Radar</title>
   <script>
     // Gewählten Modus vor dem ersten Zeichnen setzen
-    try { const m = JSON.parse(localStorage.getItem('rr:mode')); if (m === 'clean' || m === 'retro') document.documentElement.dataset.mode = m; } catch { /* egal */ }
+    try { const m = JSON.parse(localStorage.getItem('rr:mode')); document.documentElement.dataset.mode = m === 'clean' || m === 'retro' ? m : 'warm'; } catch { document.documentElement.dataset.mode = 'warm'; }
   </script>
   <script src="https://cdn.tailwindcss.com/3.4.5"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet" />
   <script>
     tailwind.config = {
       theme: {
@@ -86,6 +86,60 @@
     input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
                         background: var(--text); border: 4px solid var(--c); cursor: pointer; }
     input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 4px solid var(--c); cursor: pointer; }
+
+    /* Standard-Design „Warm & ruhig“ (Konzept C): Creme, Serifenschrift für Namen und große Zahlen,
+       Dunkelgrün als Akzent, Terrakotta für Hervorhebungen. Als eigener Farbsatz, damit Clean und Retro unberührt bleiben. */
+    :root[data-mode="warm"] {
+      --bg: #f3eee5; --panel: #fffdf8; --panel-2: #f8f3ea; --line: #ebe4d8; --line-2: #ddd4c4;
+      --text: #2b2722; --muted: #6f665b; --faint: #9a9083; --accent: #2f5d50; --accent-ink: #fffdf8; --up: #2f6b4f; --down: #c2410c;
+      color-scheme: light;
+    }
+    [data-mode="warm"] body { background: var(--bg); font-family: Inter, -apple-system, 'Segoe UI', system-ui, sans-serif; }
+    [data-mode="warm"] .num { font-family: Inter, -apple-system, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+    [data-mode="warm"] .serif, [data-mode="warm"] h1, [data-mode="warm"] #stockName, [data-mode="warm"] #stockPrice,
+    [data-mode="warm"] #totalScore, [data-mode="warm"] .simple-score, [data-mode="warm"] dialog h2 {
+      font-family: Fraunces, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif; font-weight: 600; letter-spacing: -.01em; }
+    [data-mode="warm"] .text-white { color: var(--text) !important; }
+    [data-mode="warm"] .hover\:text-white:hover { color: var(--accent) !important; }
+    [data-mode="warm"] .text-amber-300 { color: #b45309 !important; }
+    [data-mode="warm"] header .text-white { font: 600 21px Fraunces, Georgia, serif !important; }
+    [data-mode="warm"] header .logo { background: var(--accent) !important; color: #fffdf8 !important; border-radius: 12px; }
+    [data-mode="warm"] .card { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 1px 2px rgba(43, 39, 34, .03); }
+    [data-mode="warm"] .inset { background: var(--panel-2); border-color: var(--line); border-radius: 16px; }
+    [data-mode="warm"] .eyebrow { color: #8a8173; letter-spacing: .07em; font-weight: 600; }
+    [data-mode="warm"] .btn { background: var(--panel); border-color: var(--line-2); border-radius: 999px; color: var(--text); }
+    [data-mode="warm"] .btn:hover { background: #f1eadf; border-color: #cfc5b3; }
+    [data-mode="warm"] .btn-primary { background: var(--accent); border-color: var(--accent); color: #fffdf8; }
+    [data-mode="warm"] .btn-primary:hover { background: #264d42; border-color: #264d42; }
+    [data-mode="warm"] .field { background: var(--panel); border-color: var(--line-2); border-radius: 14px; color: var(--text); }
+    [data-mode="warm"] .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47, 93, 80, .15); }
+    [data-mode="warm"] .chip { border-color: #e3dbcd; color: #6b6358; }
+    [data-mode="warm"] .chip:hover { color: var(--text); border-color: #cfc5b3; }
+    [data-mode="warm"] .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fffdf8; }
+    [data-mode="warm"] .seg { border: 0; padding: 0; gap: 1.1rem; }
+    [data-mode="warm"] .seg-item { padding: .35rem 0; border-radius: 0; color: #7a7166; font-weight: 500; border-bottom: 2px solid transparent; }
+    [data-mode="warm"] .seg-item:hover { color: var(--text); }
+    [data-mode="warm"] .seg-item[aria-current="page"] { background: transparent; color: var(--text); border-bottom-color: #c2410c; font-weight: 600; }
+    [data-mode="warm"] .tabs { background: var(--bg); border-color: var(--line); }
+    [data-mode="warm"] .tab[aria-selected="true"] { border-color: #c2410c; }
+    [data-mode="warm"] .wrow:hover, [data-mode="warm"] .metric > summary:hover { background: var(--panel-2); }
+    [data-mode="warm"] tbody tr:hover { background: var(--panel-2); }
+    [data-mode="warm"] dialog::backdrop { background: rgba(43, 39, 34, .35); }
+    [data-mode="warm"] #appVersion { background: var(--panel) !important; border-color: var(--line-2) !important; color: var(--muted); }
+    [data-mode="warm"] #loadError { background: #fdf0ea !important; border-color: #f0c4b3 !important; color: #9a3412 !important; }
+    [data-mode="warm"] input[type=range]::-webkit-slider-thumb { background: var(--panel); }
+    /* Gesamtscore als dunkelgrüne Karte mit großer Zahl (statt Ring) */
+    [data-mode="warm"] .score-card { background: #2f5d50; border-color: #2f5d50;
+      --text: #fffdf8; --muted: #cfe0d8; --faint: #a9c4b9; --line: rgba(255, 255, 255, .14); --line-2: rgba(255, 255, 255, .22); color: var(--text); }
+    [data-mode="warm"] .score-card .eyebrow { color: #cfe0d8; }
+    [data-mode="warm"] .score-card .gauge-box { width: auto; height: auto; margin: 1rem 0 .5rem; }
+    [data-mode="warm"] .score-card .gauge-box svg { display: none; }
+    [data-mode="warm"] .score-card .gauge-center { position: static; }
+    [data-mode="warm"] .score-card #totalScore { font-size: 88px; line-height: 1; color: #fffdf8 !important; }
+    [data-mode="warm"] .score-card #verdict { background: transparent !important; color: #fffdf8 !important; font: 500 20px Fraunces, Georgia, serif;
+      text-transform: none; letter-spacing: 0; padding: 0; margin-top: .4rem; }
+    [data-mode="warm"] .score-card #scaleMarker { background: #fffdf8 !important; box-shadow: 0 0 0 2px #2f5d50 !important; }
+    [data-mode="warm"] .score-card .bar-fill { background: #f4c27a !important; }
 
     /* Clean-Modus: reines Schwarz, keine Flächen, nur Haarlinien und Graustufen */
     :root[data-mode="clean"] {
@@ -327,7 +381,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '4.9';
+const APP_VERSION = '5.0';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -790,7 +844,7 @@ const PHASES = {
   early:   { label: 'Früh',       color: '#3ecf8e', text: 'Aufmerksamkeit steigt seit Wochen deutlich, der Preis hat noch kaum reagiert.' },
   mainstream: { label: 'Etabliert', color: '#7aa2f7', text: 'Längst bekannt, gerade mehr Interesse als sonst. Eher News als Frühsignal.' },
   seasonal: { label: 'Saisonal',  color: '#b48cf2', text: 'Mehr Interesse als sonst, aber nicht mehr als zur gleichen Zeit im Vorjahr. Kein Frühsignal.' },
-  running: { label: 'Läuft',      color: '#f2c46d', text: 'Aufmerksamkeit und Preis steigen gemeinsam.' },
+  running: { label: 'Läuft',      color: '#b45309', text: 'Aufmerksamkeit und Preis steigen gemeinsam.' },
   hot:     { label: 'Überhitzt',  color: '#f06363', text: 'Preis ist stark gestiegen, die Aufmerksamkeit lässt schon nach.' },
   cooling: { label: 'Abkühlend',  color: '#8e9aab', text: 'Aufmerksamkeit unter Normalniveau, Preis ohne Schwung.' },
   calm:    { label: 'Ruhig',      color: '#5f6b7c', text: 'Nichts Auffälliges.' },
@@ -988,8 +1042,9 @@ async function loadAll(force = false) {
 const RETRO_SCORE = s => (s >= 65 ? '#008000' : s >= 50 ? '#9a7d00' : s >= 35 ? '#d2691e' : '#cc0000');
 const MODES = ['standard', 'clean', 'retro'];
 const MODE_LABEL = { standard: 'Standard', clean: 'Clean', retro: 'Retro' };
-const phaseColor = ph => state.mode === 'retro' ? ({ early: '#008000', mainstream: '#003366', seasonal: '#6a3d9a', running: '#9a7d00', hot: '#cc0000', cooling: '#666666', calm: '#999999' }[ph]) : state.mode === 'clean' ? ({ early: '#fff', mainstream: '#b0b0b0', seasonal: '#9a9a9a', running: '#d0d0d0', hot: '#fff', cooling: '#8a8a8a', calm: '#5c5c5c' }[ph]) : PHASES[ph].color;
-const scoreColor = s => state.mode === 'retro' ? RETRO_SCORE(clamp(s)) : state.mode === 'clean' ? `hsl(0, 0%, ${Math.round(38 + clamp(s) * 0.62)}%)` : `hsl(${clamp(s) * 1.3}, 62%, 52%)`;
+const WARM_PHASE = { early: '#2f6b4f', mainstream: '#3b5b8c', seasonal: '#7c5c9e', running: '#b7791f', hot: '#c2410c', cooling: '#8a8173', calm: '#a39a8c' };
+const phaseColor = ph => state.mode === 'retro' ? ({ early: '#008000', mainstream: '#003366', seasonal: '#6a3d9a', running: '#9a7d00', hot: '#cc0000', cooling: '#666666', calm: '#999999' }[ph]) : state.mode === 'clean' ? ({ early: '#fff', mainstream: '#b0b0b0', seasonal: '#9a9a9a', running: '#d0d0d0', hot: '#fff', cooling: '#8a8a8a', calm: '#5c5c5c' }[ph]) : WARM_PHASE[ph];
+const scoreColor = s => state.mode === 'retro' ? RETRO_SCORE(clamp(s)) : state.mode === 'clean' ? `hsl(0, 0%, ${Math.round(38 + clamp(s) * 0.62)}%)` : `hsl(${clamp(s) * 1.3}, 50%, 38%)`;
 function phaseBadge(ph) {
   if (!ph) return '<span class="faint text-xs">–</span>';
   const c = phaseColor(ph);
@@ -1127,7 +1182,7 @@ function render() {
         <tbody>${list.map(r => `
           <tr data-open="${esc(r.t.id)}" class="cursor-pointer hover:bg-white/[.02]" style="border-top:1px solid var(--line)">
             <td class="py-2.5 px-1 max-w-[220px]">
-              <span class="block truncate text-white">${state.fav.has(r.t.id) ? '<span style="color:#f2c46d" aria-label="Favorit">★</span> ' : ''}${esc(r.t.name)}</span>
+              <span class="block truncate text-white">${state.fav.has(r.t.id) ? '<span style="color:#b45309" aria-label="Favorit">★</span> ' : ''}${esc(r.t.name)}</span>
               <span class="block text-[11px] faint truncate">${esc(r.t.group)}${r.t.price ? ` · ${esc(r.t.price.label || r.t.price.fmp || r.t.price.cg)}` : ''}${r.t.scarcity ? ' · knapp' : ''}</span>
             </td>
             <td class="py-2.5 px-1 whitespace-nowrap">${r.d.viewsError && !r.a ? `<span class="text-[11px] faint">${esc(r.d.viewsError)}</span>` : phaseBadge(r.phase)}${isNew(r) ? ' <span class="text-[10px] font-semibold uppercase" style="color:var(--accent)">neu</span>' : ''}</td>
@@ -1343,9 +1398,9 @@ function renderDetail() {
       yAttn: v => y(v, 0, vHi), yPrice: v => y(v, pLo, pHi), yNews: v => y(v, 0, nHi),
       newsAt: d => { let hit = null; nIn.forEach((n, i) => { if (n[0] <= d) hit = [n[0], n[1], sn[i]]; }); return nLine ? hit : null; },
     };
-    const attnColor = state.mode === 'clean' ? '#8a8a8a' : state.mode === 'retro' ? '#e69500' : '#5ab0f0';
-    const priceColor = state.mode === 'clean' ? '#ffffff' : state.mode === 'retro' ? '#003366' : '#e7b34a';
-    const newsColor = state.mode === 'clean' ? '#5c5c5c' : state.mode === 'retro' ? '#008000' : '#b48cf2';
+    const attnColor = state.mode === 'clean' ? '#8a8a8a' : state.mode === 'retro' ? '#e69500' : '#2f5d50';
+    const priceColor = state.mode === 'clean' ? '#ffffff' : state.mode === 'retro' ? '#003366' : '#c2410c';
+    const newsColor = state.mode === 'clean' ? '#5c5c5c' : state.mode === 'retro' ? '#008000' : '#7c5c9e';
     const baseY = pad + (1 - (r.a?.base || 0) / Math.max(...sv)) * (H - 2 * pad);
     chart = `
       <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs mb-2">
@@ -1990,7 +2045,7 @@ function renderHelp() {
 ---------------------------------------------------------------- */
 function applyMode() {
   if (!MODES.includes(state.mode)) state.mode = 'standard';
-  document.documentElement.dataset.mode = state.mode === 'standard' ? '' : state.mode;
+  document.documentElement.dataset.mode = state.mode === 'standard' ? 'warm' : state.mode;
   document.getElementById('modeLabel').textContent = MODE_LABEL[MODES[(MODES.indexOf(state.mode) + 1) % MODES.length]];
   document.getElementById('modeBtn').setAttribute('aria-pressed', String(state.mode !== 'standard'));
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', { standard: '#0a0d13', clean: '#000000', retro: '#003366' }[state.mode]);
