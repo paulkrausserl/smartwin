@@ -24,7 +24,7 @@ const html = await readFile('radar.html', 'utf8');
 const THEMES = Function(`return ${html.match(/const THEMES = (\[[\s\S]*?\n\]);/)[1]}`)();
 const prev = await readFile(OUT, 'utf8').then(JSON.parse).catch(() => ({}));
 const out = { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [],
-  fred: {}, cot: {}, defi: {}, sentiment: {}, apps: {}, discover: {} };
+  fred: {}, cot: {}, defi: {}, sentiment: {}, apps: {}, discover: {}, perps: {}, market: {}, fx: {}, poly: {}, so: {} };
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 // wie in radar.html
@@ -611,10 +611,125 @@ async function collectDiscover() {
   log(`Neu aufgetaucht: ${d.google.length} Google, ${d.github.length} GitHub, ${d.hf.length} Hugging Face`);
 }
 
+/* --- Hebel und Spekulation bei Krypto (Hyperliquid, öffentliche Schnittstelle ohne Key):
+   Funding-Rate (wie viel Long-Positionen den Shorts zahlen, aufs Jahr gerechnet) und offene Positionen in Dollar.
+   Hohe positive Funding-Rate = viel Hebel auf steigende Kurse, oft überhitzt. Verlauf der offenen Positionen wird täglich gesammelt. --- */
+async function collectPerps() {
+  try {
+    const res = await fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': UA }, body: JSON.stringify({ type: 'metaAndAssetCtxs' }), signal: AbortSignal.timeout(30000) });
+    if (!res.ok) throw new Error(`Hyperliquid antwortet mit ${res.status}`);
+    const [meta, ctxs] = await res.json();
+    const byCoin = Object.fromEntries(meta.universe.map((u, i) => [u.name, ctxs[i]]));
+    for (const t of THEMES.filter(x => x.perp)) {
+      const c = byCoin[t.perp];
+      if (!c) continue;
+      const funding = round(Number(c.funding) * 24 * 365 * 100, 1), oiUsd = Math.round(Number(c.openInterest) * Number(c.markPx));
+      const hist = (prev.perps?.[t.id]?.hist || []).filter(h => h[0] !== today);
+      hist.push([today, oiUsd, funding]);
+      out.perps[t.id] = { coin: t.perp, funding, oiUsd, vol24: Math.round(Number(c.dayNtlVlm)), hist: hist.slice(-180) };
+    }
+  } catch (e) { log(`Hyperliquid: ${e.message}`); out.perps = prev.perps || {}; }
+  log(`Hebel (Hyperliquid) fertig (${Object.keys(out.perps).length})`);
+}
+
+/* --- Marktweite Kennzahlen: Stablecoin-Geldmenge (DefiLlama), Bitcoin-Transaktionen (blockchain.com),
+   VIX und Kreditrisiko-Aufschlag für Hochzinsanleihen (FRED). Je eine Tagesreihe über gut ein Jahr. --- */
+async function fredSeries(id) {
+  const csv = await get(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}`, { text: true, headers: { Accept: 'text/csv' } });
+  return csv.trim().split('\n').slice(1).map(l => l.split(',')).filter(([d, v]) => d && v && v !== '.').map(([d, v]) => [d, Number(v)]);
+}
+async function collectMarket() {
+  const put = (key, pts) => { pts = pts.filter(([d]) => d < today).slice(-400); if (pts.length > 30) out.market[key] = { d: pts.map(p => p[0]), v: pts.map(p => round(p[1], 2)) }; };
+  const jobs = {
+    stablecoins: async () => (await get('https://stablecoins.llama.fi/stablecoincharts/all')).map(x => [ymd(new Date(Number(x.date) * 1000)), x.totalCirculatingUSD?.peggedUSD || 0]),
+    btcTx: async () => ((await get('https://api.blockchain.info/charts/n-transactions?timespan=1year&format=json&sampled=false')).values || []).map(x => [ymd(new Date(x.x * 1000)), x.y]),
+    vix: () => fredSeries('VIXCLS'),
+    hy: () => fredSeries('BAMLH0A0HYM2'),
+  };
+  for (const [key, fn] of Object.entries(jobs)) {
+    try { put(key, await fn()); } catch (e) { log(`Markt ${key}: ${e.message}`); }
+    if (!out.market[key] && prev.market?.[key]) out.market[key] = { ...prev.market[key], stale: true };
+  }
+  log(`Markt fertig (${Object.keys(out.market).join(', ')})`);
+}
+
+/* --- Währungen der Länder gegen den Dollar (EZB-Kurse über Frankfurter, Taiwan-Dollar über FRED):
+   Eine starke Währung zeigt, dass Geld ins Land fließt. Gespeichert: Einheiten der Landeswährung je Dollar. --- */
+async function collectFx() {
+  const countries = THEMES.filter(t => t.ccy);
+  const ecb = countries.filter(t => t.ccy !== 'TWD').map(t => t.ccy);
+  try {
+    const body = await get(`https://api.frankfurter.app/${ymd(new Date(Date.now() - 400 * DAY_MS))}..?base=USD&symbols=${ecb.join(',')}`);
+    const days = Object.keys(body.rates || {}).sort();
+    for (const t of countries.filter(x => x.ccy !== 'TWD')) {
+      const pts = days.map(d => [d, body.rates[d][t.ccy]]).filter(([, v]) => v);
+      if (pts.length > 30) out.fx[t.id] = { ccy: t.ccy, d: pts.map(p => p[0]), v: pts.map(p => round(p[1], 4)) };
+    }
+  } catch (e) { log(`Frankfurter: ${e.message}`); }
+  try {
+    const t = countries.find(x => x.ccy === 'TWD');
+    if (t) { const pts = (await fredSeries('DEXTAUS')).slice(-280); if (pts.length > 30) out.fx[t.id] = { ccy: 'TWD', d: pts.map(p => p[0]), v: pts.map(p => round(p[1], 4)) }; }
+  } catch (e) { log(`FRED TWD: ${e.message}`); }
+  for (const t of countries) if (!out.fx[t.id] && prev.fx?.[t.id]) out.fx[t.id] = { ...prev.fx[t.id], stale: true };
+  log(`Währungen fertig (${Object.keys(out.fx).length})`);
+}
+
+/* --- Polymarket (Prognosemärkte, ohne Key): Wie viel Geld gerade auf Ereignisse rund um ein Thema gewettet wird.
+   Ein Abruf für die 500 aktivsten Märkte, dann Zuordnung über Suchbegriffe. Volumen-Verlauf wird täglich gesammelt. --- */
+async function collectPoly() {
+  try {
+    const events = await get('https://gamma-api.polymarket.com/events?active=true&closed=false&limit=500&order=volume24hr&ascending=false');
+    const list = (Array.isArray(events) ? events : []).map(e => ({ title: e.title || '', vol24: Number(e.volume24hr) || 0, vol: Number(e.volume) || 0, slug: e.slug }));
+    out.discover.poly = list.slice(0, 10).map(e => ({ title: e.title, vol24: Math.round(e.vol24), slug: e.slug }));
+    for (const t of THEMES) {
+      const words = [...new Set([trendsFor(t), t.tag, t.wiki].filter(Boolean).map(w => w.toLowerCase()).filter(w => w.length >= 3))];
+      const hits = list.filter(e => words.some(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(e.title)));
+      const hist = (prev.poly?.[t.id]?.hist || []).filter(h => h[0] !== today);
+      if (hits.length) hist.push([today, Math.round(hits.reduce((a, e) => a + e.vol24, 0))]);
+      if (hits.length || hist.length) out.poly[t.id] = { n: hits.length, vol24: Math.round(hits.reduce((a, e) => a + e.vol24, 0)), top: hits.slice(0, 3).map(e => ({ title: e.title, vol24: Math.round(e.vol24), slug: e.slug })), hist: hist.slice(-180) };
+    }
+  } catch (e) { log(`Polymarket: ${e.message}`); out.poly = prev.poly || {}; out.discover.poly = prev.discover?.poly || []; }
+  log(`Polymarket fertig (${Object.keys(out.poly).length} Themen mit Wetten)`);
+}
+
+/* --- Stack Overflow (Stack Exchange API, ohne Key): Anteil der Fragen mit dem Tag eines Tech-Themas.
+   Als Anteil an allen Fragen, weil Stack Overflow insgesamt schrumpft. --- */
+async function soCount(tag, from, to) {
+  const url = new URL('https://api.stackexchange.com/2.3/questions');
+  Object.entries({ fromdate: Math.floor(from / 1000), todate: Math.floor(to / 1000), site: 'stackoverflow', filter: 'total', ...(tag ? { tagged: tag } : {}) }).forEach(([k, v]) => url.searchParams.set(k, v));
+  return (await get(url)).total ?? NaN;
+}
+async function collectSo() {
+  const now = Date.now(), r = [now - 30 * DAY_MS, now], b = [now - 210 * DAY_MS, now - 31 * DAY_MS];
+  try {
+    const allNow = await soCount(null, ...r), allBefore = await soCount(null, ...b);
+    for (const t of THEMES.filter(x => x.so)) {
+      try {
+        const n = await soCount(t.so, ...r), m = await soCount(t.so, ...b);
+        if (![n, m, allNow, allBefore].every(Number.isFinite)) throw new Error('keine Zahl');
+        // Fragen pro Monat und Anteil an allen Fragen (in Promille)
+        out.so[t.id] = { tag: t.so, now: n, base: round(m / 6, 1), shareNow: round((n / allNow) * 1000, 3), shareBase: round((m / allBefore) * 1000, 3) };
+      } catch (e) { log(`Stack Overflow ${t.so}: ${e.message}`); }
+      await sleep(500);
+    }
+  } catch (e) { log(`Stack Overflow: ${e.message}`); }
+  for (const t of THEMES.filter(x => x.so)) if (!out.so[t.id] && prev.so?.[t.id]) out.so[t.id] = { ...prev.so[t.id], stale: true };
+  log(`Stack Overflow fertig (${Object.keys(out.so).length})`);
+}
+
+/* --- Bluesky: öffentliche Trend-Themen (für „Neu aufgetaucht“; die Suche selbst braucht eine Anmeldung) --- */
+async function collectBskyTrends() {
+  try {
+    const body = await get('https://public.api.bsky.app/xrpc/app.bsky.unspecced.getTrendingTopics?limit=15');
+    out.discover.bsky = (body.topics || []).map(x => ({ title: x.displayName || x.topic })).filter(x => x.title).slice(0, 12);
+  } catch (e) { log(`Bluesky-Trends: ${e.message}`); out.discover.bsky = prev.discover?.bsky || []; }
+}
+
 await Promise.all([
   collectWiki(), collectNews(), collectTrends(), collectHn(), collectMasto(), collectGnews(), collectGithub(), collectArxiv(), collectSec(), collectDev(),
   (async () => { await collectPokemon(); await collectMtg(); await collectYugioh(); await collectMacro(); await collectTrendingCoins(); })(),
-  (async () => { await collectFred(); await collectCot(); await collectDefi(); await collectSentiment(); await collectApps(); await collectDiscover(); })(),
+  (async () => { await collectFred(); await collectCot(); await collectDefi(); await collectSentiment(); await collectApps(); await collectDiscover(); await collectPoly(); await collectBskyTrends(); })(),
+  (async () => { await collectPerps(); await collectMarket(); await collectFx(); await collectSo(); })(),
 ]);
 
 /* --- Aufmerksamkeits-Index je Thema und Tag: geometrisches Mittel aller verfügbaren Quellen-Verhältnisse
@@ -631,10 +746,11 @@ const ratios = x => {
   if (x.arxiv && !x.arxiv.error && x.arxiv.base >= 3) r.push((x.arxiv.now + 1) / (x.arxiv.base + 1));
   if (x.sec && !x.sec.error && x.sec.base >= 3) r.push((x.sec.now + 1) / (x.sec.base + 1));
   if (x.dev && !x.dev.error && x.dev.base > 0) r.push(x.dev.now / x.dev.base);
+  if (x.so?.shareBase > 0 && x.so.base >= 5) r.push(x.so.shareNow / x.so.shareBase);
   return r;
 };
 for (const t of THEMES) {
-  const r = ratios(out.themes[t.id] || {});
+  const r = ratios({ ...(out.themes[t.id] || {}), so: out.so[t.id] });
   const hist = (prev.history?.[t.id] || []).filter(p => p[0] !== today);
   if (r.length) hist.push([today, round(Math.exp(mean(r.map(Math.log))), 3), r.length]);
   out.history[t.id] = hist.slice(-180);
@@ -643,7 +759,8 @@ for (const t of THEMES) {
 const count = src => Object.values(out.themes).filter(x => x[src] && !x[src].error).length;
 out.summary = Object.fromEntries(['wiki', 'langs', 'news', 'gnews', 'trends', 'hn', 'masto', 'github', 'arxiv', 'sec', 'dev'].map(s => [s, count(s)]));
 Object.assign(out.summary, { fred: Object.keys(out.fred).length, cot: Object.keys(out.cot).length, defi: Object.keys(out.defi).length,
-  sentiment: Object.keys(out.sentiment).length, discover: (out.discover.google?.length || 0) + (out.discover.github?.length || 0) + (out.discover.hf?.length || 0) });
+  sentiment: Object.keys(out.sentiment).length, perps: Object.keys(out.perps).length, market: Object.keys(out.market).length,
+  fx: Object.keys(out.fx).length, poly: Object.keys(out.poly).length, so: Object.keys(out.so).length, discover: (out.discover.google?.length || 0) + (out.discover.github?.length || 0) + (out.discover.hf?.length || 0) });
 log('Ergebnis', JSON.stringify(out.summary), 'Karten:', Object.keys(out.cards).join(', ') || 'keine');
 await mkdir('data', { recursive: true });
 await writeFile(OUT, JSON.stringify(out));
