@@ -260,6 +260,9 @@
     </section>
 
     <!-- Eigenes Thema -->
+    <!-- Rückblick: Trefferquote der Frühsignale -->
+    <details id="backtest" hidden class="raw card p-4 sm:p-5 mb-6"></details>
+
     <details id="addPanel" class="raw card p-4 sm:p-5 mb-6">
       <summary class="flex items-center justify-between gap-3">
         <h2 class="eyebrow">Eigenes Thema hinzufügen</h2>
@@ -324,7 +327,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '4.8';
+const APP_VERSION = '4.9';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -611,7 +614,11 @@ function fromCollected(src, c) {
   if (!c || c.error) return null;
   const t = Date.parse(state.collected.updated);
   if (src === 'news') return { t, series: c.d.map((d, i) => [d, c.v[i], c.p[i]]) };
-  if (src === 'trends') return { t, series: c.d.map((d, i) => [d, c.v[i]]), kw: c.kw, rising: c.rising || null, risingAt: c.risingAt || null };
+  if (src === 'trends') {
+    // neues Format: nur erstes Datum, danach wöchentlich
+    const d = c.d || c.v.map((_, i) => ymd(new Date(Date.parse(c.start) + i * 7 * DAY_MS)));
+    return { t, series: d.map((x, i) => [x, c.v[i]]), kw: c.kw, rising: c.rising || null, risingAt: c.risingAt || null };
+  }
   if (src === 'hn') return { t, hn: { kw: c.kw, now: c.now, base: c.base } };
   if (src === 'masto') return { t, hist: c.hist };
   if (['gnews', 'langs', 'github', 'arxiv', 'sec', 'dev', 'edits', 'fedreg', 'trials', 'manifold'].includes(src)) return { t, data: c };
@@ -1012,19 +1019,6 @@ function srcSummary(r) {
   const c = v => (state.mode === 'clean' ? 'var(--text)' : v);
   return `<span class="num text-xs whitespace-nowrap" title="${esc(list).replace(/&amp;#10;/g, '&#10;')}"><span style="color:${up.length ? c('var(--up)') : 'var(--faint)'}">${up.length}↑</span> <span style="color:${down.length ? c('var(--down)') : 'var(--faint)'}">${down.length}↓</span> <span class="faint">/ ${items.length}</span></span>`;
 }
-// Kleine Buchstaben je Quelle, gefärbt nach Richtung
-function srcDots(r) {
-  const items = [['W', 'wiki', r.a], ['S', 'langs', r.ext.langs], ['G', 'trends', r.ext.trends], ['N', 'news', r.ext.news], ['H', 'hn', r.ext.hn], ['M', 'masto', r.ext.masto],
-    ...(TECH(r.t) ? [['C', 'github', r.ext.github]] : []), ...(r.t.group === 'Technologie' ? [['F', 'arxiv', r.ext.arxiv]] : []),
-    ...(r.t.group !== 'Länder' ? [['U', 'sec', r.ext.sec]] : []), ...(r.t.dev ? [['D', 'dev', r.ext.dev]] : []),
-    ...(r.t.so ? [['Q', 'so', r.ext.so]] : []), ...(r.ext.poly ? [['P', 'poly', r.ext.poly]] : [])];
-  return items.map(([l, k, x]) => {
-    const ratio = x?.ratio;
-    const color = ratio == null ? 'var(--faint)' : ratio >= 1.3 ? (state.mode === 'clean' ? 'var(--text)' : 'var(--up)') : ratio < 0.8 ? (state.mode === 'clean' ? 'var(--muted)' : 'var(--down)') : 'var(--muted)';
-    const tip = ratio == null ? `${SRC_NAMES[k]}: keine Daten` : `${SRC_NAMES[k]}: ${pctTxt((ratio - 1) * 100)} ggü. normal`;
-    return `<span class="num text-[11px] font-semibold px-[3px]" style="color:${color};opacity:${ratio == null ? 0.35 : 1}" title="${tip}">${l}</span>`;
-  }).join('');
-}
 const upDown = v => (!has(v) ? 'var(--faint)' : state.mode === 'clean' ? 'var(--text)' : v >= 0 ? 'var(--up)' : 'var(--down)');
 
 function renderStatus(pending = state.wikiPending) {
@@ -1066,6 +1060,7 @@ const earlyScore = r => (r.a ? Math.log2(r.a.ratio) + 0.5 * Math.log2(r.a.accel)
 function render() {
   renderMood();
   renderDiscover();
+  renderBacktest();
   const rows = allThemes().map(compute);
   const loaded = rows.filter(r => r.a);
 
@@ -1158,13 +1153,102 @@ function indexBlock(r) {
   if (!r.hist.length) return '';
   const v = r.hist.map(h => h[1]), last = v.at(-1);
   return `<div>
-    <h3 class="eyebrow mb-2">Aufmerksamkeits-Index (alle Quellen)</h3>
+    <h3 class="eyebrow mb-2">Aufmerksamkeits-Index (Wikipedia, Google, News)</h3>
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
       <div><span class="num text-xl text-white">${num(last, 2)}×</span> <span class="text-xs faint">normal</span></div>
       <div class="text-sm">${r.week == null ? `<span class="faint">Wochenvergleich ab ${8 - r.hist.length} weiteren Tagen</span>` : `<span class="num" style="color:${upDown(r.week)}">${pctTxt(r.week * 100)}</span> <span class="faint">ggü. vor 7 Tagen</span>`}</div>
       <div class="flex-1 min-w-[160px]">${v.length > 1 ? spark(v.slice(-90), { w: 300, h: 34, color: 'var(--accent)', fill: true }) : ''}</div>
     </div>
-    <p class="text-[11px] faint mt-1">Mittel aus allen Quellen, die Daten haben, jeden Morgen vom Sammler berechnet. 1× = normal.</p>
+    <p class="text-[11px] faint mt-1">Mittel der Quellen mit Tagesverlauf, jeden Morgen vom Sammler für die letzten 120 Tage berechnet. 1× = normal.</p>
+  </div>`;
+}
+
+/* ---------------------------------------------------------------
+   Rückblick: Frühsignale des letzten Jahres und was danach mit dem Preis passierte.
+   Die Signale berechnet der Sammler rückwirkend (vereinfachte Regel). Renditen kommen vom Sammler (Krypto, Rohstoffe)
+   oder werden hier aus den Kursen der Seite berechnet (Aktien und ETFs mit FMP-Key, Kartenpreise).
+---------------------------------------------------------------- */
+// Kurs am Tag D (erster Kurs ab D) und Kurs nach `days` Tagen (letzter Kurs bis dahin); null, wenn die Zeit noch nicht um ist
+function fwdRet(ser, D, days) {
+  const i0 = ser.findIndex(p => p[0] >= D);
+  if (i0 < 0) return null;
+  const D2 = ymd(new Date(Date.parse(D) + days * DAY_MS));
+  if (D2 > ser.at(-1)[0]) return null;
+  let i1 = i0;
+  while (i1 + 1 < ser.length && ser[i1 + 1][0] <= D2) i1++;
+  return (ser[i1][1] / ser[i0][1] - 1) * 100;
+}
+function priceSeriesOf(t) {
+  if (t.price?.idx) return cardIndex(t.price.idx)?.series || null;
+  if (t.price?.fred) return state.collected?.fred?.[t.id]?.series || null;
+  return state.data[t.id]?.price || null;
+}
+function backtestRows() {
+  const bt = state.collected?.backtest;
+  if (!bt?.signals?.length) return null;
+  const rows = [];
+  for (const sg of bt.signals) {
+    const t = allThemes().find(x => x.id === sg.id);
+    if (!t) continue;
+    let { ret30: r30, ret90: r90 } = sg;
+    const ser = priceSeriesOf(t);
+    if (ser?.length > 30) {
+      // gleiche Regel wie beim Sammler: Lief der Preis in den 30 Tagen davor schon über 10 %, ist es kein Frühsignal
+      const before = fwdRet(ser, ymd(new Date(Date.parse(sg.d) - 30 * DAY_MS)), 30);
+      if (sg.ret30 == null && before != null && before > 10) continue;
+      r30 ??= fwdRet(ser, sg.d, 30);
+      r90 ??= fwdRet(ser, sg.d, 90);
+    }
+    rows.push({ ...sg, t, r30, r90 });
+  }
+  return rows.sort((a, b) => b.d.localeCompare(a.d));
+}
+function renderBacktest() {
+  const el = document.getElementById('backtest');
+  const rows = backtestRows();
+  if (!rows) { el.hidden = true; return; }
+  el.hidden = false;
+  const stat = k => { const r = rows.map(x => x[k]).filter(x => x != null); return r.length ? { n: r.length, hit: r.filter(x => x > 0).length / r.length, avg: mean(r) } : null; };
+  // Vergleich: zufälliger Einstieg, gleiche Themen, wöchentlich über das Jahr
+  const base = [];
+  for (const id of new Set(rows.map(x => x.id))) {
+    const ser = priceSeriesOf(rows.find(x => x.id === id).t);
+    if (!(ser?.length > 60)) continue;
+    for (let k = 0; k < ser.length; k += 5) { const r = fwdRet(ser, ser[k][0], 30); if (r != null) base.push(r); }
+  }
+  const s30 = stat('r30'), s90 = stat('r90');
+  const b30 = base.length ? { hit: base.filter(x => x > 0).length / base.length, avg: mean(base) } : null;
+  const tile = (title, main, sub) => `<div class="inset p-3"><div class="eyebrow">${title}</div><div class="num text-xl text-white mt-1">${main}</div><div class="text-[11px] faint mt-0.5">${sub}</div></div>`;
+  const cell = v => (v == null ? '<span class="faint">–</span>' : `<span style="color:${upDown(v)}">${pctTxt(v)}</span>`);
+  el.innerHTML = `<summary class="flex items-center justify-between gap-3 cursor-pointer list-none">
+      <span><span class="eyebrow">Rückblick: Wie gut waren die Frühsignale?</span>
+        <span class="block text-xs faint mt-1">Frühsignale der letzten 12 Monate, rückwirkend berechnet, und was danach mit dem Preis passierte.</span></span>
+      <span class="text-xs faint">ein-/ausklappen</span>
+    </summary>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+      ${tile('Frühsignale', rows.length, `seit ${new Date(state.collected.backtest.since).toLocaleDateString('de-DE')}, davon ${s30?.n ?? 0} mit Kurs nach 30 Tagen`)}
+      ${tile('Nach 30 Tagen im Plus', s30 ? `${num(s30.hit * 100, 0)} %` : '–', b30 ? `zufälliger Einstieg: ${num(b30.hit * 100, 0)} %` : 'Vergleich fehlt')}
+      ${tile('Ø Rendite nach 30 Tagen', s30 ? pctTxt(s30.avg) : '–', b30 ? `zufälliger Einstieg: ${pctTxt(b30.avg)}` : '')}
+      ${tile('Ø Rendite nach 90 Tagen', s90 ? pctTxt(s90.avg) : '–', s90 ? `${s90.n} Signale, ${num(s90.hit * 100, 0)} % im Plus` : 'noch zu wenige')}
+    </div>
+    <div class="overflow-x-auto mt-4"><table class="w-full text-sm" style="min-width:480px">
+      <thead><tr class="text-left"><th class="eyebrow py-1.5 px-1">Datum</th><th class="eyebrow py-1.5 px-1">Thema</th><th class="eyebrow py-1.5 px-1 text-right">Aufmerks.</th><th class="eyebrow py-1.5 px-1 text-right">nach 30 T.</th><th class="eyebrow py-1.5 px-1 text-right">nach 90 T.</th></tr></thead>
+      <tbody>${rows.slice(0, 20).map(x => `<tr data-open="${esc(x.t.id)}" class="cursor-pointer" style="border-top:1px solid var(--line)">
+        <td class="py-1.5 px-1 num faint">${new Date(x.d).toLocaleDateString('de-DE')}</td><td class="py-1.5 px-1 text-white">${esc(x.t.name)}</td>
+        <td class="py-1.5 px-1 text-right num">${num(x.ratio, 1)}×</td><td class="py-1.5 px-1 text-right num">${cell(x.r30)}</td><td class="py-1.5 px-1 text-right num">${cell(x.r90)}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <p class="text-[11px] faint mt-2">Vereinfachte Regel: Wikipedia-Aufrufe seit Wochen mindestens 1,5× über normal, kein sehr bekanntes Thema, von Google Trends oder News bestätigt, Preis vorher nicht schon über 10 % gestiegen.
+      Renditen nur, wo es einen Kurs gibt (Krypto, Rohstoffe, Kartenpreise; Aktien und ETFs mit FMP-Key). Wenige Fälle können Zufall sein. Vergangenheit ist keine Garantie.</p>`;
+}
+// Detailansicht: frühere Frühsignale dieses Themas
+function pastSignalsBlock(t) {
+  const rows = (backtestRows() || []).filter(x => x.id === t.id);
+  if (!rows.length) return '';
+  return `<div>
+    <h3 class="eyebrow mb-2">Frühere Frühsignale</h3>
+    <ul class="space-y-1 text-sm">${rows.map(x => `<li class="flex flex-wrap gap-x-4"><span class="num faint">${new Date(x.d).toLocaleDateString('de-DE')}</span><span>Aufmerksamkeit ${num(x.ratio, 1)}×</span>
+      <span>nach 30 T.: ${x.r30 == null ? '<span class="faint">–</span>' : `<span class="num" style="color:${upDown(x.r30)}">${pctTxt(x.r30)}</span>`}</span>
+      <span>nach 90 T.: ${x.r90 == null ? '<span class="faint">–</span>' : `<span class="num" style="color:${upDown(x.r90)}">${pctTxt(x.r90)}</span>`}</span></li>`).join('')}</ul>
   </div>`;
 }
 
@@ -1337,6 +1421,7 @@ function renderDetail() {
     </div>
     ${r.d.priceError ? `<p class="text-xs faint">Kurs: ${esc(r.d.priceError)}</p>` : ''}
     ${t.price?.idx ? cardBlock(r) : ''}
+    ${pastSignalsBlock(t)}
     ${macroBlock(t)}
     ${fxBlock(t)}
     ${perpsBlock(t)}
@@ -1864,6 +1949,7 @@ function renderHelp() {
       <h3 class="font-semibold text-white mb-1">Zusätzlich</h3>
       <ul class="muted list-disc pl-5 space-y-1">
         <li><b class="text-white">Aufmerksamkeits-Index:</b> Mittel aller Quellen, täglich vom Sammler. „Diese Woche“ sortiert nach der Veränderung über 7 Tage.</li>
+        <li><b class="text-white">Rückblick:</b> Das Radar berechnet die Frühsignale des letzten Jahres rückwirkend (vereinfachte Regel) und zeigt, was danach mit dem Preis passierte, im Vergleich zu einem zufälligen Einstieg. So siehst du, wie viel die Signale wert sind.</li>
         <li><b class="text-white">Quellen-Streuung:</b> zeigt für jede Quelle, wie weit sie über oder unter normal liegt, und wie einig sich die Quellen sind. Viele verschiedene Datenarten, die in dieselbe Richtung zeigen, sind belastbarer als eine einzelne.</li>
         <li><b class="text-white">Läuft ähnlich wie:</b> Themen, deren Aufmerksamkeit sich Woche für Woche ähnlich bewegt, z. B. ein Land und eine Technologie, von der es profitiert.</li>
         <li><b class="text-white">Favoriten und „Neu seit deinem letzten Besuch“:</b> ★ in der Detailansicht. Oben erscheinen Themen, die seit deinem letzten Besuch (mindestens 6 Stunden her) in „Früh“, „Läuft“ oder „Überhitzt“ gewechselt sind.</li>

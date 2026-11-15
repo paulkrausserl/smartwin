@@ -123,7 +123,8 @@ async function collectTrends() {
           risingAt = today;
         } catch (e) { log(`  ${t.id}/steigende Suchen: ${e.message}`); }
       }
-      slot(t.id).trends = { kw: trendsFor(t), d: tl.map(p => ymd(new Date(Number(p.time) * 1000))), v: tl.map(p => p.value[0]), rising, risingAt };
+      // Wochenwerte sind lückenlos: erstes Datum genügt
+      slot(t.id).trends = { kw: trendsFor(t), start: ymd(new Date(Number(tl[0].time) * 1000)), v: tl.map(p => p.value[0]), rising, risingAt };
       blocked = 0;
     } catch (e) {
       if (/429/.test(e.message)) blocked++;
@@ -252,7 +253,7 @@ async function collectGnews() {
         link: decode(it.match(/<link>([\s\S]*?)<\/link>/)?.[1] || ''),
       })).filter(x => x.t);
       // neueste zuerst, Quelle aus dem Titel entfernen („Titel - Quelle“)
-      const headlines = items.sort((a, b) => (b.d || 0) - (a.d || 0)).slice(0, 5)
+      const headlines = items.sort((a, b) => (b.d || 0) - (a.d || 0)).slice(0, 3)
         .map(x => ({ t: x.src && x.t.endsWith(` - ${x.src}`) ? x.t.slice(0, -(x.src.length + 3)) : x.t, src: x.src, d: x.d ? ymd(new Date(x.d)) : null, link: x.link }));
       slot(t.id).gnews = { q: newsFor(t), count: items.length, headlines };
     } catch (e) { slot(t.id).gnews = keep(t.id, 'gnews', e.message); }
@@ -581,7 +582,7 @@ async function collectDefi() {
       else pts = ((await get(`https://api.llama.fi/summary/fees/${encodeURIComponent(t.defi.fees)}?dataType=dailyFees`)).totalDataChart || []).map(([ts, v]) => [ymd(new Date(ts * 1000)), v]);
       pts = pts.filter(([d]) => d < today).slice(-400);
       if (pts.length < 60) throw new Error('zu wenig Daten');
-      out.defi[t.id] = { kind: t.defi.tvl ? 'tvl' : 'fees', name: t.defi.tvl || t.defi.fees, d: pts.map(p => p[0]), v: pts.map(p => Math.round(p[1])) };
+      out.defi[t.id] = { kind: t.defi.tvl ? 'tvl' : 'fees', name: t.defi.tvl || t.defi.fees, start: pts[0][0], v: pts.map(p => Math.round(p[1])) };
     } catch (e) { log(`DefiLlama ${t.id}: ${e.message}`); if (prev.defi?.[t.id]) out.defi[t.id] = { ...prev.defi[t.id], stale: true }; }
   }
   log(`DefiLlama fertig (${Object.keys(out.defi).length})`);
@@ -705,7 +706,7 @@ async function collectFx() {
     const days = Object.keys(body.rates || {}).sort();
     for (const t of countries.filter(x => x.ccy !== 'TWD')) {
       const pts = days.map(d => [d, body.rates[d][t.ccy]]).filter(([, v]) => v);
-      if (pts.length > 30) out.fx[t.id] = { ccy: t.ccy, d: pts.map(p => p[0]), v: pts.map(p => round(p[1], 4)) };
+      if (pts.length > 30) out.fx[t.id] = { ccy: t.ccy, d: pts.slice(-260).map(p => p[0]), v: pts.slice(-260).map(p => round(p[1], 4)) };
     }
   } catch (e) { log(`Frankfurter: ${e.message}`); }
   try {
@@ -878,31 +879,108 @@ await Promise.all([
   (async () => { await collectPerps(); await collectMarket(); await collectFx(); await collectSo(); await collectManifold(); await collectFedreg(); await collectTrials(); })(),
 ]);
 
-/* --- Aufmerksamkeits-Index je Thema und Tag: geometrisches Mittel aller verfügbaren Quellen-Verhältnisse
-   („wie viel mehr Aufmerksamkeit als normal“). Daraus zeigt die Seite die Bewegung über Tage und Wochen. --- */
-const ratios = x => {
-  const r = [];
-  if (x.wiki?.v?.length > 60) { const v = x.wiki.v; r.push((mean(v.slice(-30)) + 1) / (median(v.slice(0, -30)) + 1)); }
-  if (x.trends?.v?.length > 12) { const v = x.trends.v; r.push((mean(v.slice(-4)) + 1) / (median(v.slice(0, -4)) + 1)); }
-  if (x.news?.p?.length > 60) { const v = x.news.p; r.push((mean(v.slice(-30)) + 1e-3) / (median(v.slice(0, -30)) + 1e-3)); }
-  if (x.hn && !x.hn.error && x.hn.base >= 3) r.push((x.hn.now + 1) / (x.hn.base + 1));
-  const langs = Object.values(x.langs || {});
-  if (langs.length) { const n = langs.reduce((a, l) => a + l.now, 0), b = langs.reduce((a, l) => a + l.base, 0); if (b >= 20) r.push((n + 1) / (b + 1)); }
-  if (x.github && !x.github.error && x.github.base >= 3) r.push((x.github.now + 1) / (x.github.base + 1));
-  if (x.arxiv && !x.arxiv.error && x.arxiv.base >= 3) r.push((x.arxiv.now + 1) / (x.arxiv.base + 1));
-  if (x.sec && !x.sec.error && x.sec.base >= 3) r.push((x.sec.now + 1) / (x.sec.base + 1));
-  if (x.dev && !x.dev.error && x.dev.base > 0) r.push(x.dev.now / x.dev.base);
-  if (x.so?.shareBase > 0 && x.so.base >= 5) r.push(x.so.shareNow / x.so.shareBase);
-  for (const k of ['edits', 'fedreg', 'trials']) if (x[k] && !x[k].error && x[k].base >= 3) r.push((x[k].now + 1) / (x[k].base + 1));
-  if (x.manifold && !x.manifold.error && !x.manifold.capped && x.manifold.base >= 2) r.push((x.manifold.now + 1) / (x.manifold.base + 1));
-  return r;
-};
-for (const t of THEMES) {
-  const r = ratios({ ...(out.themes[t.id] || {}), so: out.so[t.id] });
-  const hist = (prev.history?.[t.id] || []).filter(p => p[0] !== today);
-  if (r.length) hist.push([today, round(Math.exp(mean(r.map(Math.log))), 3), r.length]);
-  out.history[t.id] = hist.slice(-180);
+/* --- Aufmerksamkeits-Index je Thema und Tag, aus den Quellen mit Tagesverlauf (Wikipedia, Google Trends, News).
+   Wird jeden Tag für die letzten 120 Tage neu berechnet, darum gibt es den Verlauf sofort und er bleibt in sich stimmig.
+   Je Tag: Verhältnis „letzte 30 Tage (bzw. 4 Wochen) ggü. Median der Zeit davor“, dann geometrisches Mittel der Quellen. --- */
+const dayIdx = (start, date) => Math.round((Date.parse(date) - Date.parse(start)) / DAY_MS);
+function seriesAt(x) {
+  // liefert je Quelle eine Funktion: Verhältnis am Tag D (oder null)
+  const fns = [];
+  if (x.wiki?.v?.length > 120) {
+    const v = x.wiki.v, st = x.wiki.start;
+    fns.push(D => { const i = dayIdx(st, D); if (i < 120 || i >= v.length) return null; return (mean(v.slice(i - 29, i + 1)) + 1) / (median(v.slice(Math.max(0, i - 395), i - 29)) + 1); });
+  }
+  if (x.trends?.v?.length > 20) {
+    const v = x.trends.v, st = x.trends.start || x.trends.d?.[0];
+    fns.push(D => { const i = Math.floor(dayIdx(st, D) / 7); if (i < 16 || i >= v.length) return null; return (mean(v.slice(i - 3, i + 1)) + 1) / (median(v.slice(0, i - 3)) + 1); });
+  }
+  if (x.news?.p?.length > 120 && x.news.d) {
+    const idx = new Map(x.news.d.map((d, i) => [d, i])), p = x.news.p;
+    fns.push(D => { const i = idx.get(D); if (i == null || i < 90) return null; return (mean(p.slice(i - 29, i + 1)) + 1e-3) / (median(p.slice(0, i - 29)) + 1e-3); });
+  }
+  return fns;
 }
+const lastDay = ymd(new Date(Date.now() - 2 * DAY_MS)); // Wikipedia und News sind bis vorgestern vollständig
+for (const t of THEMES) {
+  const fns = seriesAt(out.themes[t.id] || {});
+  const hist = [];
+  for (let k = 119; k >= 0; k--) {
+    const D = ymd(new Date(Date.parse(lastDay) - k * DAY_MS));
+    const r = fns.map(f => f(D)).filter(v => v != null && v > 0);
+    if (r.length) hist.push([D, round(Math.exp(mean(r.map(Math.log))), 3), r.length]);
+  }
+  out.history[t.id] = hist;
+}
+
+/* --- Signal-Logbuch und Rückblick (Trefferquote).
+   Vereinfachtes Frühsignal, das sich rückwirkend berechnen lässt: Wikipedia-Aufrufe seit Wochen mindestens 1,5× über normal
+   (in 3 der letzten 4 Wochen), kein sehr bekanntes Thema, Google Trends oder News bestätigen, und der Preis ist in den
+   30 Tagen davor nicht schon über 10 % gestiegen. Danach: Was hat der Preis in 30 und 90 Tagen gemacht?
+   Preise holt der Sammler selbst: Krypto (CoinGecko, 365 Tage), Kakao/Kaffee/Olivenöl (FRED, monatlich). --- */
+async function collectPriceHistory() {
+  out.priceHist = {};
+  for (const t of THEMES.filter(x => x.price?.cg)) {
+    try {
+      const body = await get(`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(t.price.cg)}/market_chart?vs_currency=eur&days=365&interval=daily`);
+      const byDay = new Map((body.prices || []).map(([ts, v]) => [ymd(new Date(ts)), v]));
+      if (byDay.size > 60) out.priceHist[t.id] = Object.fromEntries([...byDay].map(([d, v]) => [d, round(v, 6)]));
+    } catch (e) { log(`Kurs ${t.id}: ${e.message}`); }
+    await sleep(7000); // CoinGecko ohne Key: wenige Abrufe pro Minute
+  }
+  for (const t of THEMES.filter(x => x.price?.fred)) {
+    // Monatswerte auf Tage verteilen: jeder Tag bekommt den Wert seines Monats
+    const ser = out.fred[t.id]?.series;
+    if (!ser) continue;
+    const m = Object.fromEntries(ser.map(([d, v]) => [d.slice(0, 7), v]));
+    const days = {};
+    for (let k = 420; k >= 0; k--) { const D = ymd(new Date(Date.now() - k * DAY_MS)); if (m[D.slice(0, 7)] != null) days[D] = m[D.slice(0, 7)]; }
+    if (Object.keys(days).length > 60) out.priceHist[t.id] = days;
+  }
+  log(`Kursverläufe für Rückblick: ${Object.keys(out.priceHist).length}`);
+}
+function backtest() {
+  const signals = [];
+  const priceAt = (id, D) => { const h = out.priceHist[id]; if (!h) return null; for (let k = 0; k < 5; k++) { const x = h[ymd(new Date(Date.parse(D) - k * DAY_MS))]; if (x != null) return x; } return null; };
+  for (const t of THEMES) {
+    const x = out.themes[t.id] || {};
+    if (!(x.wiki?.v?.length > 150)) continue;
+    const v = x.wiki.v, st = x.wiki.start;
+    const others = seriesAt({ trends: x.trends, news: x.news });
+    let lastSig = null;
+    for (let k = 330; k >= 0; k--) {
+      const D = ymd(new Date(Date.parse(lastDay) - k * DAY_MS)), i = dayIdx(st, D);
+      if (i < 150 || i >= v.length) continue;
+      const base = median(v.slice(Math.max(0, i - 395), i - 29));
+      if (base >= 4000) continue; // sehr bekannte Themen: kein Frühsignal
+      const ratio = (mean(v.slice(i - 29, i + 1)) + 1) / (base + 1);
+      if (ratio < 1.5) continue;
+      const weeks = [0, 1, 2, 3].map(w => mean(v.slice(i - 7 * w - 6, i - 7 * w + 1)));
+      if (weeks.filter(w => (w + 1) / (base + 1) >= 1.3).length < 3) continue;
+      const conf = others.map(f => f(D)).filter(r => r != null);
+      if (conf.length && !conf.some(r => r >= 1.3)) continue;
+      const p0 = priceAt(t.id, D), pPrev = priceAt(t.id, ymd(new Date(Date.parse(D) - 30 * DAY_MS)));
+      if (p0 && pPrev && p0 / pPrev - 1 > 0.1) continue; // Preis lief schon: kein Frühsignal mehr
+      if (lastSig && Date.parse(D) - Date.parse(lastSig) < 30 * DAY_MS) continue; // je Thema höchstens ein Signal pro Monat
+      lastSig = D;
+      const ret = days => { const D2 = ymd(new Date(Date.parse(D) + days * DAY_MS)); if (D2 > lastDay) return null; const p1 = priceAt(t.id, D2); return p0 && p1 ? round((p1 / p0 - 1) * 100, 1) : null; };
+      signals.push({ id: t.id, d: D, ratio: round(ratio, 2), ret30: ret(30), ret90: ret(90) });
+    }
+  }
+  // Vergleichsmaßstab: durchschnittliche 30-Tage-Rendite derselben Kurse an allen Tagen (zufälliger Einstieg)
+  const baseRets = [];
+  for (const id of Object.keys(out.priceHist)) for (let k = 360; k >= 30; k -= 7) {
+    const D = ymd(new Date(Date.parse(lastDay) - k * DAY_MS)), D2 = ymd(new Date(Date.parse(D) + 30 * DAY_MS));
+    const a = priceAt(id, D), b = priceAt(id, D2);
+    if (a && b) baseRets.push((b / a - 1) * 100);
+  }
+  const stat = key => { const r = signals.map(x => x[key]).filter(x => x != null); return r.length ? { n: r.length, hit: round(r.filter(x => x > 0).length / r.length, 2), avg: round(mean(r), 1), median: round(median(r), 1) } : null; };
+  out.backtest = { since: ymd(new Date(Date.parse(lastDay) - 330 * DAY_MS)), signals: signals.slice(-200), r30: stat('ret30'), r90: stat('ret90'),
+    base30: baseRets.length ? { n: baseRets.length, hit: round(baseRets.filter(x => x > 0).length / baseRets.length, 2), avg: round(mean(baseRets), 1) } : null };
+  log(`Rückblick: ${signals.length} Frühsignale, mit Kurs nach 30 Tagen: ${JSON.stringify(out.backtest.r30)}, Vergleich: ${JSON.stringify(out.backtest.base30)}`);
+}
+await collectPriceHistory();
+backtest();
+delete out.priceHist; // nur zum Rechnen, nicht in die Datei
 
 const count = src => Object.values(out.themes).filter(x => x[src] && !x[src].error).length;
 out.summary = Object.fromEntries(['wiki', 'langs', 'edits', 'news', 'gnews', 'trends', 'hn', 'masto', 'github', 'arxiv', 'sec', 'dev', 'fedreg', 'trials', 'manifold'].map(s => [s, count(s)]));
