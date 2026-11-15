@@ -25,6 +25,7 @@ const THEMES = Function(`return ${html.match(/const THEMES = (\[[\s\S]*?\n\]);/)
 const prev = await readFile(OUT, 'utf8').then(JSON.parse).catch(() => ({}));
 const out = { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [],
   fred: {}, cot: {}, defi: {}, sentiment: {}, apps: {}, discover: {}, perps: {}, market: {}, fx: {}, poly: {}, so: {} };
+// weitere Quellen je Thema landen wie gewohnt in out.themes[id]: edits, fedreg, trials, manifold
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 // wie in radar.html
@@ -449,6 +450,17 @@ async function collectMtg() {
   } catch (e) { keepCards('mtg', e); }
 }
 
+// Lorcana: „Enchanted“-Karten bei Lorcast (Preise in US-Dollar von TCGplayer)
+async function collectLorcana() {
+  try {
+    const body = await get(`https://api.lorcast.com/v0/cards/search?q=${encodeURIComponent('rarity:enchanted')}`);
+    const prices = {};
+    for (const c of body.results || []) { const p = Number(c.prices?.usd ?? c.prices?.usd_foil); if (p > 0.5) prices[c.id] = p; }
+    if (Object.keys(prices).length < 10) throw new Error('zu wenige Kartenpreise');
+    chainIndex('lorcana', 'Lorcana (Enchanted-Karten, US-Dollar)', prices);
+  } catch (e) { keepCards('lorcana', e); }
+}
+
 async function collectYugioh() {
   try {
     const body = await get('https://db.ygoprodeck.com/api/v7/cardinfo.php', { timeout: 120000 });
@@ -720,6 +732,110 @@ async function collectPoly() {
     }
   } catch (e) { log(`Polymarket: ${e.message}`); out.poly = prev.poly || {}; out.discover.poly = prev.discover?.poly || []; }
   log(`Polymarket fertig (${Object.keys(out.poly).length} Themen mit Wetten)`);
+  // Kalshi (zweiter, US-regulierter Wettmarkt, öffentliche Marktdaten ohne Key): offene Ereignisse, Volumen in Kontrakten
+  try {
+    const events = [];
+    let cursor = '';
+    for (let page = 0; page < 5; page++) {
+      const body = await get(`https://api.elections.kalshi.com/trade-api/v2/events?status=open&with_nested_markets=true&limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+      events.push(...(body.events || []));
+      cursor = body.cursor;
+      if (!cursor) break;
+      await sleep(500);
+    }
+    const list = events.map(e => ({ title: e.title || '', ticker: e.event_ticker, vol24: (e.markets || []).reduce((a, m) => a + (Number(m.volume_24h) || 0), 0) }));
+    for (const t of THEMES) {
+      const words = [...new Set([trendsFor(t), t.tag, t.wiki].filter(Boolean).map(w => w.toLowerCase()).filter(w => w.length >= 3))];
+      const hits = list.filter(e => words.some(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(e.title)));
+      if (!hits.length) continue;
+      (out.poly[t.id] ||= { n: 0, vol24: 0, top: [], hist: prev.poly?.[t.id]?.hist || [] }).kalshi = {
+        n: hits.length, vol24: hits.reduce((a, e) => a + e.vol24, 0),
+        top: hits.sort((a, b) => b.vol24 - a.vol24).slice(0, 2).map(e => ({ title: e.title, vol24: e.vol24, ticker: e.ticker })),
+      };
+    }
+    log(`Kalshi fertig (${list.length} Ereignisse)`);
+  } catch (e) { log(`Kalshi: ${e.message}`); }
+}
+
+/* --- Manifold (Prognosemarkt mit Spielgeld, ohne Key): Wie viele neue Wettfragen zu einem Thema gestellt werden.
+   Neue Fragen in den letzten 30 Tagen ggü. dem Monatsschnitt der 5 Monate davor. Deckt auch Nischen ab. --- */
+async function collectManifold() {
+  for (const t of THEMES) {
+    try {
+      const body = await get(`https://api.manifold.markets/v0/search-markets?term=${encodeURIComponent(trendsFor(t))}&sort=newest&limit=100`);
+      const now = Date.now(), times = (Array.isArray(body) ? body : []).map(m => m.createdTime).filter(Number.isFinite);
+      const recent = times.filter(x => x > now - 30 * DAY_MS).length, before = times.filter(x => x <= now - 30 * DAY_MS && x > now - 180 * DAY_MS).length;
+      const bettors = (Array.isArray(body) ? body : []).filter(m => m.createdTime > now - 30 * DAY_MS).reduce((a, m) => a + (m.uniqueBettorCount || 0), 0);
+      // 100 Treffer in 30 Tagen: Abfrage ist gedeckelt, ein Vergleich wäre dann verzerrt
+      slot(t.id).manifold = { kw: trendsFor(t), now: recent, base: round(before / 5, 1), bettors, capped: recent >= 100 };
+    } catch (e) { slot(t.id).manifold = keep(t.id, 'manifold', e.message); }
+    await sleep(250);
+  }
+  log('Manifold fertig');
+}
+
+/* --- Wikipedia-Bearbeitungen: Wie viele Änderungen ein Artikel bekommt (Schreiben statt Lesen).
+   Letzte 30 Tage ggü. dem Median der 30-Tage-Summen im Jahr davor. --- */
+async function collectEdits() {
+  const titles = Object.fromEntries(THEMES.map(t => [t.id, out.themes[t.id]?.wiki?.title]).filter(([, x]) => x));
+  const end = new Date(Date.now() - DAY_MS), start = new Date(end - 400 * DAY_MS);
+  const fmt = d => ymd(d).replace(/-/g, '');
+  for (const t of THEMES) {
+    const title = titles[t.id];
+    if (!title) continue;
+    try {
+      const body = await get(`https://wikimedia.org/api/rest_v1/metrics/edits/per-page/en.wikipedia/${encodeURIComponent(title.replace(/ /g, '_'))}/all-editor-types/daily/${fmt(start)}/${fmt(end)}`);
+      const byDay = new Map((body.items?.[0]?.results || []).map(r => [r.timestamp.slice(0, 10), r.edits]));
+      const v = [];
+      for (let d = new Date(ymd(start)); d <= end; d = new Date(+d + DAY_MS)) v.push(byDay.get(ymd(d)) ?? 0);
+      const sums = [];
+      for (let e = v.length - 30; e - 30 >= 0; e -= 30) sums.push(v.slice(e - 30, e).reduce((a, b) => a + b, 0));
+      slot(t.id).edits = { now: v.slice(-30).reduce((a, b) => a + b, 0), base: median(sums) ?? 0 };
+    } catch (e) { slot(t.id).edits = keep(t.id, 'edits', e.message); }
+    await sleep(150);
+  }
+  log('Wikipedia-Bearbeitungen fertig');
+}
+
+/* --- Federal Register (Amtsblatt der US-Regierung, ohne Key): Wie oft das Thema in Regierungsdokumenten vorkommt.
+   Zeigt, ob Regulierung und Politik sich damit beschäftigen. Für Technologie, Rohstoffe und Krypto. --- */
+async function fedregCount(kw, from, to) {
+  const url = new URL('https://www.federalregister.gov/api/v1/documents.json');
+  Object.entries({ per_page: '1', 'conditions[term]': `"${kw.replace(/"/g, '')}"`, 'conditions[publication_date][gte]': ymd(new Date(from)), 'conditions[publication_date][lte]': ymd(new Date(to)) }).forEach(([k, v]) => url.searchParams.set(k, v));
+  return (await get(url)).count ?? NaN;
+}
+async function collectFedreg() {
+  for (const t of THEMES.filter(x => ['Technologie', 'Rohstoffe', 'Krypto'].includes(x.group))) {
+    try {
+      const kw = trendsFor(t), now = Date.now();
+      const recent = await fedregCount(kw, now - 30 * DAY_MS, now);
+      await sleep(300);
+      const before = await fedregCount(kw, now - 360 * DAY_MS, now - 31 * DAY_MS);
+      if (!Number.isFinite(recent) || !Number.isFinite(before)) throw new Error('keine Zahl');
+      slot(t.id).fedreg = { kw, now: recent, base: round(before / 11, 1) };
+    } catch (e) { slot(t.id).fedreg = keep(t.id, 'fedreg', e.message); }
+    await sleep(300);
+  }
+  log('Federal Register fertig');
+}
+
+/* --- ClinicalTrials.gov (ohne Key): neu registrierte klinische Studien, z. B. zu Abnehmspritzen --- */
+async function trialsCount(q, from, to) {
+  const url = new URL('https://clinicaltrials.gov/api/v2/studies');
+  Object.entries({ 'query.intr': q, 'filter.advanced': `AREA[StudyFirstPostDate]RANGE[${ymd(new Date(from))},${ymd(new Date(to))}]`, countTotal: 'true', pageSize: '1' }).forEach(([k, v]) => url.searchParams.set(k, v));
+  return (await get(url)).totalCount ?? NaN;
+}
+async function collectTrials() {
+  for (const t of THEMES.filter(x => x.trials)) {
+    try {
+      const now = Date.now();
+      const recent = await trialsCount(t.trials, now - 30 * DAY_MS, now);
+      const before = await trialsCount(t.trials, now - 360 * DAY_MS, now - 31 * DAY_MS);
+      if (!Number.isFinite(recent) || !Number.isFinite(before)) throw new Error('keine Zahl');
+      slot(t.id).trials = { q: t.trials, now: recent, base: round(before / 11, 1) };
+    } catch (e) { slot(t.id).trials = keep(t.id, 'trials', e.message); }
+  }
+  log('Klinische Studien fertig');
 }
 
 /* --- Stack Overflow (Stack Exchange API, ohne Key): Anteil der Fragen mit dem Tag eines Tech-Themas.
@@ -756,10 +872,10 @@ async function collectBskyTrends() {
 }
 
 await Promise.all([
-  collectWiki(), collectNews(), collectTrends(), collectHn(), collectMasto(), collectGnews(), collectGithub(), collectArxiv(), collectSec(), collectDev(),
-  (async () => { await collectPokemon(); await collectMtg(); await collectYugioh(); await collectMacro(); await collectTrendingCoins(); })(),
+  (async () => { await collectWiki(); await collectEdits(); })(), collectNews(), collectTrends(), collectHn(), collectMasto(), collectGnews(), collectGithub(), collectArxiv(), collectSec(), collectDev(),
+  (async () => { await collectPokemon(); await collectMtg(); await collectYugioh(); await collectLorcana(); await collectMacro(); await collectTrendingCoins(); })(),
   (async () => { await collectFred(); await collectCot(); await collectDefi(); await collectSentiment(); await collectApps(); await collectDiscover(); await collectPoly(); await collectBskyTrends(); })(),
-  (async () => { await collectPerps(); await collectMarket(); await collectFx(); await collectSo(); })(),
+  (async () => { await collectPerps(); await collectMarket(); await collectFx(); await collectSo(); await collectManifold(); await collectFedreg(); await collectTrials(); })(),
 ]);
 
 /* --- Aufmerksamkeits-Index je Thema und Tag: geometrisches Mittel aller verfügbaren Quellen-Verhältnisse
@@ -777,6 +893,8 @@ const ratios = x => {
   if (x.sec && !x.sec.error && x.sec.base >= 3) r.push((x.sec.now + 1) / (x.sec.base + 1));
   if (x.dev && !x.dev.error && x.dev.base > 0) r.push(x.dev.now / x.dev.base);
   if (x.so?.shareBase > 0 && x.so.base >= 5) r.push(x.so.shareNow / x.so.shareBase);
+  for (const k of ['edits', 'fedreg', 'trials']) if (x[k] && !x[k].error && x[k].base >= 3) r.push((x[k].now + 1) / (x[k].base + 1));
+  if (x.manifold && !x.manifold.error && !x.manifold.capped && x.manifold.base >= 2) r.push((x.manifold.now + 1) / (x.manifold.base + 1));
   return r;
 };
 for (const t of THEMES) {
@@ -787,7 +905,7 @@ for (const t of THEMES) {
 }
 
 const count = src => Object.values(out.themes).filter(x => x[src] && !x[src].error).length;
-out.summary = Object.fromEntries(['wiki', 'langs', 'news', 'gnews', 'trends', 'hn', 'masto', 'github', 'arxiv', 'sec', 'dev'].map(s => [s, count(s)]));
+out.summary = Object.fromEntries(['wiki', 'langs', 'edits', 'news', 'gnews', 'trends', 'hn', 'masto', 'github', 'arxiv', 'sec', 'dev', 'fedreg', 'trials', 'manifold'].map(s => [s, count(s)]));
 Object.assign(out.summary, { fred: Object.keys(out.fred).length, cot: Object.keys(out.cot).length, defi: Object.keys(out.defi).length,
   sentiment: Object.keys(out.sentiment).length, perps: Object.keys(out.perps).length, market: Object.keys(out.market).length,
   fx: Object.keys(out.fx).length, poly: Object.keys(out.poly).length, so: Object.keys(out.so).length, discover: (out.discover.google?.length || 0) + (out.discover.github?.length || 0) + (out.discover.hf?.length || 0) });
