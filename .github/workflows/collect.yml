@@ -35,5 +35,6 @@ jobs:
           git add data/radar.json
           git diff --cached --quiet && exit 0
           git commit -m "Radar-Daten $(date -u +%F)"
-          git pull --rebase origin main
+          # Hat ein anderer Lauf die Datei inzwischen geändert, gewinnen die gerade gesammelten Daten
+          git pull --rebase -X theirs origin main
           git push
