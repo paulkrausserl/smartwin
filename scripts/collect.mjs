@@ -379,35 +379,64 @@ function chainIndex(key, label, prices, extra = {}) {
 }
 const keepCards = (key, e) => { log(`Karten ${key}: ${e.message}`); if (prev.cards?.[key]) out.cards[key] = { ...prev.cards[key], stale: true }; };
 
+// Quelle 1: pokemontcg.io (liefert auch 1-, 7- und 30-Tage-Schnitte). Quelle 2 als Ausweich: TCGdex (Cardmarket-Preise je Karte).
+async function pokemonFromPtcg() {
+  const q = encodeURIComponent('rarity:"Special Illustration Rare"');
+  // in kleineren Seiten abrufen: große Abfragen beantwortet der Server oft mit 502
+  const data = [];
+  for (let page = 1; page <= 3; page++) {
+    let part;
+    for (let i = 0; i < 3 && !part; i++) {
+      try { part = await get(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=100&page=${page}&orderBy=-set.releaseDate&select=id,cardmarket`, { timeout: 90000 }); }
+      catch (e) { if (i === 2) throw e; await sleep(15000); }
+    }
+    data.push(...(part.data || []));
+    if ((part.data || []).length < 100) break;
+  }
+  const prices = {}, mom = [], dates = [];
+  for (const c of data) {
+    const p = c.cardmarket?.prices;
+    if (c.cardmarket?.updatedAt) dates.push(c.cardmarket.updatedAt.replace(/\//g, '-'));
+    const price = p?.trendPrice || p?.avg1;
+    if (!(price > 0.5)) continue;
+    prices[c.id] = price;
+    // Gestern ggü. 30-Tage-Schnitt: zeigt sofort, ob die Preise gerade anziehen
+    if (p.avg1 > 0.5 && p.avg30 > 0.5) mom.push(p.avg1 / p.avg30);
+  }
+  return { prices, mom, priceDate: dates.sort().at(-1) || null, source: 'pokemontcg.io' };
+}
+async function pokemonFromTcgdex() {
+  const list = await get(`https://api.tcgdex.net/v2/en/cards?rarity=${encodeURIComponent('Special illustration rare')}`);
+  // neueste Karten zuerst (Set-Kürzel im Kartennamen sind nicht sortierbar, daher die letzten der Liste)
+  const ids = (Array.isArray(list) ? list : []).map(c => c.id).slice(-150);
+  const prices = {}, mom = [], dates = [];
+  const queue = [...ids];
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (queue.length) {
+      const id = queue.shift();
+      try {
+        const cm = (await get(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(id)}`)).pricing?.cardmarket;
+        const price = cm?.trend || cm?.avg1 || cm?.avg;
+        if (!(price > 0.5)) continue;
+        prices[id] = price;
+        if (cm.updated) dates.push(String(cm.updated).slice(0, 10));
+        if (cm.avg1 > 0.5 && cm.avg30 > 0.5) mom.push(cm.avg1 / cm.avg30);
+      } catch { /* einzelne Karte fehlt: egal */ }
+    }
+  }));
+  return { prices, mom, priceDate: dates.sort().at(-1) || null, source: 'TCGdex' };
+}
 async function collectPokemon() {
-  try {
-    const q = encodeURIComponent('rarity:"Special Illustration Rare"');
-    // in kleineren Seiten abrufen: große Abfragen beantwortet der Server oft mit 502
-    const body = { data: [] };
-    for (let page = 1; page <= 3; page++) {
-      let part;
-      for (let i = 0; i < 3 && !part; i++) {
-        try { part = await get(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=100&page=${page}&orderBy=-set.releaseDate&select=id,cardmarket`, { timeout: 90000 }); }
-        catch (e) { if (i === 2) throw e; await sleep(15000); }
-      }
-      body.data.push(...(part.data || []));
-      if ((part.data || []).length < 100) break;
-    }
-    const prices = {}, mom = [], dates = [];
-    for (const c of body.data || []) {
-      const p = c.cardmarket?.prices;
-      if (c.cardmarket?.updatedAt) dates.push(c.cardmarket.updatedAt.replace(/\//g, '-'));
-      const price = p?.trendPrice || p?.avg1;
-      if (!(price > 0.5)) continue;
-      prices[c.id] = price;
-      // Gestern ggü. 30-Tage-Schnitt: zeigt sofort, ob die Preise gerade anziehen
-      if (p.avg1 > 0.5 && p.avg30 > 0.5) mom.push(p.avg1 / p.avg30);
-    }
-    if (Object.keys(prices).length < 10) throw new Error('zu wenige Kartenpreise');
-    // Stand der Preise bei der Quelle: pokemontcg.io aktualisiert nicht immer täglich
-    const priceDate = dates.sort().at(-1) || null;
-    chainIndex('pokemon', 'Pokémon (Special Illustration Rares)', prices, { momentum: mom.length >= 10 ? round(median(mom), 4) : null, priceDate });
-  } catch (e) { keepCards('pokemon', e); }
+  let r = null;
+  for (const [name, fn] of [['pokemontcg.io', pokemonFromPtcg], ['TCGdex', pokemonFromTcgdex]]) {
+    try {
+      r = await fn();
+      if (Object.keys(r.prices).length >= 10) break;
+      throw new Error('zu wenige Kartenpreise');
+    } catch (e) { log(`Karten pokemon über ${name}: ${e.message}`); r = null; }
+  }
+  if (!r) return keepCards('pokemon', new Error('keine Quelle erreichbar'));
+  chainIndex('pokemon', 'Pokémon (Special Illustration Rares)', r.prices, { momentum: r.mom.length >= 10 ? round(median(r.mom), 4) : null, priceDate: r.priceDate, source: r.source });
 }
 
 async function collectMtg() {
