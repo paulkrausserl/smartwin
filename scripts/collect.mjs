@@ -1,7 +1,8 @@
 // Täglicher Datensammler für das Radar (läuft als GitHub Action, siehe .github/workflows/collect.yml).
 // Sammelt serverseitig, was im Browser langsam oder gesperrt ist, und schreibt alles nach data/radar.json:
-//   Wikipedia-Aufrufe, Google Trends, News (GDELT), Hacker News, Mastodon-Hashtags und Kartenpreis-Indizes (Cardmarket),
-//   dazu je Thema einen täglichen Aufmerksamkeits-Index für den Verlauf über Wochen.
+//   Wikipedia-Aufrufe (englisch und 7 weitere Sprachen), Google Trends, News (GDELT und Google News), Hacker News,
+//   Mastodon-Hashtags, GitHub- und arXiv-Aktivität (Tech-Themen), IMF-Prognosen (Länder), CoinGecko-Trends
+//   und Kartenpreis-Indizes (Cardmarket), dazu je Thema einen täglichen Aufmerksamkeits-Index für den Verlauf über Wochen.
 // Fällt eine Quelle aus, bleiben die Daten vom Vortag stehen.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
@@ -19,7 +20,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const html = await readFile('radar.html', 'utf8');
 const THEMES = Function(`return ${html.match(/const THEMES = (\[[\s\S]*?\n\]);/)[1]}`)();
 const prev = await readFile(OUT, 'utf8').then(JSON.parse).catch(() => ({}));
-const out = { updated: new Date().toISOString(), themes: {}, cards: {}, history: {} };
+const out = { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [] };
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 // wie in radar.html
@@ -168,6 +169,145 @@ async function collectWiki() {
     }
   }));
   log('Wikipedia fertig');
+  await collectWikiLangs(resolved);
+}
+
+/* --- Wikipedia in weiteren Sprachen: zeigt Interesse außerhalb der englischsprachigen Welt.
+   Gespeichert wird je Sprache nur die Zusammenfassung (sonst würde die Datei zu groß). --- */
+const LANGS = ['de', 'fr', 'es', 'ja', 'ko', 'zh', 'pt'];
+async function collectWikiLangs(resolved) {
+  const titles = [...new Set(Object.values(resolved).filter(Boolean))];
+  const links = {}; // englischer Titel -> { sprache: titel }
+  for (let i = 0; i < titles.length; i += 50) {
+    try {
+      let cont = {};
+      do {
+        const url = new URL('https://en.wikipedia.org/w/api.php');
+        Object.entries({ action: 'query', titles: titles.slice(i, i + 50).join('|'), prop: 'langlinks', lllimit: 'max', format: 'json', formatversion: '2', ...cont }).forEach(([k, v]) => url.searchParams.set(k, v));
+        const body = await get(url);
+        for (const pg of body.query?.pages || []) for (const l of pg.langlinks || []) if (LANGS.includes(l.lang)) (links[pg.title] ||= {})[l.lang] = l.title;
+        cont = body.continue || null;
+      } while (cont);
+    } catch (e) { log(`Sprachversionen: ${e.message}`); }
+  }
+  const end = new Date(Date.now() - DAY_MS), start = new Date(end - 420 * DAY_MS);
+  const fmt = d => ymd(d).replace(/-/g, '');
+  const jobs = [];
+  for (const t of THEMES) for (const [lang, title] of Object.entries(links[resolved[t.wiki]] || {})) jobs.push({ t, lang, title });
+  await Promise.all(Array.from({ length: 6 }, async () => {
+    while (jobs.length) {
+      const { t, lang, title } = jobs.shift();
+      try {
+        const body = await get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${lang}.wikipedia/all-access/user/${encodeURIComponent(title.replace(/ /g, '_'))}/daily/${fmt(start)}/${fmt(end)}`);
+        const v = (body.items || []).map(it => it.views);
+        if (v.length < 90) continue;
+        const now = mean(v.slice(-30)), base = median(v.slice(0, -30));
+        const yearAgo = v.length >= 395 ? mean(v.slice(-395, -365)) : null;
+        ((slot(t.id).langs ||= {}))[lang] = { title, now: round(now, 1), base: round(base, 1), yoy: yearAgo != null ? round(yearAgo, 1) : null };
+      } catch { /* einzelne Sprache fehlt: egal */ }
+    }
+  }));
+  log(`Wikipedia-Sprachen fertig (${Object.values(out.themes).filter(x => x.langs).length} Themen)`);
+}
+
+/* --- Google News (RSS, ohne Key): News-Menge pro Tag, letzte 7 Tage ggü. einer Woche vor 2 und vor 4 Monaten.
+   Der Feed liefert höchstens 100 Meldungen; ist er voll, wird die Rate aus der abgedeckten Zeitspanne geschätzt. --- */
+async function gnewsRate(q, from, to) {
+  const query = `${q} after:${ymd(new Date(from))} before:${ymd(new Date(to))}`;
+  const xml = await get(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`, { text: true, headers: { Accept: 'application/rss+xml' } });
+  const dates = [...xml.matchAll(/<pubDate>([^<]+)<\/pubDate>/g)].map(m => Date.parse(m[1])).filter(Number.isFinite).filter(d => d >= from - DAY_MS && d <= to + DAY_MS);
+  const days = (to - from) / DAY_MS;
+  if (dates.length < 100) return dates.length / days;
+  return 100 / Math.max((to - Math.min(...dates)) / DAY_MS, 1 / 24);
+}
+async function collectGnews() {
+  for (const t of THEMES) {
+    try {
+      const q = newsFor(t), now = Date.now();
+      const recent = await gnewsRate(q, now - 7 * DAY_MS, now);
+      await sleep(1500);
+      const b1 = await gnewsRate(q, now - 67 * DAY_MS, now - 60 * DAY_MS);
+      await sleep(1500);
+      const b2 = await gnewsRate(q, now - 127 * DAY_MS, now - 120 * DAY_MS);
+      slot(t.id).gnews = { q, now: round(recent, 2), base: round((b1 + b2) / 2, 2) };
+    } catch (e) { slot(t.id).gnews = keep(t.id, 'gnews', e.message); }
+    await sleep(1500);
+  }
+  log('Google News fertig');
+}
+
+/* --- GitHub (neue Projekte, deren Name oder Beschreibung das Thema nennt) und arXiv (neue Forschungsarbeiten):
+   Entwickler- und Forscher-Interesse. Nur für Technologie und Krypto, dort ist das aussagekräftig. --- */
+const TECH = t => t.group === 'Technologie' || t.group === 'Krypto';
+async function ghCount(kw, range) {
+  const q = `${kw.includes(' ') ? `"${kw}"` : kw} in:name,description,topics created:${range}`;
+  const body = await get(`https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&per_page=1`, {
+    headers: { Accept: 'application/vnd.github+json', ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) },
+  });
+  return body.total_count ?? 0;
+}
+async function collectGithub() {
+  const d = n => ymd(new Date(Date.now() - n * DAY_MS));
+  for (const t of THEMES.filter(TECH)) {
+    try {
+      const kw = trendsFor(t);
+      const recent = await ghCount(kw, `${d(30)}..${d(0)}`);
+      await sleep(2500); // Suche erlaubt 30 Abrufe pro Minute
+      const before = await ghCount(kw, `${d(360)}..${d(31)}`);
+      slot(t.id).github = { kw, now: recent, base: round(before / 11, 1) };
+    } catch (e) { slot(t.id).github = keep(t.id, 'github', e.message); }
+    await sleep(2500);
+  }
+  log('GitHub fertig');
+}
+async function arxivCount(kw, from, to) {
+  const f = x => ymd(new Date(x)).replace(/-/g, '');
+  const q = `all:"${kw}" AND submittedDate:[${f(from)}0000 TO ${f(to)}2359]`;
+  const xml = await get(`https://export.arxiv.org/api/query?search_query=${encodeURIComponent(q)}&max_results=0`, { text: true, headers: { Accept: 'application/atom+xml' } });
+  return Number(xml.match(/<opensearch:totalResults[^>]*>(\d+)</)?.[1] ?? NaN);
+}
+async function collectArxiv() {
+  for (const t of THEMES.filter(x => x.group === 'Technologie')) {
+    try {
+      const kw = trendsFor(t), now = Date.now();
+      const recent = await arxivCount(kw, now - 30 * DAY_MS, now);
+      await sleep(3500); // arXiv bittet um 3 Sekunden Abstand
+      const before = await arxivCount(kw, now - 360 * DAY_MS, now - 31 * DAY_MS);
+      if (!Number.isFinite(recent) || !Number.isFinite(before)) throw new Error('arXiv lieferte keine Zahl');
+      slot(t.id).arxiv = { kw, now: recent, base: round(before / 11, 1) };
+    } catch (e) { slot(t.id).arxiv = keep(t.id, 'arxiv', e.message); }
+    await sleep(3500);
+  }
+  log('arXiv fertig');
+}
+
+/* --- IMF-Prognosen für die Länder: BIP-Wachstum und Inflation, je Jahr (ein Abruf je Kennzahl für alle Länder) --- */
+async function collectMacro() {
+  const countries = THEMES.filter(t => t.iso);
+  for (const [key, ind] of [['gdp', 'NGDP_RPCH'], ['cpi', 'PCPIPCH']]) {
+    try {
+      const body = await get(`https://www.imf.org/external/datamapper/api/v1/${ind}/${countries.map(t => t.iso).join('/')}`);
+      const vals = body.values?.[ind] || {};
+      const y = new Date().getUTCFullYear();
+      for (const t of countries) {
+        const row = vals[t.iso];
+        if (row) (out.macro[t.id] ||= {})[key] = Object.fromEntries([y - 1, y, y + 1].filter(yr => row[yr] != null).map(yr => [yr, round(row[yr], 1)]));
+      }
+    } catch (e) {
+      log(`IMF ${ind}: ${e.message}`);
+      for (const t of countries) if (prev.macro?.[t.id]?.[key]) (out.macro[t.id] ||= {})[key] = prev.macro[t.id][key];
+    }
+  }
+  log(`IMF fertig (${Object.keys(out.macro).length} Länder)`);
+}
+
+/* --- CoinGecko: die meistgesuchten Coins der letzten 24 Stunden --- */
+async function collectTrendingCoins() {
+  try {
+    const body = await get('https://api.coingecko.com/api/v3/search/trending');
+    out.trendingCoins = (body.coins || []).map(c => c.item?.id).filter(Boolean);
+    log(`CoinGecko-Trends: ${out.trendingCoins.join(', ')}`);
+  } catch (e) { log(`CoinGecko-Trends: ${e.message}`); out.trendingCoins = prev.trendingCoins || []; }
 }
 
 /* --- Mastodon: liefert 7 Tage, der Verlauf wächst hier jeden Tag weiter ---------------------- */
@@ -260,7 +400,10 @@ async function collectYugioh() {
 }
 
 log(`${THEMES.length} Themen`);
-await Promise.all([collectWiki(), collectNews(), collectTrends(), collectHn(), collectMasto(), (async () => { await collectPokemon(); await collectMtg(); await collectYugioh(); })()]);
+await Promise.all([
+  collectWiki(), collectNews(), collectTrends(), collectHn(), collectMasto(), collectGnews(), collectGithub(), collectArxiv(),
+  (async () => { await collectPokemon(); await collectMtg(); await collectYugioh(); await collectMacro(); await collectTrendingCoins(); })(),
+]);
 
 /* --- Aufmerksamkeits-Index je Thema und Tag: geometrisches Mittel aller verfügbaren Quellen-Verhältnisse
    („wie viel mehr Aufmerksamkeit als normal“). Daraus zeigt die Seite die Bewegung über Tage und Wochen. --- */
@@ -270,6 +413,11 @@ const ratios = x => {
   if (x.trends?.v?.length > 12) { const v = x.trends.v; r.push((mean(v.slice(-4)) + 1) / (median(v.slice(0, -4)) + 1)); }
   if (x.news?.p?.length > 60) { const v = x.news.p; r.push((mean(v.slice(-30)) + 1e-3) / (median(v.slice(0, -30)) + 1e-3)); }
   if (x.hn && !x.hn.error && x.hn.base >= 3) r.push((x.hn.now + 1) / (x.hn.base + 1));
+  if (x.gnews && !x.gnews.error && x.gnews.base >= 0.3) r.push((x.gnews.now + 0.1) / (x.gnews.base + 0.1));
+  const langs = Object.values(x.langs || {});
+  if (langs.length) { const n = langs.reduce((a, l) => a + l.now, 0), b = langs.reduce((a, l) => a + l.base, 0); if (b >= 20) r.push((n + 1) / (b + 1)); }
+  if (x.github && !x.github.error && x.github.base >= 3) r.push((x.github.now + 1) / (x.github.base + 1));
+  if (x.arxiv && !x.arxiv.error && x.arxiv.base >= 3) r.push((x.arxiv.now + 1) / (x.arxiv.base + 1));
   return r;
 };
 for (const t of THEMES) {
@@ -280,7 +428,7 @@ for (const t of THEMES) {
 }
 
 const count = src => Object.values(out.themes).filter(x => x[src] && !x[src].error).length;
-out.summary = Object.fromEntries(['wiki', 'news', 'trends', 'hn', 'masto'].map(s => [s, count(s)]));
+out.summary = Object.fromEntries(['wiki', 'langs', 'news', 'gnews', 'trends', 'hn', 'masto', 'github', 'arxiv'].map(s => [s, count(s)]));
 log('Ergebnis', JSON.stringify(out.summary), 'Karten:', Object.keys(out.cards).join(', ') || 'keine');
 await mkdir('data', { recursive: true });
 await writeFile(OUT, JSON.stringify(out));

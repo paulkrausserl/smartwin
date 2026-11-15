@@ -313,17 +313,17 @@
          style="background:rgba(16,21,30,.9);border:1px solid var(--line-2);right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px))"></div>
 
     <footer class="text-center text-[11px] faint mt-10 pb-8 leading-relaxed">
-      Aufmerksamkeit: englische Wikipedia (Wikimedia), Google Trends, News (GDELT), Hacker News, Mastodon. Kurse: Financial Modeling Prep, CoinGecko, Cardmarket.<br />
+      Aufmerksamkeit: Wikipedia (8 Sprachen), Google Trends, News (GDELT, Google News), Hacker News, Mastodon, GitHub, arXiv. Wirtschaft: IMF. Kurse: Financial Modeling Prep, CoinGecko, Cardmarket.<br />
       Signale, keine Vorhersagen. Keine Anlageberatung.
     </footer>
   </div>
 <script>
-const APP_VERSION = '4.2';
+const APP_VERSION = '4.3';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
    `price`: optionaler Kurs als Stellvertreter (fmp = Aktie/ETF, cg = CoinGecko-ID, idx = Kartenpreis-Index vom Sammler).
-   `scarcity`: kuratierter Hintergrund zur Knappheit, `driver`: bei Ländern, was den Markt gerade treibt.
+   `iso`: Ländercode für die IMF-Prognosen, `scarcity`: kuratierter Hintergrund zur Knappheit, `driver`: bei Ländern, was den Markt gerade treibt.
    `more`: weitere Kurse, die in der Detailansicht unter dem Chart stehen (lassen sich dort ändern).
    `tag`: Hashtag für Mastodon, `news`: Suchbegriff für die Nachrichten-Datenbank GDELT.
 ---------------------------------------------------------------- */
@@ -385,22 +385,22 @@ const THEMES = [
   { id: 'ssb', name: 'Festkörperakkus', group: 'Technologie', wiki: 'Solid-state battery', price: { fmp: 'QS', label: 'QuantumScape' }, tag: 'solidstatebattery', news: '"solid-state battery"' },
   { id: 'nuclearfusion', name: 'Kernfusion', group: 'Technologie', wiki: 'Fusion power', tag: 'fusionenergy', news: '"fusion energy"' },
   { id: 'em', name: 'Schwellenländer gesamt', group: 'Länder', wiki: 'Emerging market', price: { fmp: 'EEM', label: 'iShares MSCI Emerging Markets' }, driver: 'Vergleichsmaßstab für alle Länder in dieser Gruppe.', tag: 'emergingmarkets', news: '"emerging markets" stocks' },
-  { id: 'korea', name: 'Südkorea', group: 'Länder', wiki: 'KOSPI', price: { fmp: 'EWY', label: 'Südkorea-ETF EWY' }, driver: 'Speicherchips für KI-Rechenzentren (SK Hynix, Samsung), dazu Werften, Rüstung und Kernkraft.', tag: 'kospi', news: 'KOSPI' },
-  { id: 'taiwan', name: 'Taiwan', group: 'Länder', wiki: 'TAIEX', price: { fmp: 'EWT', label: 'Taiwan-ETF EWT' }, driver: 'TSMC fertigt den Großteil der KI-Chips, viele Server-Zulieferer sitzen hier. Politisches Risiko durch China.', tag: 'taiwanstocks', news: 'TAIEX' },
-  { id: 'india', name: 'Indien', group: 'Länder', wiki: 'NIFTY 50', price: { fmp: 'INDA', label: 'Indien-ETF INDA' }, driver: 'Junge Bevölkerung, Produktion wandert aus China ab, starker Inlandskonsum.', tag: 'nifty50', news: '"Nifty 50"' },
-  { id: 'china', name: 'China', group: 'Länder', wiki: 'SSE Composite Index', price: { fmp: 'MCHI', label: 'China-ETF MCHI' }, driver: 'Eigene KI-Modelle und Chips, Konjunkturprogramme. Risiko durch Handelsstreit und Regulierung.', tag: 'chinastocks', news: '"Chinese stocks"' },
-  { id: 'vietnam', name: 'Vietnam', group: 'Länder', wiki: 'VN-Index', price: { fmp: 'VNM', label: 'Vietnam-ETF VNM' }, driver: 'Produktion wandert aus China ab, Hoffnung auf Aufnahme in große Schwellenländer-Indizes.', tag: 'vnindex', news: '"VN-Index"' },
-  { id: 'indonesia', name: 'Indonesien', group: 'Länder', wiki: 'IDX Composite', price: { fmp: 'EIDO', label: 'Indonesien-ETF EIDO' }, driver: 'Nickel für Batterien, große junge Bevölkerung.', tag: 'idx', news: '"Indonesia stocks"' },
-  { id: 'thailand', name: 'Thailand', group: 'Länder', wiki: 'SET Index', price: { fmp: 'THD', label: 'Thailand-ETF THD' }, driver: 'Tourismus, Autoindustrie und Elektronik-Zulieferer.', tag: 'setindex', news: '"SET index" Thailand' },
-  { id: 'malaysia', name: 'Malaysia', group: 'Länder', wiki: 'FTSE Bursa Malaysia KLCI', price: { fmp: 'EWM', label: 'Malaysia-ETF EWM' }, driver: 'Neue Rechenzentren für KI und Chip-Verpackung (Back-End der Halbleiterfertigung).', tag: 'klci', news: '"Bursa Malaysia"' },
-  { id: 'philippines', name: 'Philippinen', group: 'Länder', wiki: 'PSE Composite Index', price: { fmp: 'EPHE', label: 'Philippinen-ETF EPHE' }, tag: 'psei', news: '"Philippine stocks"' },
-  { id: 'brazil', name: 'Brasilien', group: 'Länder', wiki: 'Ibovespa', price: { fmp: 'EWZ', label: 'Brasilien-ETF EWZ' }, driver: 'Rohstoffe und Agrar, hohe Zinsen.', tag: 'ibovespa', news: 'Ibovespa' },
-  { id: 'mexico', name: 'Mexiko', group: 'Länder', wiki: 'S&P/BMV IPC', price: { fmp: 'EWW', label: 'Mexiko-ETF EWW' }, driver: 'Produktion wandert aus Asien näher an die USA („Nearshoring“), abhängig von US-Zöllen.', tag: 'mexicostocks', news: '"Mexican stocks"' },
-  { id: 'argentina', name: 'Argentinien', group: 'Länder', wiki: 'S&P Merval', price: { fmp: 'ARGT', label: 'Argentinien-ETF ARGT' }, driver: 'Wirtschaftsreformen, Lithium und Schiefergas (Vaca Muerta). Sehr schwankungsanfällig.', tag: 'merval', news: 'Merval' },
-  { id: 'southafrica', name: 'Südafrika', group: 'Länder', wiki: 'FTSE/JSE Top 40 Index', price: { fmp: 'EZA', label: 'Südafrika-ETF EZA' }, driver: 'Gold, Platin und andere Rohstoffe.', tag: 'jse', news: '"Johannesburg Stock Exchange"' },
-  { id: 'turkey', name: 'Türkei', group: 'Länder', wiki: 'BIST 100', price: { fmp: 'TUR', label: 'Türkei-ETF TUR' }, driver: 'Hohe Inflation und schwache Lira, Kurse in Dollar oft deutlich schwächer als in Lira.', tag: 'bist100', news: '"Borsa Istanbul"' },
-  { id: 'saudi', name: 'Saudi-Arabien', group: 'Länder', wiki: 'Saudi Exchange', price: { fmp: 'KSA', label: 'Saudi-ETF KSA' }, driver: 'Ölpreis, Umbau der Wirtschaft (Vision 2030), Investitionen in KI-Rechenzentren.', tag: 'tadawul', news: 'Tadawul' },
-  { id: 'poland', name: 'Polen', group: 'Länder', wiki: 'WIG20', price: { fmp: 'EPOL', label: 'Polen-ETF EPOL' }, driver: 'Starkes Wachstum, Banken, Rüstungsausgaben.', tag: 'wig20', news: '"Warsaw Stock Exchange"' },
+  { id: 'korea', iso: 'KOR', name: 'Südkorea', group: 'Länder', wiki: 'KOSPI', price: { fmp: 'EWY', label: 'Südkorea-ETF EWY' }, driver: 'Speicherchips für KI-Rechenzentren (SK Hynix, Samsung), dazu Werften, Rüstung und Kernkraft.', tag: 'kospi', news: 'KOSPI' },
+  { id: 'taiwan', iso: 'TWN', name: 'Taiwan', group: 'Länder', wiki: 'TAIEX', price: { fmp: 'EWT', label: 'Taiwan-ETF EWT' }, driver: 'TSMC fertigt den Großteil der KI-Chips, viele Server-Zulieferer sitzen hier. Politisches Risiko durch China.', tag: 'taiwanstocks', news: 'TAIEX' },
+  { id: 'india', iso: 'IND', name: 'Indien', group: 'Länder', wiki: 'NIFTY 50', price: { fmp: 'INDA', label: 'Indien-ETF INDA' }, driver: 'Junge Bevölkerung, Produktion wandert aus China ab, starker Inlandskonsum.', tag: 'nifty50', news: '"Nifty 50"' },
+  { id: 'china', iso: 'CHN', name: 'China', group: 'Länder', wiki: 'SSE Composite Index', price: { fmp: 'MCHI', label: 'China-ETF MCHI' }, driver: 'Eigene KI-Modelle und Chips, Konjunkturprogramme. Risiko durch Handelsstreit und Regulierung.', tag: 'chinastocks', news: '"Chinese stocks"' },
+  { id: 'vietnam', iso: 'VNM', name: 'Vietnam', group: 'Länder', wiki: 'VN-Index', price: { fmp: 'VNM', label: 'Vietnam-ETF VNM' }, driver: 'Produktion wandert aus China ab, Hoffnung auf Aufnahme in große Schwellenländer-Indizes.', tag: 'vnindex', news: '"VN-Index"' },
+  { id: 'indonesia', iso: 'IDN', name: 'Indonesien', group: 'Länder', wiki: 'IDX Composite', price: { fmp: 'EIDO', label: 'Indonesien-ETF EIDO' }, driver: 'Nickel für Batterien, große junge Bevölkerung.', tag: 'idx', news: '"Indonesia stocks"' },
+  { id: 'thailand', iso: 'THA', name: 'Thailand', group: 'Länder', wiki: 'SET Index', price: { fmp: 'THD', label: 'Thailand-ETF THD' }, driver: 'Tourismus, Autoindustrie und Elektronik-Zulieferer.', tag: 'setindex', news: '"SET index" Thailand' },
+  { id: 'malaysia', iso: 'MYS', name: 'Malaysia', group: 'Länder', wiki: 'FTSE Bursa Malaysia KLCI', price: { fmp: 'EWM', label: 'Malaysia-ETF EWM' }, driver: 'Neue Rechenzentren für KI und Chip-Verpackung (Back-End der Halbleiterfertigung).', tag: 'klci', news: '"Bursa Malaysia"' },
+  { id: 'philippines', iso: 'PHL', name: 'Philippinen', group: 'Länder', wiki: 'PSE Composite Index', price: { fmp: 'EPHE', label: 'Philippinen-ETF EPHE' }, tag: 'psei', news: '"Philippine stocks"' },
+  { id: 'brazil', iso: 'BRA', name: 'Brasilien', group: 'Länder', wiki: 'Ibovespa', price: { fmp: 'EWZ', label: 'Brasilien-ETF EWZ' }, driver: 'Rohstoffe und Agrar, hohe Zinsen.', tag: 'ibovespa', news: 'Ibovespa' },
+  { id: 'mexico', iso: 'MEX', name: 'Mexiko', group: 'Länder', wiki: 'S&P/BMV IPC', price: { fmp: 'EWW', label: 'Mexiko-ETF EWW' }, driver: 'Produktion wandert aus Asien näher an die USA („Nearshoring“), abhängig von US-Zöllen.', tag: 'mexicostocks', news: '"Mexican stocks"' },
+  { id: 'argentina', iso: 'ARG', name: 'Argentinien', group: 'Länder', wiki: 'S&P Merval', price: { fmp: 'ARGT', label: 'Argentinien-ETF ARGT' }, driver: 'Wirtschaftsreformen, Lithium und Schiefergas (Vaca Muerta). Sehr schwankungsanfällig.', tag: 'merval', news: 'Merval' },
+  { id: 'southafrica', iso: 'ZAF', name: 'Südafrika', group: 'Länder', wiki: 'FTSE/JSE Top 40 Index', price: { fmp: 'EZA', label: 'Südafrika-ETF EZA' }, driver: 'Gold, Platin und andere Rohstoffe.', tag: 'jse', news: '"Johannesburg Stock Exchange"' },
+  { id: 'turkey', iso: 'TUR', name: 'Türkei', group: 'Länder', wiki: 'BIST 100', price: { fmp: 'TUR', label: 'Türkei-ETF TUR' }, driver: 'Hohe Inflation und schwache Lira, Kurse in Dollar oft deutlich schwächer als in Lira.', tag: 'bist100', news: '"Borsa Istanbul"' },
+  { id: 'saudi', iso: 'SAU', name: 'Saudi-Arabien', group: 'Länder', wiki: 'Saudi Exchange', price: { fmp: 'KSA', label: 'Saudi-ETF KSA' }, driver: 'Ölpreis, Umbau der Wirtschaft (Vision 2030), Investitionen in KI-Rechenzentren.', tag: 'tadawul', news: 'Tadawul' },
+  { id: 'poland', iso: 'POL', name: 'Polen', group: 'Länder', wiki: 'WIG20', price: { fmp: 'EPOL', label: 'Polen-ETF EPOL' }, driver: 'Starkes Wachstum, Banken, Rüstungsausgaben.', tag: 'wig20', news: '"Warsaw Stock Exchange"' },
 ];
 const GROUPS = ['Alle', 'Sammelobjekte', 'Lifestyle', 'Rohstoffe', 'Krypto', 'Technologie', 'Länder', 'Eigene'];
 
@@ -604,9 +604,23 @@ function fromCollected(src, c) {
   if (src === 'trends') return { t, series: c.d.map((d, i) => [d, c.v[i]]), kw: c.kw };
   if (src === 'hn') return { t, hn: { kw: c.kw, now: c.now, base: c.base } };
   if (src === 'masto') return { t, hist: c.hist };
+  if (['gnews', 'langs', 'github', 'arxiv'].includes(src)) return { t, data: c };
   return null;
 }
 const cardIndex = idx => state.collected?.cards?.[idx] || null;
+
+// Zählungen vom Sammler (jetzt ggü. Monats- bzw. Tagesschnitt davor). Unter minBase ist ein Verhältnis Zufall.
+const countStats = (c, minBase, pad = 1) => (!c || c.error ? null : { perDay: c.now, ratio: c.base >= minBase ? (c.now + pad) / (c.base + pad) : null, few: c.base < minBase });
+// Wikipedia in weiteren Sprachen: zusammen und die Sprache mit dem stärksten Anstieg
+const LANG_NAMES = { de: 'deutschen', fr: 'französischen', es: 'spanischen', ja: 'japanischen', ko: 'koreanischen', zh: 'chinesischen', pt: 'portugiesischen' };
+function langsStats(langs) {
+  const l = Object.entries(langs || {});
+  if (!l.length) return null;
+  const now = l.reduce((a, [, x]) => a + x.now, 0), base = l.reduce((a, [, x]) => a + x.base, 0);
+  const top = l.filter(([, x]) => x.now >= 30).map(([k, x]) => ({ lang: k, ratio: (x.now + 1) / (x.base + 1), now: x.now })).sort((a, b) => b.ratio - a.ratio)[0] || null;
+  return { perDay: now, ratio: base >= 20 ? (now + 1) / (base + 1) : null, few: base < 20, langs: l.map(([k]) => k), top };
+}
+const TECH = t => t.group === 'Technologie' || t.group === 'Krypto';
 
 // Google Trends: wöchentliche Werte 0–100; letzte 4 Wochen ggü. Median davor
 function trendsStats(series) {
@@ -626,6 +640,7 @@ async function loadExtras(force = false) {
     const col = state.collected?.themes?.[t.id];
     if (col) {
       x.trends = fromCollected('trends', col.trends) || { error: col.trends?.error || 'keine Daten' };
+      for (const src of ['gnews', 'langs', 'github', 'arxiv']) x[src] = fromCollected(src, col[src]) || (col[src]?.error ? { error: col[src].error } : null);
       // Sammler-Daten haben Vorrang; fehlt dort eine Quelle, lädt die Seite sie selbst
       for (const src of Object.keys(todo)) { const v = fromCollected(src, col[src]); if (v) x[src] = v; }
     } else if (!x.trends) x.trends = { error: !state.collected ? 'Sammler-Daten nicht erreichbar' : t.group === 'Eigene' ? 'Nur für die festen Themen' : 'Kommt mit dem nächsten Sammler-Lauf' };
@@ -727,11 +742,12 @@ function priceStats(series) {
 }
 
 // Hype-Score: Aufmerksamkeit 45 %, Beschleunigung 20 %, Handelsvolumen 15 %, Preisdynamik 20 %, dazu die weiteren Quellen. Fehlende Teile werden umverteilt.
-// Weitere Quellen fließen mit ein, wenn es sie gibt: News 15 %, Google Trends 15 %, Hacker News 10 %, Mastodon 5 % (vor dem Umverteilen)
+// Weitere Quellen fließen mit ein, wenn es sie gibt: News 15 %, Google Trends 15 %, Wikipedia weltweit 10 %, Hacker News 10 %,
+// Mastodon 5 %, GitHub 5 %, arXiv 5 % (vor dem Umverteilen)
 function hypeScore(a, p, ext = {}) {
   const src = (w, x) => [w, x?.ratio != null ? lin(Math.log2(x.ratio), -1, 2) : null];
   const parts = [
-    src(0.15, ext.news), src(0.15, ext.trends), src(0.10, ext.hn), src(0.05, ext.masto),
+    src(0.15, ext.news), src(0.15, ext.trends), src(0.10, ext.langs), src(0.10, ext.hn), src(0.05, ext.masto), src(0.05, ext.github), src(0.05, ext.arxiv),
     [0.45, a ? lin(Math.log2(a.ratio), -1, 2) : null],
     [0.20, a ? lin(Math.log2(a.accel), -0.5, 1) : null],
     [0.15, p?.volRatio ? lin(Math.log2(p.volRatio), -0.5, 1.5) : null],
@@ -766,7 +782,7 @@ function phaseFor(a, p, conf = { avail: 0, rising: 0 }) {
   return 'calm';
 }
 
-const SRC_NAMES = { wiki: 'Wikipedia', trends: 'Google', news: 'News', hn: 'Hacker News', masto: 'Mastodon' };
+const SRC_NAMES = { wiki: 'Wikipedia', langs: 'Wikipedia weltweit', trends: 'Google', news: 'News', hn: 'Hacker News', masto: 'Mastodon', github: 'GitHub', arxiv: 'arXiv' };
 // Welche Quellen gerade einen Anstieg zeigen (mindestens 1,3× über normal)
 const risingSources = (a, ext) => Object.entries({ wiki: a, ...ext }).filter(([, x]) => x?.ratio != null && x.ratio >= 1.3).map(([k]) => k);
 
@@ -775,6 +791,12 @@ function signalsFor(t, a, p, ext = {}) {
   if (ext.trends?.ratio >= 1.5) out.push(`Google-Suchen ${num(ext.trends.ratio, 1)}× so häufig wie normal`);
   if (ext.news?.ratio >= 1.5) out.push(`${num(ext.news.ratio, 1)}× so viele News-Artikel wie normal`);
   if (ext.hn?.ratio >= 1.5) out.push(`Auf Hacker News ${num(ext.hn.ratio, 1)}× so oft erwähnt wie sonst`);
+  if (ext.langs?.top?.ratio >= 1.8) out.push(`Auf der ${LANG_NAMES[ext.langs.top.lang]} Wikipedia ${num(ext.langs.top.ratio, 1)}× so oft aufgerufen wie normal`);
+  if (ext.github?.ratio >= 1.5) out.push(`${num(ext.github.ratio, 1)}× so viele neue GitHub-Projekte wie sonst: Entwickler steigen ein`);
+  if (ext.arxiv?.ratio >= 1.5) out.push(`${num(ext.arxiv.ratio, 1)}× so viele neue Forschungsarbeiten (arXiv) wie sonst`);
+  if (t.price?.cg && state.collected?.trendingCoins?.includes(t.price.cg)) out.push('Gerade unter den meistgesuchten Coins bei CoinGecko');
+  const mac = state.collected?.macro?.[t.id], y = new Date().getFullYear();
+  if (mac?.gdp?.[y + 1] != null && mac?.gdp?.[y] != null && mac.gdp[y + 1] - mac.gdp[y] >= 1) out.push(`IMF erwartet ${y + 1} deutlich stärkeres Wachstum (${num(mac.gdp[y + 1], 1)} % statt ${num(mac.gdp[y], 1)} %)`);
   if (ext.masto?.ratio >= 1.5) out.push(`#${tagFor(t)} auf Mastodon ${num(ext.masto.ratio, 1)}× häufiger als sonst`);
   const rising = risingSources(a, ext);
   if (rising.length >= 2) out.unshift(`${rising.length} Quellen zeigen gleichzeitig einen Anstieg: ${rising.map(k => SRC_NAMES[k]).join(', ')}`);
@@ -810,7 +832,10 @@ function compute(t) {
   const bench = t.group === 'Länder' && t.id !== 'em' && state.data.em?.price ? priceStats(state.data.em.price) : null;
   if (p && bench) { p.rel30 = has(p.p30) && has(bench.p30) ? p.p30 - bench.p30 : null; p.rel90 = has(p.p90) && has(bench.p90) ? p.p90 - bench.p90 : null; }
   const x = state.extra[t.id] || {};
-  const ext = { news: newsStats(x.news?.series), trends: trendsStats(x.trends?.series), hn: hnStats(x.hn?.hn), masto: mastoStats(x.masto?.hist) };
+  // News: GDELT, wenn vorhanden, sonst Google News
+  const gnews = countStats(x.gnews?.data, 0.3, 0.1);
+  const ext = { news: newsStats(x.news?.series) || gnews, trends: trendsStats(x.trends?.series), langs: langsStats(x.langs?.data), hn: hnStats(x.hn?.hn), masto: mastoStats(x.masto?.hist),
+    ...(TECH(t) ? { github: countStats(x.github?.data, 3) } : {}), ...(t.group === 'Technologie' ? { arxiv: countStats(x.arxiv?.data, 3) } : {}) };
   const others = Object.values(ext).filter(e => e?.ratio != null);
   const conf = { avail: others.length, rising: others.filter(e => e.ratio >= 1.3).length };
   // Aufmerksamkeits-Index des Sammlers (alle Quellen, je Tag): Bewegung über 7 Tage
@@ -928,7 +953,8 @@ const attnSpark = (r, opts) => spark(r.d.views ? smooth(r.d.views.map(x => x[1])
 const attnTxt = a => (a ? pctTxt((a.ratio - 1) * 100) : '–');
 // Kleine Buchstaben je Quelle, gefärbt nach Richtung
 function srcDots(r) {
-  const items = [['W', 'wiki', r.a], ['G', 'trends', r.ext.trends], ['N', 'news', r.ext.news], ['H', 'hn', r.ext.hn], ['M', 'masto', r.ext.masto]];
+  const items = [['W', 'wiki', r.a], ['S', 'langs', r.ext.langs], ['G', 'trends', r.ext.trends], ['N', 'news', r.ext.news], ['H', 'hn', r.ext.hn], ['M', 'masto', r.ext.masto],
+    ...(TECH(r.t) ? [['C', 'github', r.ext.github]] : []), ...(r.t.group === 'Technologie' ? [['F', 'arxiv', r.ext.arxiv]] : [])];
   return items.map(([l, k, x]) => {
     const ratio = x?.ratio;
     const color = ratio == null ? 'var(--faint)' : ratio >= 1.3 ? (state.mode === 'clean' ? 'var(--text)' : 'var(--up)') : ratio < 0.8 ? (state.mode === 'clean' ? 'var(--muted)' : 'var(--down)') : 'var(--muted)';
@@ -1034,7 +1060,7 @@ function render() {
           <th class="eyebrow font-semibold py-2 px-1">Phase</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Hype</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Aufmerks.</th>
-          <th class="eyebrow font-semibold py-2 px-1 text-center" title="W = Wikipedia, G = Google Trends, N = News, H = Hacker News, M = Mastodon">Quellen</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-center" title="W = Wikipedia, S = Wikipedia in 7 weiteren Sprachen, G = Google Trends, N = News, H = Hacker News, M = Mastodon, C = GitHub, F = Forschung (arXiv)">Quellen</th>
           <th class="eyebrow font-semibold py-2 px-1 hidden sm:table-cell">Verlauf 4 Mon.</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Preis 30 T.</th>
         </tr></thead>
@@ -1054,7 +1080,7 @@ function render() {
       </table>
     </div>
     <p class="text-[11px] faint mt-2">Aufmerksamkeit: Wikipedia-Aufrufe der letzten 30 Tage im Vergleich zum Normalniveau des Jahres davor.
-      Quellen: <b>W</b>ikipedia, <b>G</b>oogle Trends, <b>N</b>ews, <b>H</b>acker News, <b>M</b>astodon; grün = steigt, rot = fällt, grau = normal, blass = keine Daten. Antippen für Details.</p>`;
+      Quellen: <b>W</b>ikipedia, <b>S</b>prachen (Wikipedia de, fr, es, ja, ko, zh, pt), <b>G</b>oogle Trends, <b>N</b>ews, <b>H</b>acker News, <b>M</b>astodon, bei Tech-Themen <b>C</b>ode (GitHub) und <b>F</b>orschung (arXiv); grün = steigt, rot = fällt, grau = normal, blass = keine Daten. Antippen für Details.</p>`;
 
   if (document.getElementById('detailDialog').open) renderDetail();
 }
@@ -1215,7 +1241,7 @@ function renderDetail() {
     ${indexBlock(r)}
     <div>
       <h3 class="eyebrow mb-2">Quellen im Vergleich</h3>
-      ${r.conf.avail ? `<p class="text-xs muted mb-2">Bestätigung: <b class="text-white">${r.conf.rising} von ${r.conf.avail}</b> weiteren Quellen zeigen ebenfalls einen Anstieg.</p>` : ''}
+      ${r.conf.avail ? `<p class="text-xs muted mb-2">Bestätigung: <b class="text-white">${r.conf.rising} von ${r.conf.avail}</b> weiteren Quellen ${r.conf.rising === 1 ? 'zeigt' : 'zeigen'} ebenfalls einen Anstieg.</p>` : ''}
       <dl class="grid grid-cols-2 sm:grid-cols-3 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${sourceCells(r)}</dl>
     </div>
     <div>
@@ -1230,6 +1256,7 @@ function renderDetail() {
     </div>
     ${r.d.priceError ? `<p class="text-xs faint">Kurs: ${esc(r.d.priceError)}</p>` : ''}
     ${t.price?.idx ? cardBlock(r) : ''}
+    ${macroBlock(t)}
     <div class="flex flex-wrap gap-2">
       ${r.d.title ? `<a class="btn btn-sm" href="https://en.wikipedia.org/wiki/${encodeURIComponent(r.d.title.replace(/ /g, '_'))}" target="_blank" rel="noopener">Wikipedia-Artikel</a>` : ''}
       ${open ? `<a class="btn btn-sm" href="${open}">${esc(t.price.label || 'Kurs')} analysieren</a>` : ''}
@@ -1248,6 +1275,22 @@ function openDetail(id) {
   if (!dlg.open) dlg.showModal();
 }
 
+// Länder: IMF-Prognosen für Wachstum und Inflation
+function macroBlock(t) {
+  const m = state.collected?.macro?.[t.id];
+  if (!t.iso) return '';
+  if (!m) return `<div><h3 class="eyebrow mb-2">Wirtschaft (IMF-Prognose)</h3><p class="text-sm faint">${state.collected ? 'Kommt mit dem nächsten Sammler-Lauf.' : 'Sammler-Daten nicht erreichbar.'}</p></div>`;
+  const years = [...new Set([...Object.keys(m.gdp || {}), ...Object.keys(m.cpi || {})])].sort();
+  const cell = (label, v) => `<div class="px-4 py-3" style="background:var(--panel)"><dt class="eyebrow">${label}</dt><dd class="num text-[15px] mt-1">${v}</dd></div>`;
+  return `<div>
+    <h3 class="eyebrow mb-2">Wirtschaft (IMF-Prognose)</h3>
+    <dl class="grid grid-cols-2 sm:grid-cols-3 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">
+      ${years.map(y => cell(`${y}${Number(y) > new Date().getFullYear() - 1 ? ' (Prognose)' : ''}`, `Wachstum ${m.gdp?.[y] != null ? `<span style="color:${upDown(m.gdp[y])}">${num(m.gdp[y], 1)} %</span>` : '–'}<br><span class="text-xs muted">Inflation ${m.cpi?.[y] != null ? `${num(m.cpi[y], 1)} %` : '–'}</span>`)).join('')}
+    </dl>
+    <p class="text-[11px] faint mt-1">Internationaler Währungsfonds (World Economic Outlook). Wachstum = reales BIP ggü. Vorjahr.</p>
+  </div>`;
+}
+
 // Kartenpreis-Index vom Sammler: was drinsteckt und wie er sich bewegt
 function cardBlock(r) {
   const c = r.card;
@@ -1258,6 +1301,8 @@ function cardBlock(r) {
     <div class="inset px-4 py-3 text-sm space-y-1">
       <div><span class="muted">Korb:</span> ${esc(c.label)}, ${c.n} Karten, typischer Preis ${f2(c.typical)} €</div>
       ${c.momentum ? `<div><span class="muted">Trend:</span> <span class="num" style="color:${upDown(c.momentum - 1)}">${pctTxt((c.momentum - 1) * 100)}</span> <span class="faint">(gestern ggü. 30-Tage-Schnitt, Mittel über alle Karten)</span></div>` : ''}
+      ${c.priceDate ? `<div><span class="muted">Preise vom:</span> ${new Date(c.priceDate).toLocaleDateString('de-DE')}${Date.now() - Date.parse(c.priceDate) > 7 * DAY_MS ? ' <span style="color:var(--down)">(die Quelle aktualisiert gerade nicht)</span>' : ''}</div>` : ''}
+      ${c.moved != null ? `<div><span class="muted">Bewegt seit gestern:</span> ${num(c.moved * 100, 0)} % der Karten</div>` : ''}
       <div><span class="muted">Index:</span> <span class="num">${num(c.series.at(-1)[1], 1)}</span> <span class="faint">(Start 100, ${days < 30 ? `Verlauf wird gesammelt, ${days} von 30 Tagen` : `seit ${new Date(c.series[0][0]).toLocaleDateString('de-DE')}`})</span></div>
     </div>
     <p class="text-[11px] faint mt-1">Täglich vom Sammler erfasst. Der Index zeigt die mittlere Preisänderung der Karten im Korb.</p>
@@ -1458,7 +1503,8 @@ function renderHelp() {
       <h3 class="font-semibold text-white mb-1">Die Idee</h3>
       <p class="muted">Preise steigen meist in dieser Reihenfolge: erst wächst die Aufmerksamkeit, dann der Handel, dann der Preis, am Ende kommt die Überhitzung.
         Das Radar misst die Aufmerksamkeit über die täglichen Aufrufe der englischen Wikipedia und legt sie neben Kurs und Handelsvolumen, wo es die gibt.
-        Zur Bestätigung kommen vier weitere Quellen dazu: Google-Suchen (Google Trends), News-Artikel weltweit (GDELT), Erwähnungen auf Hacker News (Tech-Forum) und wie oft der Hashtag auf Mastodon gepostet wird.</p>
+        Zur Bestätigung kommen weitere Quellen dazu: Wikipedia in sieben weiteren Sprachen, Google-Suchen (Google Trends), News (GDELT und Google News), Erwähnungen auf Hacker News (Tech-Forum),
+        Mastodon-Hashtags, bei Tech- und Krypto-Themen neue GitHub-Projekte und bei Technologie neue Forschungsarbeiten (arXiv). Bei Ländern zeigt das Radar zusätzlich die IMF-Prognosen, bei Krypto die meistgesuchten Coins bei CoinGecko.</p>
     </section>
     <section>
       <h3 class="font-semibold text-white mb-1">Damit es weniger Fehlalarme gibt</h3>
@@ -1490,7 +1536,7 @@ function renderHelp() {
         <li class="inset px-3 py-2"><b class="text-white">Beschleunigung, 20 %:</b> <span class="muted">letzte 7 Tage ggü. 30 Tagen. −30 % = 0, verdoppelt = 100.</span></li>
         <li class="inset px-3 py-2"><b class="text-white">Handelsvolumen, 15 %:</b> <span class="muted">30 Tage ggü. normal. −30 % = 0, knapp 3× = 100.</span></li>
         <li class="inset px-3 py-2"><b class="text-white">Preisdynamik, 20 %:</b> <span class="muted">Kurs 30 Tage. −15 % = 0, +30 % = 100.</span></li>
-        <li class="inset px-3 py-2"><b class="text-white">Weitere Quellen, 45 %:</b> <span class="muted">News 15 %, Google Trends 15 %, Hacker News 10 %, Mastodon 5 %. Jeweils ggü. normal, halbiert = 0, vervierfacht = 100.</span></li>
+        <li class="inset px-3 py-2"><b class="text-white">Weitere Quellen, 45 %:</b> <span class="muted">News 15 %, Google Trends 15 %, Wikipedia weltweit 10 %, Hacker News 10 %, Mastodon 5 %, GitHub 5 %, arXiv 5 %. Jeweils ggü. normal, halbiert = 0, vervierfacht = 100.</span></li>
       </ul>
       <p class="text-xs faint mt-2">Fehlt ein Teil, werden die anderen hochgerechnet. „Frühsignal“ sortiert nach hoher Aufmerksamkeit bei noch wenig Preisbewegung.</p>
     </section>
@@ -1532,10 +1578,14 @@ function sourceCells(r) {
   const m = r.ext.masto;
   return [
     cellFor('Wikipedia', r.d.title || '–', r.a && { perDay: r.a.last30, ratio: r.a.ratio }, 'Aufrufe/Tag', r.d.viewsError),
+    cellFor('Wikipedia weltweit', r.ext.langs ? r.ext.langs.langs.join(', ') : '7 weitere Sprachen', r.ext.langs, 'Aufrufe/Tag', r.x.langs?.error || (r.t.group === 'Eigene' ? 'Nur für die festen Themen' : 'kein Artikel in weiteren Sprachen'), r.ext.langs?.few ? 'zu wenig Aufrufe für einen Vergleich' : null),
     cellFor('Google Trends', r.x.trends?.kw || '–', r.ext.trends, 'von 100', r.x.trends?.error),
-    cellFor('News', newsFor(r.t).replace(/"/g, ''), r.ext.news, 'Artikel/Tag', pending('news') || r.x.news?.error),
+    cellFor('News (GDELT)', newsFor(r.t).replace(/"/g, ''), newsStats(r.x.news?.series), 'Artikel/Tag', pending('news') || r.x.news?.error),
+    cellFor('Google News', newsFor(r.t).replace(/"/g, ''), countStats(r.x.gnews?.data, 0.3, 0.1), 'Meldungen/Tag', r.x.gnews?.error || (r.t.group === 'Eigene' ? 'Nur für die festen Themen' : 'kommt mit dem nächsten Sammler-Lauf')),
     cellFor('Hacker News', r.x.hn?.hn?.kw || hnKeyword(r.t), r.ext.hn, 'Erwähnungen/Monat', pending('hn') || r.x.hn?.error, r.ext.hn?.few ? 'zu selten für einen Vergleich' : null),
     cellFor('Mastodon', tag, m, 'Posts/Tag', pending('masto') || r.x.masto?.error, m && m.ratio == null ? `Verlauf wird gesammelt (${m.days} von 21 Tagen)` : null),
+    ...(TECH(r.t) ? [cellFor('GitHub', r.x.github?.data?.kw || hnKeyword(r.t), r.ext.github, 'neue Projekte/Monat', r.x.github?.error || 'kommt mit dem nächsten Sammler-Lauf', r.ext.github?.few ? 'zu wenige für einen Vergleich' : null)] : []),
+    ...(r.t.group === 'Technologie' ? [cellFor('Forschung (arXiv)', r.x.arxiv?.data?.kw || hnKeyword(r.t), r.ext.arxiv, 'Arbeiten/Monat', r.x.arxiv?.error || 'kommt mit dem nächsten Sammler-Lauf', r.ext.arxiv?.few ? 'zu wenige für einen Vergleich' : null)] : []),
   ].join('');
 }
 

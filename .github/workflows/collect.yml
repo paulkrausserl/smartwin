@@ -25,6 +25,9 @@ jobs:
           node-version: 22
       - name: Daten sammeln
         run: node scripts/collect.mjs
+        env:
+          # für die GitHub-Suche (Entwickler-Interesse): höheres Abruflimit als ohne Anmeldung
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Speichern
         run: |
           git config user.name 'smartwin-sammler'
