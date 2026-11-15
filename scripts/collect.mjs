@@ -369,7 +369,10 @@ function chainIndex(key, label, prices, extra = {}) {
   const old = prev.cards?.[key];
   const series = (old?.series || []).filter(p => p[0] !== today);
   let level = 100, moved = null;
-  if (series.length && old?.prices) {
+  // Nur Preise derselben Quelle vergleichen: Quellen rechnen Preise unterschiedlich (bei Pokémon gibt es zwei)
+  const oldSource = old?.source || (key === 'pokemon' ? 'pokemontcg.io' : null), sameSource = oldSource === (extra.source || oldSource);
+  if (series.length && !sameSource) level = series.at(-1)[1];
+  else if (series.length && old?.prices) {
     const ratios = Object.entries(prices).filter(([id, p]) => old.prices[id] > 0.5 && p > 0.5).map(([id, p]) => p / old.prices[id]);
     level = series.at(-1)[1] * (ratios.length >= 10 ? trimmedGeoMean(ratios) : 1);
     moved = ratios.length ? round(ratios.filter(r => Math.abs(r - 1) > 0.001).length / ratios.length, 2) : null;
