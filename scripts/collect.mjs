@@ -293,13 +293,14 @@ async function researchCount(kw, from, to) {
 async function collectArxiv() {
   for (const t of THEMES.filter(x => x.group === 'Technologie')) {
     try {
-      // die letzten 2 Wochen fehlen in Katalogen oft noch: Vergleichsmonat endet deshalb vor 14 Tagen
-      const kw = trendsFor(t), now = Date.now() - 14 * DAY_MS;
-      const recent = await researchCount(kw, now - 30 * DAY_MS, now);
+      // Kataloge erfassen neue Arbeiten mit Monaten Verzug. Darum: ein Monat, der 2 Monate zurückliegt,
+      // ggü. demselben Monat im Vorjahr (Wachstum der Forschung übers Jahr, ohne Verzerrung durch den Verzug)
+      const kw = trendsFor(t), end = Date.now() - 60 * DAY_MS;
+      const recent = await researchCount(kw, end - 30 * DAY_MS, end);
       await sleep(300);
-      const before = await researchCount(kw, now - 360 * DAY_MS, now - 31 * DAY_MS);
-      if (!Number.isFinite(recent) || !Number.isFinite(before)) throw new Error('OpenAlex lieferte keine Zahl');
-      slot(t.id).arxiv = { kw, now: recent, base: round(before / 11, 1), src: 'OpenAlex' };
+      const yearAgo = await researchCount(kw, end - 395 * DAY_MS, end - 365 * DAY_MS);
+      if (!Number.isFinite(recent) || !Number.isFinite(yearAgo)) throw new Error('OpenAlex lieferte keine Zahl');
+      slot(t.id).arxiv = { kw, now: recent, base: yearAgo, src: 'OpenAlex', month: ymd(new Date(end)).slice(0, 7) };
     } catch (e) { slot(t.id).arxiv = keep(t.id, 'arxiv', e.message); }
     await sleep(300);
   }

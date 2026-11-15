@@ -814,7 +814,7 @@ function signalsFor(t, a, p, ext = {}) {
   if (ext.hn?.ratio >= 1.5) out.push(`Auf Hacker News ${num(ext.hn.ratio, 1)}× so oft erwähnt wie sonst`);
   if (ext.langs?.top?.ratio >= 1.8) out.push(`Auf der ${LANG_NAMES[ext.langs.top.lang]} Wikipedia ${num(ext.langs.top.ratio, 1)}× so oft aufgerufen wie normal`);
   if (ext.github?.ratio >= 1.5) out.push(`${num(ext.github.ratio, 1)}× so viele neue GitHub-Projekte wie sonst: Entwickler steigen ein`);
-  if (ext.arxiv?.ratio >= 1.5) out.push(`${num(ext.arxiv.ratio, 1)}× so viele neue Forschungsarbeiten wie sonst`);
+  if (ext.arxiv?.ratio >= 1.5) out.push(`${num(ext.arxiv.ratio, 1)}× so viele neue Forschungsarbeiten wie ein Jahr zuvor`);
   if (t.price?.cg && state.collected?.trendingCoins?.includes(t.price.cg)) out.push('Gerade unter den meistgesuchten Coins bei CoinGecko');
   if (ext.sec?.ratio >= 1.5) out.push(`${num(ext.sec.ratio, 1)}× so viele Erwähnungen in US-Firmenberichten (SEC) wie sonst: Firmen springen auf`);
   if (ext.dev?.ratio >= 1.3) out.push(`Downloads der Entwickler-Pakete ${pctTxt((ext.dev.ratio - 1) * 100)} ggü. den Monaten davor: wird mehr genutzt`);
@@ -1915,7 +1915,7 @@ function sourceCells(r) {
     ...(r.t.dev ? [cellFor('Entwickler-Downloads', [...(r.t.dev.npm || []), ...(r.t.dev.pypi || [])].join(', '), r.ext.dev, 'pro Monat', r.x.dev?.error || 'kommt mit dem nächsten Sammler-Lauf')] : []),
     ...(r.t.so ? [cellFor('Stack Overflow', `Tag: ${r.t.so}`, r.ext.so, 'Fragen/Monat', 'kommt mit dem nächsten Sammler-Lauf', r.ext.so?.few ? 'zu wenige für einen Vergleich' : null)] : []),
     ...(r.ext.poly ? [cellFor('Polymarket', `${state.collected.poly[r.t.id].n} passende Wetten`, { ...r.ext.poly, perDay: r.ext.poly.perDay / 1e6 }, 'Mio. $ in 24 h', null, r.ext.poly.few ? 'Verlauf wird gesammelt' : null)] : []),
-    ...(r.t.group === 'Technologie' ? [cellFor('Forschung (OpenAlex)', r.x.arxiv?.data?.kw || hnKeyword(r.t), r.ext.arxiv, 'Arbeiten/Monat', r.x.arxiv?.error || 'kommt mit dem nächsten Sammler-Lauf', r.ext.arxiv?.few ? 'zu wenige für einen Vergleich' : null)] : []),
+    ...(r.t.group === 'Technologie' ? [cellFor('Forschung (OpenAlex)', `${r.x.arxiv?.data?.kw || hnKeyword(r.t)}${r.x.arxiv?.data?.month ? ` · ${r.x.arxiv.data.month} ggü. Vorjahr` : ''}`, r.ext.arxiv, 'Arbeiten/Monat', r.x.arxiv?.error || 'kommt mit dem nächsten Sammler-Lauf', r.ext.arxiv?.few ? 'zu wenige für einen Vergleich' : null)] : []),
   ].join('');
 }
 
