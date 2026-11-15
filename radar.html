@@ -224,6 +224,9 @@
     <!-- Was sich seit dem letzten Besuch geändert hat -->
     <div id="sinceVisit" hidden class="card p-4 mb-4 text-sm"></div>
 
+    <!-- Marktstimmung: Fear & Greed und App-Store-Ränge -->
+    <section id="mood" hidden class="card p-4 sm:p-5 mb-6"></section>
+
     <!-- Aufsteiger -->
     <section class="card p-4 sm:p-5 mb-6">
       <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
@@ -235,6 +238,9 @@
       </div>
       <div id="risers" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
     </section>
+
+    <!-- Neu aufgetaucht: was gerade hochschießt, auch außerhalb der Themenliste -->
+    <details id="discover" hidden open class="raw card p-4 sm:p-5 mb-6"></details>
 
     <!-- Alle Themen -->
     <section class="card p-4 sm:p-5 mb-6">
@@ -313,12 +319,12 @@
          style="background:rgba(16,21,30,.9);border:1px solid var(--line-2);right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px))"></div>
 
     <footer class="text-center text-[11px] faint mt-10 pb-8 leading-relaxed">
-      Aufmerksamkeit: Wikipedia (8 Sprachen), Google Trends, News (GDELT, Google News), Hacker News, Mastodon, GitHub, arXiv. Wirtschaft: IMF. Kurse: Financial Modeling Prep, CoinGecko, Cardmarket.<br />
+      Aufmerksamkeit: Wikipedia (8 Sprachen), Google Trends, News (GDELT, Google News), Hacker News, Mastodon, GitHub, arXiv. US-Firmenberichte (SEC), npm, PyPI. Wirtschaft: IMF, FRED, CFTC, DefiLlama. Stimmung: alternative.me, CNN, Apple App Store. Kurse: Financial Modeling Prep, CoinGecko, Cardmarket.<br />
       Signale, keine Vorhersagen. Keine Anlageberatung.
     </footer>
   </div>
 <script>
-const APP_VERSION = '4.4';
+const APP_VERSION = '4.5';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -604,10 +610,10 @@ function fromCollected(src, c) {
   if (!c || c.error) return null;
   const t = Date.parse(state.collected.updated);
   if (src === 'news') return { t, series: c.d.map((d, i) => [d, c.v[i], c.p[i]]) };
-  if (src === 'trends') return { t, series: c.d.map((d, i) => [d, c.v[i]]), kw: c.kw };
+  if (src === 'trends') return { t, series: c.d.map((d, i) => [d, c.v[i]]), kw: c.kw, rising: c.rising || null, risingAt: c.risingAt || null };
   if (src === 'hn') return { t, hn: { kw: c.kw, now: c.now, base: c.base } };
   if (src === 'masto') return { t, hist: c.hist };
-  if (['gnews', 'langs', 'github', 'arxiv'].includes(src)) return { t, data: c };
+  if (['gnews', 'langs', 'github', 'arxiv', 'sec', 'dev'].includes(src)) return { t, data: c };
   return null;
 }
 const cardIndex = idx => state.collected?.cards?.[idx] || null;
@@ -624,6 +630,8 @@ function langsStats(langs) {
   return { perDay: now, ratio: base >= 20 ? (now + 1) / (base + 1) : null, few: base < 20, langs: l.map(([k]) => k), top };
 }
 const TECH = t => t.group === 'Technologie' || t.group === 'Krypto';
+// Entwickler-Downloads: letzte 30 Tage ggü. Monatsschnitt der Monate davor
+const devStats = c => (!c || c.error || !c.base ? null : { perDay: c.now, ratio: c.now / c.base });
 
 // Google Trends: wöchentliche Werte 0–100; letzte 4 Wochen ggü. Median davor
 function trendsStats(series) {
@@ -643,7 +651,7 @@ async function loadExtras(force = false) {
     const col = state.collected?.themes?.[t.id];
     if (col) {
       x.trends = fromCollected('trends', col.trends) || { error: col.trends?.error || 'keine Daten' };
-      for (const src of ['gnews', 'langs', 'github', 'arxiv']) x[src] = fromCollected(src, col[src]) || (col[src]?.error ? { error: col[src].error } : null);
+      for (const src of ['gnews', 'langs', 'github', 'arxiv', 'sec', 'dev']) x[src] = fromCollected(src, col[src]) || (col[src]?.error ? { error: col[src].error } : null);
       // Sammler-Daten haben Vorrang; fehlt dort eine Quelle, lädt die Seite sie selbst
       for (const src of Object.keys(todo)) { const v = fromCollected(src, col[src]); if (v) x[src] = v; }
     } else if (!x.trends) x.trends = { error: !state.collected ? 'Sammler-Daten nicht erreichbar' : t.group === 'Eigene' ? 'Nur für die festen Themen' : 'Kommt mit dem nächsten Sammler-Lauf' };
@@ -746,11 +754,11 @@ function priceStats(series) {
 
 // Hype-Score: Aufmerksamkeit 45 %, Beschleunigung 20 %, Handelsvolumen 15 %, Preisdynamik 20 %, dazu die weiteren Quellen. Fehlende Teile werden umverteilt.
 // Weitere Quellen fließen mit ein, wenn es sie gibt: News 15 %, Google Trends 15 %, Wikipedia weltweit 10 %, Hacker News 10 %,
-// Mastodon 5 %, GitHub 5 %, arXiv 5 % (vor dem Umverteilen)
+// Mastodon 5 %, GitHub 5 %, arXiv 5 %, US-Firmenberichte 10 %, Downloads 5 % (vor dem Umverteilen)
 function hypeScore(a, p, ext = {}) {
   const src = (w, x) => [w, x?.ratio != null ? lin(Math.log2(x.ratio), -1, 2) : null];
   const parts = [
-    src(0.15, ext.news), src(0.15, ext.trends), src(0.10, ext.langs), src(0.10, ext.hn), src(0.05, ext.masto), src(0.05, ext.github), src(0.05, ext.arxiv),
+    src(0.15, ext.news), src(0.15, ext.trends), src(0.10, ext.langs), src(0.10, ext.hn), src(0.05, ext.masto), src(0.05, ext.github), src(0.05, ext.arxiv), src(0.10, ext.sec), src(0.05, ext.dev),
     [0.45, a ? lin(Math.log2(a.ratio), -1, 2) : null],
     [0.20, a ? lin(Math.log2(a.accel), -0.5, 1) : null],
     [0.15, p?.volRatio ? lin(Math.log2(p.volRatio), -0.5, 1.5) : null],
@@ -785,7 +793,7 @@ function phaseFor(a, p, conf = { avail: 0, rising: 0 }) {
   return 'calm';
 }
 
-const SRC_NAMES = { wiki: 'Wikipedia', langs: 'Wikipedia weltweit', trends: 'Google', news: 'News', hn: 'Hacker News', masto: 'Mastodon', github: 'GitHub', arxiv: 'arXiv' };
+const SRC_NAMES = { wiki: 'Wikipedia', langs: 'Wikipedia weltweit', trends: 'Google', news: 'News', hn: 'Hacker News', masto: 'Mastodon', github: 'GitHub', arxiv: 'arXiv', sec: 'US-Firmenberichte', dev: 'Downloads' };
 // Welche Quellen gerade einen Anstieg zeigen (mindestens 1,3× über normal)
 const risingSources = (a, ext) => Object.entries({ wiki: a, ...ext }).filter(([, x]) => x?.ratio != null && x.ratio >= 1.3).map(([k]) => k);
 
@@ -798,6 +806,17 @@ function signalsFor(t, a, p, ext = {}) {
   if (ext.github?.ratio >= 1.5) out.push(`${num(ext.github.ratio, 1)}× so viele neue GitHub-Projekte wie sonst: Entwickler steigen ein`);
   if (ext.arxiv?.ratio >= 1.5) out.push(`${num(ext.arxiv.ratio, 1)}× so viele neue Forschungsarbeiten (arXiv) wie sonst`);
   if (t.price?.cg && state.collected?.trendingCoins?.includes(t.price.cg)) out.push('Gerade unter den meistgesuchten Coins bei CoinGecko');
+  if (ext.sec?.ratio >= 1.5) out.push(`${num(ext.sec.ratio, 1)}× so viele Erwähnungen in US-Firmenberichten (SEC) wie sonst: Firmen springen auf`);
+  if (ext.dev?.ratio >= 1.3) out.push(`Downloads der Entwickler-Pakete ${pctTxt((ext.dev.ratio - 1) * 100)} ggü. den Monaten davor: wird mehr genutzt`);
+  const cot = state.collected?.cot?.[t.id];
+  if (cot?.pct >= 90) out.push('Spekulanten am Terminmarkt so optimistisch wie selten in 3 Jahren: oft schon spät im Trend');
+  if (cot && cot.pct <= 10) out.push('Spekulanten am Terminmarkt so pessimistisch wie selten in 3 Jahren: oft ein Gegensignal');
+  const defi = defiChange(t);
+  if (defi?.ch >= 0.25) out.push(`${defi.kind === 'tvl' ? 'Geld auf der Blockchain' : 'Gebühren'} ${pctTxt(defi.ch * 100)} in 30 Tagen: echte Nutzung wächst`);
+  if (defi && defi.ch <= -0.25) out.push(`${defi.kind === 'tvl' ? 'Geld auf der Blockchain' : 'Gebühren'} ${pctTxt(defi.ch * 100)} in 30 Tagen: Nutzung schrumpft`);
+  const appFor = t.group === 'Krypto' ? 'coinbase' : t.id === 'pokemon' ? 'pokemontcg' : null;
+  const appRank = appFor ? state.collected?.apps?.[appFor]?.at(-1)?.[1]?.us : null;
+  if (appRank != null && appRank <= 20) out.push(`${APP_NAMES[appFor]}-App auf Platz ${appRank} der US-App-Charts: ${appFor === 'coinbase' ? 'Privatanleger im Rausch, oft spätes Signal' : 'großes Interesse'}`);
   const mac = state.collected?.macro?.[t.id], y = new Date().getFullYear();
   if (mac?.gdp?.[y + 1] != null && mac?.gdp?.[y] != null && mac.gdp[y + 1] - mac.gdp[y] >= 1) out.push(`IMF erwartet ${y + 1} deutlich stärkeres Wachstum (${num(mac.gdp[y + 1], 1)} % statt ${num(mac.gdp[y], 1)} %)`);
   if (ext.masto?.ratio >= 1.5) out.push(`#${tagFor(t)} auf Mastodon ${num(ext.masto.ratio, 1)}× häufiger als sonst`);
@@ -827,7 +846,7 @@ function compute(t) {
   const d = state.data[t.id] || {};
   const a = d.views ? attentionStats(d.views) : null;
   const card = t.price?.idx ? cardIndex(t.price.idx) : null;
-  const priceSeries = t.price?.idx ? card?.series || null : d.price;
+  const priceSeries = t.price?.idx ? card?.series || null : t.price?.fred ? state.collected?.fred?.[t.id]?.series || null : d.price;
   let p = priceSeries ? priceStats(priceSeries) : null;
   // Kartenindex noch zu kurz für einen Verlauf: Cardmarket-Trend (gestern ggü. 30-Tage-Schnitt) als 30-Tage-Wert
   if (!p && card) p = { last: card.series.at(-1)[1], p30: card.momentum ? (card.momentum - 1) * 100 : null, p90: null, fromHigh: null, volRatio: null, synthetic: true };
@@ -838,7 +857,8 @@ function compute(t) {
   // News: GDELT, wenn vorhanden, sonst Google News
   const gnews = countStats(x.gnews?.data, 0.3, 0.1);
   const ext = { news: newsStats(x.news?.series) || gnews, trends: trendsStats(x.trends?.series), langs: langsStats(x.langs?.data), hn: hnStats(x.hn?.hn), masto: mastoStats(x.masto?.hist),
-    ...(TECH(t) ? { github: countStats(x.github?.data, 3) } : {}), ...(t.group === 'Technologie' ? { arxiv: countStats(x.arxiv?.data, 3) } : {}) };
+    ...(TECH(t) ? { github: countStats(x.github?.data, 3) } : {}), ...(t.group === 'Technologie' ? { arxiv: countStats(x.arxiv?.data, 3) } : {}),
+    ...(t.group !== 'Länder' ? { sec: countStats(x.sec?.data, 3) } : {}), ...(t.dev ? { dev: devStats(x.dev?.data) } : {}) };
   const others = Object.values(ext).filter(e => e?.ratio != null);
   const conf = { avail: others.length, rising: others.filter(e => e.ratio >= 1.3).length };
   // Aufmerksamkeits-Index des Sammlers (alle Quellen, je Tag): Bewegung über 7 Tage
@@ -874,7 +894,7 @@ async function loadAll(force = false) {
   for (const t of themes) {
     const c = store.get(cacheKey(t)), col = collectedViews(t);
     // Kurs fehlt im Cache: neu laden, außer er ist im Gratis-Tarif gesperrt oder es gibt (noch) keinen Key
-    const priceOk = c && (!t.price || t.price.idx || c.price || /Gratis-Tarif/.test(c.priceError || '') || (t.price.fmp && !state.apiKey));
+    const priceOk = c && (!t.price || t.price.idx || t.price.fred || c.price || /Gratis-Tarif/.test(c.priceError || '') || (t.price.fmp && !state.apiKey));
     if (!force && c && Date.now() - c.t < CACHE_MS && priceOk && (c.views || col)) {
       state.data[t.id] = col ? { ...c, ...col, viewsError: null } : c;
     } else todo.push(t);
@@ -957,7 +977,8 @@ const attnTxt = a => (a ? pctTxt((a.ratio - 1) * 100) : '–');
 // Kleine Buchstaben je Quelle, gefärbt nach Richtung
 function srcDots(r) {
   const items = [['W', 'wiki', r.a], ['S', 'langs', r.ext.langs], ['G', 'trends', r.ext.trends], ['N', 'news', r.ext.news], ['H', 'hn', r.ext.hn], ['M', 'masto', r.ext.masto],
-    ...(TECH(r.t) ? [['C', 'github', r.ext.github]] : []), ...(r.t.group === 'Technologie' ? [['F', 'arxiv', r.ext.arxiv]] : [])];
+    ...(TECH(r.t) ? [['C', 'github', r.ext.github]] : []), ...(r.t.group === 'Technologie' ? [['F', 'arxiv', r.ext.arxiv]] : []),
+    ...(r.t.group !== 'Länder' ? [['U', 'sec', r.ext.sec]] : []), ...(r.t.dev ? [['D', 'dev', r.ext.dev]] : [])];
   return items.map(([l, k, x]) => {
     const ratio = x?.ratio;
     const color = ratio == null ? 'var(--faint)' : ratio >= 1.3 ? (state.mode === 'clean' ? 'var(--text)' : 'var(--up)') : ratio < 0.8 ? (state.mode === 'clean' ? 'var(--muted)' : 'var(--down)') : 'var(--muted)';
@@ -1004,6 +1025,8 @@ const isNew = r => !!state.basePhases && NEWSWORTHY.includes(r.phase) && state.b
 const earlyScore = r => (r.a ? Math.log2(r.a.ratio) + 0.5 * Math.log2(r.a.accel) - (has(r.p?.p30) ? Math.max(0, r.p.p30) / 30 : 0) - (r.a.established ? 1.5 : 0) - (r.a.sustained ? 0 : 0.5) : -99);
 
 function render() {
+  renderMood();
+  renderDiscover();
   const rows = allThemes().map(compute);
   const loaded = rows.filter(r => r.a);
 
@@ -1063,7 +1086,7 @@ function render() {
           <th class="eyebrow font-semibold py-2 px-1">Phase</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Hype</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Aufmerks.</th>
-          <th class="eyebrow font-semibold py-2 px-1 text-center" title="W = Wikipedia, S = Wikipedia in 7 weiteren Sprachen, G = Google Trends, N = News, H = Hacker News, M = Mastodon, C = GitHub, F = Forschung (arXiv)">Quellen</th>
+          <th class="eyebrow font-semibold py-2 px-1 text-center" title="W = Wikipedia, S = Wikipedia in 7 weiteren Sprachen, G = Google Trends, N = News, H = Hacker News, M = Mastodon, C = GitHub, F = Forschung (arXiv), U = US-Firmenberichte (SEC), D = Downloads">Quellen</th>
           <th class="eyebrow font-semibold py-2 px-1 hidden sm:table-cell">Verlauf 4 Mon.</th>
           <th class="eyebrow font-semibold py-2 px-1 text-right">Preis 30 T.</th>
         </tr></thead>
@@ -1083,7 +1106,7 @@ function render() {
       </table>
     </div>
     <p class="text-[11px] faint mt-2">Aufmerksamkeit: Wikipedia-Aufrufe der letzten 30 Tage im Vergleich zum Normalniveau des Jahres davor.
-      Quellen: <b>W</b>ikipedia, <b>S</b>prachen (Wikipedia de, fr, es, ja, ko, zh, pt), <b>G</b>oogle Trends, <b>N</b>ews, <b>H</b>acker News, <b>M</b>astodon, bei Tech-Themen <b>C</b>ode (GitHub) und <b>F</b>orschung (arXiv); grün = steigt, rot = fällt, grau = normal, blass = keine Daten. Antippen für Details.</p>`;
+      Quellen: <b>W</b>ikipedia, <b>S</b>prachen (Wikipedia de, fr, es, ja, ko, zh, pt), <b>G</b>oogle Trends, <b>N</b>ews, <b>H</b>acker News, <b>M</b>astodon, bei Tech-Themen <b>C</b>ode (GitHub) und <b>F</b>orschung (arXiv), <b>U</b>S-Firmenberichte (SEC), <b>D</b>ownloads von Entwickler-Paketen; grün = steigt, rot = fällt, grau = normal, blass = keine Daten. Antippen für Details.</p>`;
 
   if (document.getElementById('detailDialog').open) renderDetail();
 }
@@ -1179,7 +1202,7 @@ function renderDetail() {
     // Daten für das Nachfahren mit dem Finger
     const y = (v, lo, hi) => pad + (1 - (v - lo) / (hi - lo || 1)) * (H - 2 * pad), vHi = Math.max(...sv);
     document.getElementById('detailBody')._scrub = {
-      W, H, views, sv, priceLabel: t.price?.label || '', currency: t.price?.cg ? '€' : t.price?.fmp ? '$' : t.price?.idx ? 'Pkt.' : '',
+      W, H, views, sv, priceLabel: t.price?.label || '', currency: t.price?.cg ? '€' : t.price?.fmp || t.price?.fred ? '$' : t.price?.idx ? 'Pkt.' : '',
       priceAt: d => { if (pIn.length < 2) return null; let hit = null; for (const q of pIn) { if (q[0] > d) break; hit = q; } return hit; },
       yAttn: v => y(v, 0, vHi), yPrice: v => y(v, pLo, pHi), yNews: v => y(v, 0, nHi),
       newsAt: d => { let hit = null; nIn.forEach((n, i) => { if (n[0] <= d) hit = [n[0], n[1], sn[i]]; }); return nLine ? hit : null; },
@@ -1242,6 +1265,7 @@ function renderDetail() {
     ${moreSection(t)}
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${stats}</dl>
     ${indexBlock(r)}
+    ${trendsBlock(r)}
     <div>
       <h3 class="eyebrow mb-2">Quellen im Vergleich</h3>
       ${r.conf.avail ? `<p class="text-xs muted mb-2">Bestätigung: <b class="text-white">${r.conf.rising} von ${r.conf.avail}</b> weiteren Quellen ${r.conf.rising === 1 ? 'zeigt' : 'zeigen'} ebenfalls einen Anstieg.</p>` : ''}
@@ -1260,6 +1284,8 @@ function renderDetail() {
     ${r.d.priceError ? `<p class="text-xs faint">Kurs: ${esc(r.d.priceError)}</p>` : ''}
     ${t.price?.idx ? cardBlock(r) : ''}
     ${macroBlock(t)}
+    ${cotBlock(t)}
+    ${defiBlock(t)}
     <div class="flex flex-wrap gap-2">
       ${r.d.title ? `<a class="btn btn-sm" href="https://en.wikipedia.org/wiki/${encodeURIComponent(r.d.title.replace(/ /g, '_'))}" target="_blank" rel="noopener">Wikipedia-Artikel</a>` : ''}
       ${open ? `<a class="btn btn-sm" href="${open}">${esc(t.price.label || 'Kurs')} analysieren</a>` : ''}
@@ -1276,6 +1302,136 @@ function openDetail(id) {
   loadMore(allThemes().find(x => x.id === id));
   const dlg = document.getElementById('detailDialog');
   if (!dlg.open) dlg.showModal();
+}
+
+// Google Trends: Verlauf über 12 Monate und was die Leute gerade vermehrt suchen
+function trendsBlock(r) {
+  const tr = r.x.trends;
+  if (!tr?.series?.length) return '';
+  const v = tr.series.map(x => x[1]);
+  const peak = tr.series[v.indexOf(Math.max(...v))][0];
+  return `<div>
+    <h3 class="eyebrow mb-2">Google-Suchinteresse „${esc(tr.kw || '')}“</h3>
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div><span class="num text-xl text-white">${v.at(-1)}</span> <span class="text-xs faint">von 100 diese Woche</span></div>
+      <div class="text-xs faint">Spitzenwoche: ${new Date(peak).toLocaleDateString('de-DE')}</div>
+      <div class="flex-1 min-w-[160px]">${spark(v, { w: 300, h: 34, color: 'var(--accent)', fill: true })}</div>
+    </div>
+    ${tr.rising?.length ? `<div class="mt-3"><div class="text-xs muted mb-1.5">Steigende Suchanfragen${tr.risingAt ? ` (Stand ${new Date(tr.risingAt).toLocaleDateString('de-DE')})` : ''}</div>
+      <div class="flex flex-wrap gap-1.5">${tr.rising.map(q => `<span class="chip">${esc(q.q)} <span class="num" style="color:var(--up)">${esc(q.v)}</span></span>`).join('')}</div></div>` : ''}
+    <p class="text-[11px] faint mt-1">Google gibt keine echten Suchzahlen heraus, nur einen relativen Wert: 100 = Woche mit den meisten Suchen in den letzten 12 Monaten.
+      „Breakout“ heißt: Suchanfrage ist um mehr als 5000 % gewachsen.</p>
+  </div>`;
+}
+
+// CFTC: Netto-Position der Spekulanten am Terminmarkt, eingeordnet in die letzten 3 Jahre
+function cotBlock(t) {
+  if (!t.cot) return '';
+  const c = state.collected?.cot?.[t.id];
+  if (!c) return `<div><h3 class="eyebrow mb-2">Spekulanten am Terminmarkt (CFTC)</h3><p class="text-sm faint">${state.collected ? 'Kommt mit dem nächsten Sammler-Lauf.' : 'Sammler-Daten nicht erreichbar.'}</p></div>`;
+  const word = c.pct >= 90 ? 'so optimistisch wie selten' : c.pct >= 70 ? 'eher optimistisch' : c.pct <= 10 ? 'so pessimistisch wie selten' : c.pct <= 30 ? 'eher pessimistisch' : 'im üblichen Bereich';
+  return `<div>
+    <h3 class="eyebrow mb-2">Spekulanten am Terminmarkt (CFTC)</h3>
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div><span class="text-white font-medium">${word}</span> <span class="text-xs faint">· höher als in ${c.pct} % der Wochen seit 3 Jahren</span></div>
+      ${c.change4w != null ? `<div class="text-sm"><span class="num" style="color:${upDown(c.change4w)}">${c.change4w >= 0 ? '+' : ''}${num(c.change4w, 1)} %</span> <span class="faint">des Marktes in 4 Wochen</span></div>` : ''}
+      <div class="flex-1 min-w-[160px]">${spark(c.series.map(x => x[1]), { w: 300, h: 34, color: 'var(--accent)' })}</div>
+    </div>
+    <p class="text-[11px] faint mt-1">Netto-Position (Kauf minus Verkauf) der großen Spekulanten, Stand ${new Date(c.date).toLocaleDateString('de-DE')}, Markt: ${esc(c.market)}.
+      Ganz oben heißt: Viele haben schon gekauft, das ist oft eher spät im Trend. Ganz unten ist oft ein Gegensignal.</p>
+  </div>`;
+}
+
+// DefiLlama: Geld auf der Blockchain (TVL) bzw. Gebühren, Veränderung über 30 Tage
+function defiChange(t) {
+  const d = state.collected?.defi?.[t.id];
+  if (!d || d.v.length < 61) return null;
+  const v = d.v;
+  if (d.kind === 'tvl') return { kind: 'tvl', now: v.at(-1), ch: v.at(-31) ? v.at(-1) / v.at(-31) - 1 : null };
+  const sum = a => a.reduce((x, y) => x + y, 0), last = sum(v.slice(-30)), before = sum(v.slice(-60, -30));
+  return { kind: 'fees', now: last, ch: before ? last / before - 1 : null };
+}
+const money = v => (v >= 1e9 ? `${num(v / 1e9, 1)} Mrd. $` : v >= 1e6 ? `${num(v / 1e6, 1)} Mio. $` : `${num(v, 0)} $`);
+function defiBlock(t) {
+  if (!t.defi) return '';
+  const d = state.collected?.defi?.[t.id], c = defiChange(t);
+  if (!d || !c) return `<div><h3 class="eyebrow mb-2">Blockchain-Kennzahlen (DefiLlama)</h3><p class="text-sm faint">${state.collected ? 'Kommt mit dem nächsten Sammler-Lauf.' : 'Sammler-Daten nicht erreichbar.'}</p></div>`;
+  return `<div>
+    <h3 class="eyebrow mb-2">${d.kind === 'tvl' ? 'Geld auf der Blockchain (DefiLlama)' : 'Gebühren (DefiLlama)'}</h3>
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div><span class="num text-xl text-white">${money(c.now)}</span> <span class="text-xs faint">${d.kind === 'tvl' ? 'hinterlegt' : 'in 30 Tagen'}</span></div>
+      ${c.ch != null ? `<div class="text-sm"><span class="num" style="color:${upDown(c.ch)}">${pctTxt(c.ch * 100)}</span> <span class="faint">${d.kind === 'tvl' ? 'in 30 Tagen' : 'ggü. den 30 Tagen davor'}</span></div>` : ''}
+      <div class="flex-1 min-w-[160px]">${spark(d.v.slice(-365), { w: 300, h: 34, color: 'var(--accent)', fill: true })}</div>
+    </div>
+    <p class="text-[11px] faint mt-1">${d.kind === 'tvl' ? 'Total Value Locked: Geld, das in Anwendungen auf dieser Blockchain steckt.' : 'Was Nutzer für das Protokoll bezahlen. Zeigt echte Nutzung, nicht nur Aufmerksamkeit.'}</p>
+  </div>`;
+}
+
+/* ---------------------------------------------------------------
+   Marktstimmung (Fear & Greed, App-Store-Ränge) und „Neu aufgetaucht“
+---------------------------------------------------------------- */
+const APP_NAMES = { coinbase: 'Coinbase', cryptocom: 'Crypto.com', binance: 'Binance', robinhood: 'Robinhood', traderepublic: 'Trade Republic', pokemontcg: 'Pokémon TCG Pocket' };
+const FG_LABEL = { 'extreme fear': 'Extreme Angst', fear: 'Angst', neutral: 'Neutral', greed: 'Gier', 'extreme greed': 'Extreme Gier' };
+const fgColor = v => (state.mode === 'clean' ? 'var(--text)' : v < 25 ? 'var(--down)' : v < 45 ? '#f2a65a' : v <= 55 ? 'var(--muted)' : v <= 75 ? '#9bd36a' : 'var(--up)');
+function renderMood() {
+  const el = document.getElementById('mood'), c = state.collected;
+  const sent = c?.sentiment || {}, apps = c?.apps || {};
+  if (!sent.crypto && !sent.stocks && !Object.values(apps).some(h => h.length)) { el.hidden = true; return; }
+  el.hidden = false;
+  const fg = (title, x) => !x ? '' : `<div class="inset p-3">
+      <div class="eyebrow">${title}</div>
+      <div class="flex items-baseline gap-2 mt-1"><span class="num text-2xl" style="color:${fgColor(x.now)}">${x.now}</span><span class="text-sm" style="color:${fgColor(x.now)}">${FG_LABEL[String(x.label).toLowerCase()] || esc(x.label)}</span></div>
+      <div class="mt-2">${spark(x.v.slice(-90), { w: 220, h: 30, color: fgColor(x.now) })}</div>
+      <div class="text-[11px] faint mt-1">0 = Panik, 100 = Euphorie · 90 Tage</div>
+    </div>`;
+  const rank = (app, k) => { const h = apps[app] || []; const now = h.at(-1)?.[1]?.[k], week = h.at(-8)?.[1]?.[k]; return { now, week }; };
+  const row = (app, k, where) => {
+    const { now, week } = rank(app, k);
+    if (!apps[app]?.length) return '';
+    const arrow = now != null && week != null && now !== week ? `<span class="num text-[11px]" style="color:${upDown(week - now)}">${now < week ? '▲' : '▼'}${Math.abs(week - now)}</span>` : '';
+    return `<div class="flex justify-between gap-2 text-sm"><span class="truncate">${APP_NAMES[app]} <span class="faint text-[11px]">${where}</span></span><span class="num whitespace-nowrap">${now != null ? `Platz ${now}` : '<span class="faint">nicht in Top 200</span>'} ${arrow}</span></div>`;
+  };
+  el.innerHTML = `<div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+      <div><h2 class="eyebrow">Marktstimmung</h2><p class="text-xs faint mt-1">Wie gierig oder ängstlich der Markt gerade ist. Extreme Gier ist eher ein Warnsignal, extreme Angst oft eine Chance.</p></div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      ${fg('Fear & Greed Krypto', sent.crypto)}${fg('Fear & Greed Aktien (USA)', sent.stocks)}
+      <div class="inset p-3 space-y-1.5">
+        <div class="eyebrow mb-1">Privatanleger-Barometer (App Store)</div>
+        ${row('coinbase', 'us', 'USA gesamt')}${row('coinbase', 'usFin', 'USA Finanzen')}${row('robinhood', 'usFin', 'USA Finanzen')}${row('traderepublic', 'deFin', 'DE Finanzen')}${row('pokemontcg', 'us', 'USA gesamt')}
+        <div class="text-[11px] faint pt-1">Kostenlose Apps im Apple App Store. Springt Coinbase weit nach oben, sind Neulinge im Rausch.</div>
+      </div>
+    </div>`;
+}
+
+function renderDiscover() {
+  const el = document.getElementById('discover'), d = state.collected?.discover;
+  const coins = state.collected?.trendingCoins || [];
+  if (!d || (!d.google?.length && !d.github?.length && !d.hf?.length && !coins.length)) { el.hidden = true; return; }
+  el.hidden = false;
+  const fresh = x => { const f = d.seen?.[String(x).toLowerCase()]; return f && Date.now() - Date.parse(f) < 2.5 * DAY_MS; };
+  const tag = x => (fresh(x) ? ' <span class="text-[10px] font-semibold uppercase" style="color:var(--accent)">neu</span>' : '');
+  const known = new Set(allThemes().map(t => t.name.toLowerCase()));
+  const col = (title, note, items) => `<div class="min-w-0"><div class="eyebrow mb-1">${title}</div><div class="text-[11px] faint mb-2">${note}</div><ul class="space-y-1.5 text-sm">${items.join('') || '<li class="faint text-xs">Heute keine Daten.</li>'}</ul></div>`;
+  const google = (d.google || []).slice(0, 14).map(g => `<li class="flex items-start justify-between gap-2">
+      <span class="min-w-0"><span class="text-white">${esc(g.title)}</span>${tag(g.title)} <span class="faint text-[11px]">${g.geo}${g.traffic ? ` · ${esc(g.traffic)} Suchen` : ''}</span>
+        ${g.news ? `<span class="block text-[11px] faint truncate">${esc(g.news)}</span>` : ''}</span>
+      ${known.has(g.title.toLowerCase()) ? '' : `<button type="button" class="chip shrink-0" data-add-theme="${esc(g.title)}" title="Als eigenes Thema ins Radar übernehmen">+ Thema</button>`}
+    </li>`);
+  const gh = (d.github || []).slice(0, 8).map(g => `<li><a class="text-white hover:underline" href="https://github.com/${esc(g.name)}" target="_blank" rel="noopener">${esc(g.name)}</a>${tag(g.name)} <span class="num faint text-[11px]">★ ${num(g.stars, 0)}</span>
+      ${g.desc ? `<span class="block text-[11px] faint truncate">${esc(g.desc)}</span>` : ''}</li>`);
+  const hf = (d.hf || []).slice(0, 8).map(h => `<li><a class="text-white hover:underline" href="https://huggingface.co/${esc(h.name)}" target="_blank" rel="noopener">${esc(h.name)}</a>${tag(h.name)}${h.likes != null ? ` <span class="num faint text-[11px]">♥ ${num(h.likes, 0)}</span>` : ''}</li>`);
+  const cg = coins.slice(0, 8).map(id => `<li><a class="text-white hover:underline" href="crypto.html?q=${encodeURIComponent(id)}">${esc(id.replace(/-/g, ' '))}</a></li>`);
+  el.innerHTML = `<summary class="flex items-center justify-between gap-3 cursor-pointer list-none">
+      <span><span class="eyebrow">Neu aufgetaucht</span><span class="block text-xs faint mt-1">Was gerade hochschießt, auch außerhalb deiner Themen. „+ Thema“ übernimmt einen Begriff ins Radar.</span></span>
+      <span class="text-xs faint">ein-/ausklappen</span>
+    </summary>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mt-4">
+      ${col('Google-Trendsuchen', 'Heute in den USA und in Deutschland', google)}
+      ${col('Neue GitHub-Projekte', 'Meiste Sterne, in den letzten 7 Tagen gestartet', gh)}
+      ${col('KI-Modelle im Trend', 'Hugging Face', hf)}
+      ${col('Krypto im Trend', 'Meistgesucht bei CoinGecko (24 h)', cg)}
+    </div>`;
 }
 
 // Länder: IMF-Prognosen für Wachstum und Inflation
@@ -1319,7 +1475,7 @@ function cardBlock(r) {
 const moreKey = 'rr:radar:more';
 const moreFor = t => (store.get(moreKey) || {})[t.id] ?? t.more ?? [];
 const setMore = (t, list) => store.set(moreKey, { ...(store.get(moreKey) || {}), [t.id]: list });
-const symKey = m => (m.fmp ? `fmp:${m.fmp}` : m.cg ? `cg:${m.cg}` : `idx:${m.idx}`);
+const symKey = m => (m.fmp ? `fmp:${m.fmp}` : m.cg ? `cg:${m.cg}` : m.fred ? `fred:${m.fred}` : `idx:${m.idx}`);
 const morePrices = {}; // symKey -> { t, series, error }
 
 // Coin per Name oder Kürzel finden. `strict`: nur bei exaktem Treffer unter den größten 500 Coins
@@ -1507,7 +1663,16 @@ function renderHelp() {
       <p class="muted">Preise steigen meist in dieser Reihenfolge: erst wächst die Aufmerksamkeit, dann der Handel, dann der Preis, am Ende kommt die Überhitzung.
         Das Radar misst die Aufmerksamkeit über die täglichen Aufrufe der englischen Wikipedia und legt sie neben Kurs und Handelsvolumen, wo es die gibt.
         Zur Bestätigung kommen weitere Quellen dazu: Wikipedia in sieben weiteren Sprachen, Google-Suchen (Google Trends), News (GDELT und Google News), Erwähnungen auf Hacker News (Tech-Forum),
-        Mastodon-Hashtags, bei Tech- und Krypto-Themen neue GitHub-Projekte und bei Technologie neue Forschungsarbeiten (arXiv). Bei Ländern zeigt das Radar zusätzlich die IMF-Prognosen, bei Krypto die meistgesuchten Coins bei CoinGecko.</p>
+        Mastodon-Hashtags, Erwähnungen in US-Firmenberichten (SEC), bei Tech- und Krypto-Themen neue GitHub-Projekte und Downloads der wichtigsten Entwickler-Pakete,
+        bei Technologie neue Forschungsarbeiten (arXiv). Dazu je nach Thema: IMF-Prognosen (Länder), Positionierung der Spekulanten am Terminmarkt (CFTC, Rohstoffe und Krypto),
+        Geld und Gebühren auf Blockchains (DefiLlama), Weltmarktpreise für Kakao, Kaffee und Olivenöl (IMF über FRED) und die meistgesuchten Coins bei CoinGecko.</p>
+    </section>
+    <section>
+      <h3 class="font-semibold text-white mb-1">Marktstimmung und „Neu aufgetaucht“</h3>
+      <p class="muted">Oben zeigt das Radar den Fear &amp; Greed Index für Krypto und Aktien und, wo bekannte Finanz-Apps in den App-Store-Charts stehen.
+        Springt die Coinbase-App weit nach oben, strömen Neulinge in den Markt, das ist eher ein spätes Signal.
+        „Neu aufgetaucht“ sammelt täglich Begriffe, die gerade hochschießen: Googles Trendsuchen (USA und Deutschland), neue GitHub-Projekte mit den meisten Sternen,
+        KI-Modelle im Trend bei Hugging Face und die meistgesuchten Coins. Mit „+ Thema“ kommt ein Begriff ins Radar.</p>
     </section>
     <section>
       <h3 class="font-semibold text-white mb-1">Damit es weniger Fehlalarme gibt</h3>
@@ -1539,7 +1704,7 @@ function renderHelp() {
         <li class="inset px-3 py-2"><b class="text-white">Beschleunigung, 20 %:</b> <span class="muted">letzte 7 Tage ggü. 30 Tagen. −30 % = 0, verdoppelt = 100.</span></li>
         <li class="inset px-3 py-2"><b class="text-white">Handelsvolumen, 15 %:</b> <span class="muted">30 Tage ggü. normal. −30 % = 0, knapp 3× = 100.</span></li>
         <li class="inset px-3 py-2"><b class="text-white">Preisdynamik, 20 %:</b> <span class="muted">Kurs 30 Tage. −15 % = 0, +30 % = 100.</span></li>
-        <li class="inset px-3 py-2"><b class="text-white">Weitere Quellen, 45 %:</b> <span class="muted">News 15 %, Google Trends 15 %, Wikipedia weltweit 10 %, Hacker News 10 %, Mastodon 5 %, GitHub 5 %, arXiv 5 %. Jeweils ggü. normal, halbiert = 0, vervierfacht = 100.</span></li>
+        <li class="inset px-3 py-2"><b class="text-white">Weitere Quellen, 45 %:</b> <span class="muted">News 15 %, Google Trends 15 %, Wikipedia weltweit 10 %, Hacker News 10 %, Mastodon 5 %, GitHub 5 %, arXiv 5 %, US-Firmenberichte 10 %, Downloads 5 %. Jeweils ggü. normal, halbiert = 0, vervierfacht = 100.</span></li>
       </ul>
       <p class="text-xs faint mt-2">Fehlt ein Teil, werden die anderen hochgerechnet. „Frühsignal“ sortiert nach hoher Aufmerksamkeit bei noch wenig Preisbewegung.</p>
     </section>
@@ -1588,6 +1753,8 @@ function sourceCells(r) {
     cellFor('Hacker News', r.x.hn?.hn?.kw || hnKeyword(r.t), r.ext.hn, 'Erwähnungen/Monat', pending('hn') || r.x.hn?.error, r.ext.hn?.few ? 'zu selten für einen Vergleich' : null),
     cellFor('Mastodon', tag, m, 'Posts/Tag', pending('masto') || r.x.masto?.error, m && m.ratio == null ? `Verlauf wird gesammelt (${m.days} von 21 Tagen)` : null),
     ...(TECH(r.t) ? [cellFor('GitHub', r.x.github?.data?.kw || hnKeyword(r.t), r.ext.github, 'neue Projekte/Monat', r.x.github?.error || 'kommt mit dem nächsten Sammler-Lauf', r.ext.github?.few ? 'zu wenige für einen Vergleich' : null)] : []),
+    ...(r.t.group !== 'Länder' ? [cellFor('US-Firmenberichte (SEC)', r.x.sec?.data?.kw || hnKeyword(r.t), r.ext.sec, 'Erwähnungen/Monat', r.x.sec?.error || (r.t.group === 'Eigene' ? 'Nur für die festen Themen' : 'kommt mit dem nächsten Sammler-Lauf'), r.ext.sec?.few ? 'zu selten für einen Vergleich' : null)] : []),
+    ...(r.t.dev ? [cellFor('Entwickler-Downloads', [...(r.t.dev.npm || []), ...(r.t.dev.pypi || [])].join(', '), r.ext.dev, 'pro Monat', r.x.dev?.error || 'kommt mit dem nächsten Sammler-Lauf')] : []),
     ...(r.t.group === 'Technologie' ? [cellFor('Forschung (arXiv)', r.x.arxiv?.data?.kw || hnKeyword(r.t), r.ext.arxiv, 'Arbeiten/Monat', r.x.arxiv?.error || 'kommt mit dem nächsten Sammler-Lauf', r.ext.arxiv?.few ? 'zu wenige für einen Vergleich' : null)] : []),
   ].join('');
 }
@@ -1720,6 +1887,15 @@ function init() {
       const t = allThemes().find(x => x.id === detailId);
       setMore(t, moreFor(t).filter((_, i) => i !== Number(moreRemove)));
       renderDetail();
+      return;
+    }
+    const addT = e.target.closest('[data-add-theme]')?.dataset.addTheme;
+    if (addT) {
+      const panel = document.getElementById('addPanel');
+      panel.open = true;
+      document.getElementById('addName').value = addT;
+      panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      addTheme(addT, '', 'fmp');
       return;
     }
     const open = e.target.closest('[data-open]')?.dataset.open;
