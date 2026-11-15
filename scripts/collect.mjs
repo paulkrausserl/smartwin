@@ -43,6 +43,7 @@ const keep = (id, src, error) => {
   return old && !old.error ? { ...old, stale: true } : { error };
 };
 const slot = id => (out.themes[id] ||= {});
+const decode = x => x.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
 
 /* --- News: GDELT. Offiziell ein Abruf alle 5 Sekunden, GitHub-Server teilen sich aber IP-Adressen,
    deshalb großzügiger Abstand und bei „zu viele Anfragen“ oder Abbruch bis zu zweimal neu versuchen. --- */
@@ -197,60 +198,64 @@ const LANGS = ['de', 'fr', 'es', 'ja', 'ko', 'zh', 'pt'];
 async function collectWikiLangs(resolved) {
   const titles = [...new Set(Object.values(resolved).filter(Boolean))];
   const links = {}; // englischer Titel -> { sprache: titel }
-  for (let i = 0; i < titles.length; i += 50) {
-    try {
-      let cont = {};
-      do {
+  // je Sprache ein Abruf pro 50 Titel: liefert höchstens einen Link je Seite, keine Fortsetzungen nötig
+  for (const lang of LANGS) {
+    for (let i = 0; i < titles.length; i += 50) {
+      try {
         const url = new URL('https://en.wikipedia.org/w/api.php');
-        Object.entries({ action: 'query', titles: titles.slice(i, i + 50).join('|'), prop: 'langlinks', lllimit: 'max', format: 'json', formatversion: '2', ...cont }).forEach(([k, v]) => url.searchParams.set(k, v));
+        Object.entries({ action: 'query', titles: titles.slice(i, i + 50).join('|'), prop: 'langlinks', lllang: lang, lllimit: 'max', format: 'json', formatversion: '2' }).forEach(([k, v]) => url.searchParams.set(k, v));
         const body = await get(url);
-        for (const pg of body.query?.pages || []) for (const l of pg.langlinks || []) if (LANGS.includes(l.lang)) (links[pg.title] ||= {})[l.lang] = l.title;
-        cont = body.continue || null;
-      } while (cont);
-    } catch (e) { log(`Sprachversionen: ${e.message}`); }
+        for (const pg of body.query?.pages || []) for (const l of pg.langlinks || []) (links[pg.title] ||= {})[lang] = l.title;
+      } catch (e) { log(`Sprachversionen ${lang}: ${e.message}`); }
+      await sleep(200);
+    }
   }
   const end = new Date(Date.now() - DAY_MS), start = new Date(end - 420 * DAY_MS);
   const fmt = d => ymd(d).replace(/-/g, '');
   const jobs = [];
   for (const t of THEMES) for (const [lang, title] of Object.entries(links[resolved[t.wiki]] || {})) jobs.push({ t, lang, title });
-  await Promise.all(Array.from({ length: 6 }, async () => {
+  const errors = {};
+  await Promise.all(Array.from({ length: 3 }, async () => {
     while (jobs.length) {
       const { t, lang, title } = jobs.shift();
       try {
-        const body = await get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${lang}.wikipedia/all-access/user/${encodeURIComponent(title.replace(/ /g, '_'))}/daily/${fmt(start)}/${fmt(end)}`);
+        let body;
+        for (let i = 0; body === undefined; i++) {
+          try { body = await get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${lang}.wikipedia/all-access/user/${encodeURIComponent(title.replace(/ /g, '_'))}/daily/${fmt(start)}/${fmt(end)}`); }
+          catch (e) { if (i === 2 || !/429/.test(e.message)) throw e; await sleep(5000 * (i + 1)); }
+        }
         const v = (body.items || []).map(it => it.views);
         if (v.length < 90) continue;
         const now = mean(v.slice(-30)), base = median(v.slice(0, -30));
         const yearAgo = v.length >= 395 ? mean(v.slice(-395, -365)) : null;
         ((slot(t.id).langs ||= {}))[lang] = { title, now: round(now, 1), base: round(base, 1), yoy: yearAgo != null ? round(yearAgo, 1) : null };
-      } catch { /* einzelne Sprache fehlt: egal */ }
+      } catch (e) { const k = e.message.replace(/.*antwortet mit /, 'Status '); errors[k] = (errors[k] || 0) + 1; }
+      await sleep(100);
     }
   }));
-  log(`Wikipedia-Sprachen fertig (${Object.values(out.themes).filter(x => x.langs).length} Themen)`);
+  // heute nichts bekommen: Werte vom Vortag behalten
+  for (const t of THEMES) if (!out.themes[t.id]?.langs && prev.themes?.[t.id]?.langs) slot(t.id).langs = prev.themes[t.id].langs;
+  log(`Wikipedia-Sprachen fertig: ${Object.values(links).reduce((a, x) => a + Object.keys(x).length, 0)} Sprachversionen, ${Object.values(out.themes).filter(x => x.langs).length} Themen${Object.keys(errors).length ? `, Fehler ${JSON.stringify(errors)}` : ''}`);
 }
 
-/* --- Google News (RSS, ohne Key): News-Menge pro Tag, letzte 7 Tage ggü. einer Woche vor 2 und vor 4 Monaten.
-   Der Feed liefert höchstens 100 Meldungen; ist er voll, wird die Rate aus der abgedeckten Zeitspanne geschätzt. --- */
-async function gnewsRate(q, from, to) {
-  const query = `${q} after:${ymd(new Date(from))} before:${ymd(new Date(to))}`;
-  const xml = await get(`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`, { text: true, headers: { Accept: 'application/rss+xml' } });
-  const dates = [...xml.matchAll(/<pubDate>([^<]+)<\/pubDate>/g)].map(m => Date.parse(m[1])).filter(Number.isFinite).filter(d => d >= from - DAY_MS && d <= to + DAY_MS);
-  const days = (to - from) / DAY_MS;
-  if (dates.length < 100) return dates.length / days;
-  return 100 / Math.max((to - Math.min(...dates)) / DAY_MS, 1 / 24);
-}
+/* --- Google News (RSS, ohne Key): die aktuellen Schlagzeilen der letzten 7 Tage je Thema.
+   Zum Zählen taugt der Feed nicht (höchstens 100 Meldungen, nach Relevanz sortiert), deshalb nur als Überblick. --- */
 async function collectGnews() {
   for (const t of THEMES) {
     try {
-      const q = newsFor(t), now = Date.now();
-      const recent = await gnewsRate(q, now - 7 * DAY_MS, now);
-      await sleep(1500);
-      const b1 = await gnewsRate(q, now - 67 * DAY_MS, now - 60 * DAY_MS);
-      await sleep(1500);
-      const b2 = await gnewsRate(q, now - 127 * DAY_MS, now - 120 * DAY_MS);
-      slot(t.id).gnews = { q, now: round(recent, 2), base: round((b1 + b2) / 2, 2) };
+      const xml = await get(`https://news.google.com/rss/search?q=${encodeURIComponent(`${newsFor(t)} when:7d`)}&hl=en-US&gl=US&ceid=US:en`, { text: true, headers: { Accept: 'application/rss+xml' } });
+      const items = xml.split('<item>').slice(1).map(it => ({
+        t: decode(it.match(/<title>([\s\S]*?)<\/title>/)?.[1] || ''),
+        src: decode(it.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] || ''),
+        d: Date.parse(it.match(/<pubDate>([^<]+)<\/pubDate>/)?.[1] || '') || null,
+        link: decode(it.match(/<link>([\s\S]*?)<\/link>/)?.[1] || ''),
+      })).filter(x => x.t);
+      // neueste zuerst, Quelle aus dem Titel entfernen („Titel - Quelle“)
+      const headlines = items.sort((a, b) => (b.d || 0) - (a.d || 0)).slice(0, 5)
+        .map(x => ({ t: x.src && x.t.endsWith(` - ${x.src}`) ? x.t.slice(0, -(x.src.length + 3)) : x.t, src: x.src, d: x.d ? ymd(new Date(x.d)) : null, link: x.link }));
+      slot(t.id).gnews = { q: newsFor(t), count: items.length, headlines };
     } catch (e) { slot(t.id).gnews = keep(t.id, 'gnews', e.message); }
-    await sleep(1500);
+    await sleep(1200);
   }
   log('Google News fertig');
 }
@@ -279,25 +284,26 @@ async function collectGithub() {
   }
   log('GitHub fertig');
 }
-async function arxivCount(kw, from, to) {
-  const f = x => ymd(new Date(x)).replace(/-/g, '');
-  const q = `all:"${kw}" AND submittedDate:[${f(from)}0000 TO ${f(to)}2359]`;
-  const xml = await get(`https://export.arxiv.org/api/query?search_query=${encodeURIComponent(q)}&max_results=0`, { text: true, headers: { Accept: 'application/atom+xml' } });
-  return Number(xml.match(/<opensearch:totalResults[^>]*>(\d+)</)?.[1] ?? NaN);
+// OpenAlex (offener Katalog aller wissenschaftlichen Arbeiten, ohne Key): Arbeiten mit dem Begriff in Titel oder Zusammenfassung
+async function researchCount(kw, from, to) {
+  const url = new URL('https://api.openalex.org/works');
+  Object.entries({ filter: `title_and_abstract.search:${kw.includes(' ') ? `"${kw}"` : kw},from_publication_date:${ymd(new Date(from))},to_publication_date:${ymd(new Date(to))}`, 'per-page': '1' }).forEach(([k, v]) => url.searchParams.set(k, v));
+  return (await get(url)).meta?.count ?? NaN;
 }
 async function collectArxiv() {
   for (const t of THEMES.filter(x => x.group === 'Technologie')) {
     try {
-      const kw = trendsFor(t), now = Date.now();
-      const recent = await arxivCount(kw, now - 30 * DAY_MS, now);
-      await sleep(3500); // arXiv bittet um 3 Sekunden Abstand
-      const before = await arxivCount(kw, now - 360 * DAY_MS, now - 31 * DAY_MS);
-      if (!Number.isFinite(recent) || !Number.isFinite(before)) throw new Error('arXiv lieferte keine Zahl');
-      slot(t.id).arxiv = { kw, now: recent, base: round(before / 11, 1) };
+      // die letzten 2 Wochen fehlen in Katalogen oft noch: Vergleichsmonat endet deshalb vor 14 Tagen
+      const kw = trendsFor(t), now = Date.now() - 14 * DAY_MS;
+      const recent = await researchCount(kw, now - 30 * DAY_MS, now);
+      await sleep(300);
+      const before = await researchCount(kw, now - 360 * DAY_MS, now - 31 * DAY_MS);
+      if (!Number.isFinite(recent) || !Number.isFinite(before)) throw new Error('OpenAlex lieferte keine Zahl');
+      slot(t.id).arxiv = { kw, now: recent, base: round(before / 11, 1), src: 'OpenAlex' };
     } catch (e) { slot(t.id).arxiv = keep(t.id, 'arxiv', e.message); }
-    await sleep(3500);
+    await sleep(300);
   }
-  log('arXiv fertig');
+  log('Forschung (OpenAlex) fertig');
 }
 
 /* --- IMF-Prognosen für die Länder: BIP-Wachstum und Inflation, je Jahr (ein Abruf je Kennzahl für alle Länder) --- */
@@ -375,10 +381,16 @@ const keepCards = (key, e) => { log(`Karten ${key}: ${e.message}`); if (prev.car
 async function collectPokemon() {
   try {
     const q = encodeURIComponent('rarity:"Special Illustration Rare"');
-    let body;
-    for (let i = 0; i < 3 && !body; i++) {
-      try { body = await get(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=250&orderBy=-set.releaseDate&select=id,cardmarket`, { timeout: 90000 }); }
-      catch (e) { if (i === 2) throw e; await sleep(20000); }
+    // in kleineren Seiten abrufen: große Abfragen beantwortet der Server oft mit 502
+    const body = { data: [] };
+    for (let page = 1; page <= 3; page++) {
+      let part;
+      for (let i = 0; i < 3 && !part; i++) {
+        try { part = await get(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=100&page=${page}&orderBy=-set.releaseDate&select=id,cardmarket`, { timeout: 90000 }); }
+        catch (e) { if (i === 2) throw e; await sleep(15000); }
+      }
+      body.data.push(...(part.data || []));
+      if ((part.data || []).length < 100) break;
     }
     const prices = {}, mom = [], dates = [];
     for (const c of body.data || []) {
@@ -421,14 +433,15 @@ async function collectYugioh() {
 log(`${THEMES.length} Themen`);
 /* --- Erwähnungen in US-Firmenberichten (SEC EDGAR Volltextsuche): Wie viele Pflichtmitteilungen nennen das Thema?
    Firmen müssen dort vorsichtig formulieren; springen viele auf, ist das Narrativ in der Wirtschaft angekommen. --- */
-const SEC_UA = 'SmartWin Radar research tool (github.com/paulkrausserl/smartwin)';
+// Die SEC verlangt im Abruf eine Kontakt-E-Mail. Sie kommt aus dem GitHub-Secret SEC_CONTACT; ohne sie wird die SEC übersprungen.
+const SEC_UA = process.env.SEC_CONTACT ? `SmartWin Radar ${process.env.SEC_CONTACT}` : null;
 async function secCount(kw, from, to) {
   const q = `"${kw.replace(/"/g, '')}"`;
   const body = await get(`https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(q)}&dateRange=custom&startdt=${ymd(new Date(from))}&enddt=${ymd(new Date(to))}`, { headers: { 'User-Agent': SEC_UA } });
   return body.hits?.total?.value ?? 0;
 }
 async function collectSec() {
-  let down = null;
+  let down = SEC_UA ? null : 'SEC verlangt eine Kontakt-E-Mail (GitHub-Secret SEC_CONTACT fehlt)';
   for (const t of THEMES.filter(x => x.group !== 'Länder')) {
     if (down) { slot(t.id).sec = keep(t.id, 'sec', down); continue; }
     try {
@@ -532,18 +545,13 @@ async function collectDefi() {
   log(`DefiLlama fertig (${Object.keys(out.defi).length})`);
 }
 
-/* --- Marktstimmung: Fear & Greed Index für Krypto (alternative.me) und Aktien (CNN) --- */
+/* --- Marktstimmung: Fear & Greed Index für Krypto (alternative.me). CNN (Aktien) sperrt automatische Abrufe, daher nicht dabei. --- */
 async function collectSentiment() {
   try {
     const body = await get('https://api.alternative.me/fng/?limit=365&format=json');
     const pts = (body.data || []).map(x => [ymd(new Date(Number(x.timestamp) * 1000)), Number(x.value), x.value_classification]).reverse();
     out.sentiment.crypto = { now: pts.at(-1)[1], label: pts.at(-1)[2], d: pts.map(p => p[0]), v: pts.map(p => p[1]) };
   } catch (e) { log(`Fear & Greed Krypto: ${e.message}`); if (prev.sentiment?.crypto) out.sentiment.crypto = { ...prev.sentiment.crypto, stale: true }; }
-  try {
-    const body = await get(`https://production.dataviz.cnn.io/index/fearandgreed/graphdata/${ymd(new Date(Date.now() - 365 * DAY_MS))}`, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json', Referer: 'https://edition.cnn.com/' } });
-    const pts = (body.fear_and_greed_historical?.data || []).map(x => [ymd(new Date(x.x)), Math.round(x.y)]);
-    out.sentiment.stocks = { now: Math.round(body.fear_and_greed.score), label: body.fear_and_greed.rating, d: pts.map(p => p[0]), v: pts.map(p => p[1]) };
-  } catch (e) { log(`Fear & Greed Aktien: ${e.message}`); if (prev.sentiment?.stocks) out.sentiment.stocks = { ...prev.sentiment.stocks, stale: true }; }
   log('Stimmung fertig');
 }
 
@@ -569,7 +577,6 @@ async function collectApps() {
 }
 
 /* --- Neu aufgetaucht: Begriffe, die gerade hochschießen, auch außerhalb der Themenliste --- */
-const decode = x => x.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
 async function collectDiscover() {
   const d = { google: [], github: [], hf: [] };
   for (const geo of ['US', 'DE']) {
@@ -618,7 +625,6 @@ const ratios = x => {
   if (x.trends?.v?.length > 12) { const v = x.trends.v; r.push((mean(v.slice(-4)) + 1) / (median(v.slice(0, -4)) + 1)); }
   if (x.news?.p?.length > 60) { const v = x.news.p; r.push((mean(v.slice(-30)) + 1e-3) / (median(v.slice(0, -30)) + 1e-3)); }
   if (x.hn && !x.hn.error && x.hn.base >= 3) r.push((x.hn.now + 1) / (x.hn.base + 1));
-  if (x.gnews && !x.gnews.error && x.gnews.base >= 0.3) r.push((x.gnews.now + 0.1) / (x.gnews.base + 0.1));
   const langs = Object.values(x.langs || {});
   if (langs.length) { const n = langs.reduce((a, l) => a + l.now, 0), b = langs.reduce((a, l) => a + l.base, 0); if (b >= 20) r.push((n + 1) / (b + 1)); }
   if (x.github && !x.github.error && x.github.base >= 3) r.push((x.github.now + 1) / (x.github.base + 1));

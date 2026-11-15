@@ -28,6 +28,9 @@ jobs:
         env:
           # für die GitHub-Suche (Entwickler-Interesse): höheres Abruflimit als ohne Anmeldung
           GITHUB_TOKEN: ${{ github.token }}
+          # Kontakt-E-Mail für die SEC-Volltextsuche (verlangt die SEC); als Secret, damit sie nicht öffentlich im Code steht.
+          # Ohne das Secret überspringt der Sammler die SEC.
+          SEC_CONTACT: ${{ secrets.SEC_CONTACT }}
       - name: Speichern
         run: |
           git config user.name 'smartwin-sammler'
