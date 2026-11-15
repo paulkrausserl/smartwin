@@ -3,6 +3,9 @@
 //   Wikipedia-Aufrufe (englisch und 7 weitere Sprachen), Google Trends, News (GDELT und Google News), Hacker News,
 //   Mastodon-Hashtags, GitHub- und arXiv-Aktivität (Tech-Themen), IMF-Prognosen (Länder), CoinGecko-Trends
 //   und Kartenpreis-Indizes (Cardmarket), dazu je Thema einen täglichen Aufmerksamkeits-Index für den Verlauf über Wochen.
+//   Außerdem: Erwähnungen in US-Firmenberichten (SEC), Entwickler-Downloads (npm, PyPI), Rohstoffpreise (FRED/IMF),
+//   Positionierung der Spekulanten (CFTC), Blockchain-Kennzahlen (DefiLlama), Fear & Greed, App-Store-Ränge
+//   und „Neu aufgetaucht“ (Google-Trendsuchen, neue GitHub-Projekte, KI-Modelle im Trend).
 // Fällt eine Quelle aus, bleiben die Daten vom Vortag stehen.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
@@ -20,7 +23,8 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const html = await readFile('radar.html', 'utf8');
 const THEMES = Function(`return ${html.match(/const THEMES = (\[[\s\S]*?\n\]);/)[1]}`)();
 const prev = await readFile(OUT, 'utf8').then(JSON.parse).catch(() => ({}));
-const out = { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [] };
+const out = { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [],
+  fred: {}, cot: {}, defi: {}, sentiment: {}, apps: {}, discover: {} };
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 // wie in radar.html
@@ -94,6 +98,9 @@ async function collectTrends() {
     return JSON.parse(body.slice(body.indexOf('{')));
   };
   let blocked = 0;
+  // „Steigende Suchanfragen“ kosten einen Abruf mehr: jeden Tag nur für die 20 Themen mit dem ältesten Stand
+  const risingAge = t => Date.parse(prev.themes?.[t.id]?.trends?.risingAt || '2000-01-01');
+  const risingToday = new Set([...THEMES].sort((a, b) => risingAge(a) - risingAge(b)).slice(0, 20).map(t => t.id));
   for (const t of THEMES) {
     if (blocked >= 3) { slot(t.id).trends = keep(t.id, 'trends', 'Google Trends hat den Sammler gesperrt'); continue; }
     try {
@@ -103,7 +110,18 @@ async function collectTrends() {
       const data = await g(`https://trends.google.com/trends/api/widgetdata/multiline?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(w.request))}&token=${w.token}`);
       const tl = data.default.timelineData || [];
       if (!tl.length) throw new Error('keine Daten');
-      slot(t.id).trends = { kw: trendsFor(t), d: tl.map(p => ymd(new Date(Number(p.time) * 1000))), v: tl.map(p => p.value[0]) };
+      const old = prev.themes?.[t.id]?.trends;
+      let rising = old?.rising || null, risingAt = old?.risingAt || null;
+      const rq = ex.widgets.find(x => x.id === 'RELATED_QUERIES');
+      if (rq && risingToday.has(t.id)) {
+        try {
+          await sleep(4000);
+          const rel = await g(`https://trends.google.com/trends/api/widgetdata/relatedsearches?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(rq.request))}&token=${rq.token}`);
+          rising = (rel.default?.rankedList?.[1]?.rankedKeyword || []).slice(0, 8).map(k => ({ q: k.query, v: k.formattedValue }));
+          risingAt = today;
+        } catch (e) { log(`  ${t.id}/steigende Suchen: ${e.message}`); }
+      }
+      slot(t.id).trends = { kw: trendsFor(t), d: tl.map(p => ymd(new Date(Number(p.time) * 1000))), v: tl.map(p => p.value[0]), rising, risingAt };
       blocked = 0;
     } catch (e) {
       if (/429/.test(e.message)) blocked++;
@@ -401,9 +419,195 @@ async function collectYugioh() {
 }
 
 log(`${THEMES.length} Themen`);
+/* --- Erwähnungen in US-Firmenberichten (SEC EDGAR Volltextsuche): Wie viele Pflichtmitteilungen nennen das Thema?
+   Firmen müssen dort vorsichtig formulieren; springen viele auf, ist das Narrativ in der Wirtschaft angekommen. --- */
+const SEC_UA = 'SmartWin Radar research tool (github.com/paulkrausserl/smartwin)';
+async function secCount(kw, from, to) {
+  const q = `"${kw.replace(/"/g, '')}"`;
+  const body = await get(`https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(q)}&dateRange=custom&startdt=${ymd(new Date(from))}&enddt=${ymd(new Date(to))}`, { headers: { 'User-Agent': SEC_UA } });
+  return body.hits?.total?.value ?? 0;
+}
+async function collectSec() {
+  let down = null;
+  for (const t of THEMES.filter(x => x.group !== 'Länder')) {
+    if (down) { slot(t.id).sec = keep(t.id, 'sec', down); continue; }
+    try {
+      const kw = trendsFor(t), now = Date.now();
+      const recent = await secCount(kw, now - 30 * DAY_MS, now);
+      await sleep(300);
+      const before = await secCount(kw, now - 360 * DAY_MS, now - 31 * DAY_MS);
+      slot(t.id).sec = { kw, now: recent, base: round(before / 11, 1) };
+    } catch (e) {
+      if (/40[13]/.test(e.message)) down = 'SEC lässt den Sammler gerade nicht zu';
+      slot(t.id).sec = keep(t.id, 'sec', down || e.message);
+    }
+    await sleep(300);
+  }
+  log('SEC fertig');
+}
+
+/* --- Entwickler-Downloads (npm, PyPI) der wichtigsten Programmier-Pakete eines Tech-Themas: echte Nutzung --- */
+async function devDaily(t) {
+  const byDay = {};
+  for (const pkg of t.dev.npm || []) {
+    const body = await get(`https://api.npmjs.org/downloads/range/last-year/${pkg}`);
+    for (const d of body.downloads || []) byDay[d.day] = (byDay[d.day] || 0) + d.downloads;
+  }
+  for (const pkg of t.dev.pypi || []) {
+    const body = await get(`https://pypistats.org/api/packages/${encodeURIComponent(pkg)}/overall?mirrors=false`);
+    for (const d of body.data || []) if (d.category === 'without_mirrors') byDay[d.date] = (byDay[d.date] || 0) + d.downloads;
+    await sleep(1500); // pypistats ist klein, bitte schonend
+  }
+  return Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b)).filter(([d]) => d < today);
+}
+async function collectDev() {
+  for (const t of THEMES.filter(x => x.dev)) {
+    try {
+      // PyPI liefert nur ~180 Tage: Vergleich daher über die letzten 6 Monate
+      const days = (await devDaily(t)).slice(-180);
+      if (days.length < 90) throw new Error('zu wenig Download-Daten');
+      const v = days.map(([, x]) => x);
+      const weeks = [];
+      for (let e = v.length; e - 7 >= 0 && weeks.length < 26; e -= 7) weeks.unshift(v.slice(e - 7, e).reduce((a, b) => a + b, 0));
+      slot(t.id).dev = { pkgs: [...(t.dev.npm || []), ...(t.dev.pypi || [])], now: Math.round(mean(v.slice(-30)) * 30), base: Math.round(mean(v.slice(0, -30)) * 30), w: weeks };
+    } catch (e) { slot(t.id).dev = keep(t.id, 'dev', e.message); }
+  }
+  log('Downloads fertig');
+}
+
+/* --- Rohstoffpreise ohne Börsenkurs (Kakao, Kaffee, Olivenöl): Monatspreise des IMF über FRED, als CSV ohne Key --- */
+async function collectFred() {
+  for (const t of THEMES.filter(x => x.price?.fred)) {
+    try {
+      const csv = await get(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${t.price.fred}`, { text: true, headers: { Accept: 'text/csv' } });
+      const rows = csv.trim().split('\n').slice(1).map(l => l.split(',')).filter(([d, v]) => d && v && v !== '.').map(([d, v]) => [d, round(Number(v), 2)]);
+      if (rows.length < 12) throw new Error('zu wenig Werte');
+      out.fred[t.id] = { series: rows.slice(-120) };
+    } catch (e) { log(`FRED ${t.price.fred}: ${e.message}`); if (prev.fred?.[t.id]) out.fred[t.id] = { ...prev.fred[t.id], stale: true }; }
+  }
+  log(`FRED fertig (${Object.keys(out.fred).length})`);
+}
+
+/* --- CFTC Commitments of Traders: Netto-Position der Spekulanten (Nicht-Kommerzielle) an den Terminbörsen.
+   Eingeordnet als Perzentil der letzten 3 Jahre: ganz oben = so optimistisch wie selten (oft spätes Signal). --- */
+async function collectCot() {
+  const since = ymd(new Date(Date.now() - 3 * 365 * DAY_MS));
+  for (const t of THEMES.filter(x => x.cot)) {
+    try {
+      const where = `(${t.cot.map(pat => `market_and_exchange_names like '${pat}'`).join(' OR ')}) AND report_date_as_yyyy_mm_dd > '${since}T00:00:00'`;
+      const url = new URL('https://publicreporting.cftc.gov/resource/6dca-aqww.json');
+      Object.entries({ $select: 'market_and_exchange_names,report_date_as_yyyy_mm_dd,open_interest_all,noncomm_positions_long_all,noncomm_positions_short_all', $where: where, $order: 'report_date_as_yyyy_mm_dd', $limit: '2000' }).forEach(([k, v]) => url.searchParams.set(k, v));
+      const rows = await get(url);
+      if (!rows.length) throw new Error('kein Markt gefunden');
+      // bei mehreren Treffern den Markt mit dem größten offenen Interesse nehmen
+      const oi = {};
+      for (const r of rows) oi[r.market_and_exchange_names] = Math.max(oi[r.market_and_exchange_names] || 0, Number(r.open_interest_all) || 0);
+      const market = Object.entries(oi).sort((a, b) => b[1] - a[1])[0][0];
+      const m = rows.filter(r => r.market_and_exchange_names === market).map(r => ({ d: r.report_date_as_yyyy_mm_dd.slice(0, 10), net: Number(r.noncomm_positions_long_all) - Number(r.noncomm_positions_short_all), oi: Number(r.open_interest_all) }));
+      const last = m.at(-1), ago = m.at(-5);
+      out.cot[t.id] = {
+        market, date: last.d, net: last.net, oi: last.oi,
+        pct: Math.round((m.filter(x => x.net < last.net).length / m.length) * 100),
+        change4w: ago ? round(((last.net - ago.net) / Math.max(1, last.oi)) * 100, 1) : null,
+        series: m.map(x => [x.d, x.net]).slice(-156),
+      };
+    } catch (e) { log(`CFTC ${t.id}: ${e.message}`); if (prev.cot?.[t.id]) out.cot[t.id] = { ...prev.cot[t.id], stale: true }; }
+    await sleep(500);
+  }
+  log(`CFTC fertig (${Object.keys(out.cot).length})`);
+}
+
+/* --- DefiLlama: Geld auf einer Blockchain (TVL) bzw. Gebühren eines Protokolls, täglich --- */
+async function collectDefi() {
+  for (const t of THEMES.filter(x => x.defi)) {
+    try {
+      let pts;
+      if (t.defi.tvl) pts = (await get(`https://api.llama.fi/v2/historicalChainTvl/${encodeURIComponent(t.defi.tvl)}`)).map(x => [ymd(new Date(x.date * 1000)), x.tvl]);
+      else pts = ((await get(`https://api.llama.fi/summary/fees/${encodeURIComponent(t.defi.fees)}?dataType=dailyFees`)).totalDataChart || []).map(([ts, v]) => [ymd(new Date(ts * 1000)), v]);
+      pts = pts.filter(([d]) => d < today).slice(-400);
+      if (pts.length < 60) throw new Error('zu wenig Daten');
+      out.defi[t.id] = { kind: t.defi.tvl ? 'tvl' : 'fees', name: t.defi.tvl || t.defi.fees, d: pts.map(p => p[0]), v: pts.map(p => Math.round(p[1])) };
+    } catch (e) { log(`DefiLlama ${t.id}: ${e.message}`); if (prev.defi?.[t.id]) out.defi[t.id] = { ...prev.defi[t.id], stale: true }; }
+  }
+  log(`DefiLlama fertig (${Object.keys(out.defi).length})`);
+}
+
+/* --- Marktstimmung: Fear & Greed Index für Krypto (alternative.me) und Aktien (CNN) --- */
+async function collectSentiment() {
+  try {
+    const body = await get('https://api.alternative.me/fng/?limit=365&format=json');
+    const pts = (body.data || []).map(x => [ymd(new Date(Number(x.timestamp) * 1000)), Number(x.value), x.value_classification]).reverse();
+    out.sentiment.crypto = { now: pts.at(-1)[1], label: pts.at(-1)[2], d: pts.map(p => p[0]), v: pts.map(p => p[1]) };
+  } catch (e) { log(`Fear & Greed Krypto: ${e.message}`); if (prev.sentiment?.crypto) out.sentiment.crypto = { ...prev.sentiment.crypto, stale: true }; }
+  try {
+    const body = await get(`https://production.dataviz.cnn.io/index/fearandgreed/graphdata/${ymd(new Date(Date.now() - 365 * DAY_MS))}`, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json', Referer: 'https://edition.cnn.com/' } });
+    const pts = (body.fear_and_greed_historical?.data || []).map(x => [ymd(new Date(x.x)), Math.round(x.y)]);
+    out.sentiment.stocks = { now: Math.round(body.fear_and_greed.score), label: body.fear_and_greed.rating, d: pts.map(p => p[0]), v: pts.map(p => p[1]) };
+  } catch (e) { log(`Fear & Greed Aktien: ${e.message}`); if (prev.sentiment?.stocks) out.sentiment.stocks = { ...prev.sentiment.stocks, stale: true }; }
+  log('Stimmung fertig');
+}
+
+/* --- App-Store-Ränge (Apple, kostenlose Apps, USA und Deutschland): Springt die Coinbase-App nach oben,
+   sind Privatanleger im Rausch. Bekannter, eher später Hype-Indikator. --- */
+const APPS = [['coinbase', /^coinbase/i], ['cryptocom', /crypto\.com/i], ['binance', /binance/i], ['robinhood', /robinhood/i], ['traderepublic', /trade republic/i], ['pokemontcg', /pok[eé]mon tcg pocket/i]];
+async function collectApps() {
+  const feeds = { us: 'us/rss/topfreeapplications/limit=200', usFin: 'us/rss/topfreeapplications/limit=200/genre=6015', de: 'de/rss/topfreeapplications/limit=200', deFin: 'de/rss/topfreeapplications/limit=200/genre=6015' };
+  const ranks = {};
+  for (const [k, path] of Object.entries(feeds)) {
+    try {
+      const names = ((await get(`https://itunes.apple.com/${path}/json`)).feed?.entry || []).map(e => e['im:name']?.label || '');
+      if (!names.length) throw new Error('leere Liste');
+      for (const [app, re] of APPS) { const i = names.findIndex(n => re.test(n)); (ranks[app] ||= {})[k] = i >= 0 ? i + 1 : null; }
+    } catch (e) { log(`App Store ${k}: ${e.message}`); }
+  }
+  for (const [app] of APPS) {
+    const hist = (prev.apps?.[app] || []).filter(p => p[0] !== today);
+    if (ranks[app]) hist.push([today, ranks[app]]);
+    out.apps[app] = hist.slice(-180);
+  }
+  log(`App Store fertig: Coinbase ${JSON.stringify(ranks.coinbase || {})}`);
+}
+
+/* --- Neu aufgetaucht: Begriffe, die gerade hochschießen, auch außerhalb der Themenliste --- */
+const decode = x => x.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+async function collectDiscover() {
+  const d = { google: [], github: [], hf: [] };
+  for (const geo of ['US', 'DE']) {
+    try {
+      const xml = await get(`https://trends.google.com/trending/rss?geo=${geo}`, { text: true, headers: { Accept: 'application/rss+xml', 'User-Agent': 'Mozilla/5.0' } });
+      for (const item of xml.split('<item>').slice(1, 21)) {
+        const title = item.match(/<title>([\s\S]*?)<\/title>/)?.[1];
+        const traffic = item.match(/<ht:approx_traffic>([\s\S]*?)<\/ht:approx_traffic>/)?.[1];
+        const news = item.match(/<ht:news_item_title>([\s\S]*?)<\/ht:news_item_title>/)?.[1];
+        if (title) d.google.push({ geo, title: decode(title), traffic: traffic ? decode(traffic) : null, news: news ? decode(news) : null });
+      }
+    } catch (e) { log(`Google-Trendsuchen ${geo}: ${e.message}`); }
+  }
+  try {
+    const since = ymd(new Date(Date.now() - 7 * DAY_MS));
+    const body = await get(`https://api.github.com/search/repositories?q=${encodeURIComponent(`created:>${since}`)}&sort=stars&order=desc&per_page=12`, {
+      headers: { Accept: 'application/vnd.github+json', ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) },
+    });
+    d.github = (body.items || []).map(r => ({ name: r.full_name, desc: (r.description || '').slice(0, 140), stars: r.stargazers_count }));
+  } catch (e) { log(`GitHub neu: ${e.message}`); }
+  try {
+    const body = await get('https://huggingface.co/api/models?sort=trendingScore&direction=-1&limit=12');
+    d.hf = (Array.isArray(body) ? body : []).map(m => ({ name: m.id, likes: m.likes ?? null, downloads: m.downloads ?? null }));
+  } catch (e) { log(`Hugging Face: ${e.message}`); }
+  // fehlt eine Liste heute, die von gestern behalten
+  for (const k of ['google', 'github', 'hf']) if (!d[k].length && prev.discover?.[k]?.length) d[k] = prev.discover[k];
+  // wann ein Begriff zum ersten Mal auftauchte: damit die Seite „neu“ markieren kann (60 Tage Gedächtnis)
+  const seen = { ...(prev.discover?.seen || {}) };
+  for (const x of [...d.google.map(g => g.title), ...d.github.map(g => g.name), ...d.hf.map(h => h.name)]) seen[x.toLowerCase()] ||= today;
+  d.seen = Object.fromEntries(Object.entries(seen).filter(([, v]) => Date.parse(v) > Date.now() - 60 * DAY_MS));
+  out.discover = d;
+  log(`Neu aufgetaucht: ${d.google.length} Google, ${d.github.length} GitHub, ${d.hf.length} Hugging Face`);
+}
+
 await Promise.all([
-  collectWiki(), collectNews(), collectTrends(), collectHn(), collectMasto(), collectGnews(), collectGithub(), collectArxiv(),
+  collectWiki(), collectNews(), collectTrends(), collectHn(), collectMasto(), collectGnews(), collectGithub(), collectArxiv(), collectSec(), collectDev(),
   (async () => { await collectPokemon(); await collectMtg(); await collectYugioh(); await collectMacro(); await collectTrendingCoins(); })(),
+  (async () => { await collectFred(); await collectCot(); await collectDefi(); await collectSentiment(); await collectApps(); await collectDiscover(); })(),
 ]);
 
 /* --- Aufmerksamkeits-Index je Thema und Tag: geometrisches Mittel aller verfügbaren Quellen-Verhältnisse
@@ -419,6 +623,8 @@ const ratios = x => {
   if (langs.length) { const n = langs.reduce((a, l) => a + l.now, 0), b = langs.reduce((a, l) => a + l.base, 0); if (b >= 20) r.push((n + 1) / (b + 1)); }
   if (x.github && !x.github.error && x.github.base >= 3) r.push((x.github.now + 1) / (x.github.base + 1));
   if (x.arxiv && !x.arxiv.error && x.arxiv.base >= 3) r.push((x.arxiv.now + 1) / (x.arxiv.base + 1));
+  if (x.sec && !x.sec.error && x.sec.base >= 3) r.push((x.sec.now + 1) / (x.sec.base + 1));
+  if (x.dev && !x.dev.error && x.dev.base > 0) r.push(x.dev.now / x.dev.base);
   return r;
 };
 for (const t of THEMES) {
@@ -429,7 +635,9 @@ for (const t of THEMES) {
 }
 
 const count = src => Object.values(out.themes).filter(x => x[src] && !x[src].error).length;
-out.summary = Object.fromEntries(['wiki', 'langs', 'news', 'gnews', 'trends', 'hn', 'masto', 'github', 'arxiv'].map(s => [s, count(s)]));
+out.summary = Object.fromEntries(['wiki', 'langs', 'news', 'gnews', 'trends', 'hn', 'masto', 'github', 'arxiv', 'sec', 'dev'].map(s => [s, count(s)]));
+Object.assign(out.summary, { fred: Object.keys(out.fred).length, cot: Object.keys(out.cot).length, defi: Object.keys(out.defi).length,
+  sentiment: Object.keys(out.sentiment).length, discover: (out.discover.google?.length || 0) + (out.discover.github?.length || 0) + (out.discover.hf?.length || 0) });
 log('Ergebnis', JSON.stringify(out.summary), 'Karten:', Object.keys(out.cards).join(', ') || 'keine');
 await mkdir('data', { recursive: true });
 await writeFile(OUT, JSON.stringify(out));
