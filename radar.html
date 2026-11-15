@@ -318,7 +318,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '4.3';
+const APP_VERSION = '4.4';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -349,7 +349,7 @@ const THEMES = [
   { id: 'comics', name: 'Comics', group: 'Sammelobjekte', wiki: 'Comic book collecting', scarcity: 'Erstausgaben in gutem Zustand sind selten, bewertete Exemplare noch seltener.', tag: 'comicbooks', news: '"comic book" collecting' },
   { id: 'coins', name: 'Münzen', group: 'Sammelobjekte', wiki: 'Coin collecting', scarcity: 'Kleine Prägeauflagen und Fehlprägungen.', tag: 'numismatics', news: '"coin collecting"' },
   { id: 'birkin', name: 'Hermès Birkin', group: 'Sammelobjekte', wiki: 'Birkin bag', scarcity: 'Hermès verkauft die Tasche nur an ausgewählte Kunden, die Produktion ist bewusst knapp.', tag: 'birkin', news: '"Birkin bag"' },
-  { id: 'wine', name: 'Wein als Anlage', group: 'Sammelobjekte', wiki: 'Wine as investment', scarcity: 'Jeder Jahrgang ist endlich, getrunkene Flaschen verschwinden vom Markt.', tag: 'finewine', news: '"fine wine"' },
+  { id: 'wine', name: 'Wein als Anlage', group: 'Sammelobjekte', wiki: 'Investment wine', scarcity: 'Jeder Jahrgang ist endlich, getrunkene Flaschen verschwinden vom Markt.', tag: 'finewine', news: '"fine wine"' },
   { id: 'matcha', name: 'Matcha', group: 'Lifestyle', wiki: 'Matcha', scarcity: 'Hochwertiger Matcha kommt aus wenigen Regionen Japans, die Produktion wächst nur langsam. 2024/25 gab es Lieferengpässe.', tag: 'matcha', news: 'matcha' },
   { id: 'dubaichoc', name: 'Dubai-Schokolade', group: 'Lifestyle', wiki: 'Dubai chocolate', scarcity: 'Der Trend hat Pistazien knapper und teurer gemacht.', tag: 'dubaichocolate', news: '"Dubai chocolate"' },
   { id: 'smartglasses', name: 'Smart Glasses', group: 'Lifestyle', wiki: 'Smartglasses', tag: 'smartglasses', news: '"smart glasses"' },
@@ -395,8 +395,8 @@ const THEMES = [
   { id: 'malaysia', iso: 'MYS', name: 'Malaysia', group: 'Länder', wiki: 'FTSE Bursa Malaysia KLCI', price: { fmp: 'EWM', label: 'Malaysia-ETF EWM' }, driver: 'Neue Rechenzentren für KI und Chip-Verpackung (Back-End der Halbleiterfertigung).', tag: 'klci', news: '"Bursa Malaysia"' },
   { id: 'philippines', iso: 'PHL', name: 'Philippinen', group: 'Länder', wiki: 'PSE Composite Index', price: { fmp: 'EPHE', label: 'Philippinen-ETF EPHE' }, tag: 'psei', news: '"Philippine stocks"' },
   { id: 'brazil', iso: 'BRA', name: 'Brasilien', group: 'Länder', wiki: 'Ibovespa', price: { fmp: 'EWZ', label: 'Brasilien-ETF EWZ' }, driver: 'Rohstoffe und Agrar, hohe Zinsen.', tag: 'ibovespa', news: 'Ibovespa' },
-  { id: 'mexico', iso: 'MEX', name: 'Mexiko', group: 'Länder', wiki: 'S&P/BMV IPC', price: { fmp: 'EWW', label: 'Mexiko-ETF EWW' }, driver: 'Produktion wandert aus Asien näher an die USA („Nearshoring“), abhängig von US-Zöllen.', tag: 'mexicostocks', news: '"Mexican stocks"' },
-  { id: 'argentina', iso: 'ARG', name: 'Argentinien', group: 'Länder', wiki: 'S&P Merval', price: { fmp: 'ARGT', label: 'Argentinien-ETF ARGT' }, driver: 'Wirtschaftsreformen, Lithium und Schiefergas (Vaca Muerta). Sehr schwankungsanfällig.', tag: 'merval', news: 'Merval' },
+  { id: 'mexico', iso: 'MEX', name: 'Mexiko', group: 'Länder', wiki: 'Indice de Precios y Cotizaciones', price: { fmp: 'EWW', label: 'Mexiko-ETF EWW' }, driver: 'Produktion wandert aus Asien näher an die USA („Nearshoring“), abhängig von US-Zöllen.', tag: 'mexicostocks', news: '"Mexican stocks"' },
+  { id: 'argentina', iso: 'ARG', name: 'Argentinien', group: 'Länder', wiki: 'MERVAL', price: { fmp: 'ARGT', label: 'Argentinien-ETF ARGT' }, driver: 'Wirtschaftsreformen, Lithium und Schiefergas (Vaca Muerta). Sehr schwankungsanfällig.', tag: 'merval', news: 'Merval' },
   { id: 'southafrica', iso: 'ZAF', name: 'Südafrika', group: 'Länder', wiki: 'FTSE/JSE Top 40 Index', price: { fmp: 'EZA', label: 'Südafrika-ETF EZA' }, driver: 'Gold, Platin und andere Rohstoffe.', tag: 'jse', news: '"Johannesburg Stock Exchange"' },
   { id: 'turkey', iso: 'TUR', name: 'Türkei', group: 'Länder', wiki: 'BIST 100', price: { fmp: 'TUR', label: 'Türkei-ETF TUR' }, driver: 'Hohe Inflation und schwache Lira, Kurse in Dollar oft deutlich schwächer als in Lira.', tag: 'bist100', news: '"Borsa Istanbul"' },
   { id: 'saudi', iso: 'SAU', name: 'Saudi-Arabien', group: 'Länder', wiki: 'Saudi Exchange', price: { fmp: 'KSA', label: 'Saudi-ETF KSA' }, driver: 'Ölpreis, Umbau der Wirtschaft (Vision 2030), Investitionen in KI-Rechenzentren.', tag: 'tadawul', news: 'Tadawul' },
@@ -541,7 +541,8 @@ function newsStats(series) {
 const hnKeyword = t => t.trends || newsFor(t).replace(/[()"]/g, '').split(' OR ')[0].trim();
 async function hnCount(q, from, to) {
   const url = new URL('https://hn.algolia.com/api/v1/search_by_date');
-  Object.entries({ query: q, advancedSyntax: 'true', hitsPerPage: '0', numericFilters: `created_at_i>${Math.floor(from / 1000)},created_at_i<${Math.floor(to / 1000)}` }).forEach(([k, v]) => url.searchParams.set(k, v));
+  // ohne Tippfehler-Toleranz, sonst zählt „matcha“ auch jedes „match“
+  Object.entries({ query: q, advancedSyntax: 'true', typoTolerance: 'false', hitsPerPage: '0', numericFilters: `created_at_i>${Math.floor(from / 1000)},created_at_i<${Math.floor(to / 1000)}` }).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Hacker News antwortet mit ${res.status}`);
   return (await res.json()).nbHits ?? 0;

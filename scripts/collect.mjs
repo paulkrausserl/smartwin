@@ -118,7 +118,8 @@ async function collectTrends() {
    Letzte 30 Tage im Vergleich zum Monatsschnitt der 11 Monate davor. Vor allem für Tech- und Krypto-Themen aussagekräftig. --- */
 async function hnCount(q, from, to) {
   const url = new URL('https://hn.algolia.com/api/v1/search_by_date');
-  Object.entries({ query: q, advancedSyntax: 'true', hitsPerPage: '0', numericFilters: `created_at_i>${Math.floor(from / 1000)},created_at_i<${Math.floor(to / 1000)}` }).forEach(([k, v]) => url.searchParams.set(k, v));
+  // ohne Tippfehler-Toleranz, sonst zählt „matcha“ auch jedes „match“
+  Object.entries({ query: q, advancedSyntax: 'true', typoTolerance: 'false', hitsPerPage: '0', numericFilters: `created_at_i>${Math.floor(from / 1000)},created_at_i<${Math.floor(to / 1000)}` }).forEach(([k, v]) => url.searchParams.set(k, v));
   return (await get(url)).nbHits ?? 0;
 }
 async function collectHn() {
