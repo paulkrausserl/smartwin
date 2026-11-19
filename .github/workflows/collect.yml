@@ -9,6 +9,11 @@ on:
     - cron: '47 10 * * *'
     - cron: '47 16 * * *'
   workflow_dispatch:
+    inputs:
+      nur_trends:
+        description: 'Nur Google Trends nachholen'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -35,7 +40,7 @@ jobs:
           # Ohne das Secret überspringt der Sammler die SEC.
           SEC_CONTACT: ${{ secrets.SEC_CONTACT }}
           # Nachmittags- und Abendlauf: nur Google Trends
-          TRENDS_ONLY: ${{ github.event.schedule == '47 10 * * *' || github.event.schedule == '47 16 * * *' }}
+          TRENDS_ONLY: ${{ github.event.schedule == '47 10 * * *' || github.event.schedule == '47 16 * * *' || inputs.nur_trends == true }}
       - name: Speichern
         run: |
           git config user.name 'smartwin-sammler'

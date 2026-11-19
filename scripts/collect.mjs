@@ -105,14 +105,21 @@ async function collectTrends() {
     const res = await fetch('https://trends.google.com/trends/explore?geo=US', { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(30000) });
     cookie = (res.headers.getSetCookie?.() || []).map(c => c.split(';')[0]).join('; ');
   } catch { /* ohne Cookie probieren */ }
+  // Bei „zu viele Anfragen“ bis zu zweimal mit wachsender Pause neu versuchen
   const g = async url => {
-    const body = await get(url, { text: true, headers: { 'User-Agent': 'Mozilla/5.0', Cookie: cookie } });
-    return JSON.parse(body.slice(body.indexOf('{')));
+    for (let n = 0; ; n++) {
+      try {
+        const body = await get(url, { text: true, headers: { 'User-Agent': 'Mozilla/5.0', Cookie: cookie } });
+        return JSON.parse(body.slice(body.indexOf('{')));
+      } catch (e) {
+        if (!/429/.test(e.message) || n >= 2) throw e;
+        await sleep((n + 1) * 45000);
+      }
+    }
   };
   let blocked = 0, requests = 0, risingLeft = RISING_PER_RUN;
   const pause = () => sleep(8000 + Math.random() * 4000);
   const fail = (t, e) => {
-    if (/429/.test(e.message)) blocked++;
     slot(t.id).trends = keep(t.id, 'trends', /429/.test(e.message) ? 'Google Trends bremst' : e.message);
   };
   // Größe: Schätzung der Suchmenge auf einer gemeinsamen Skala (nur zum Gruppieren)
@@ -132,7 +139,7 @@ async function collectTrends() {
     const ex = await g(`https://trends.google.com/trends/api/explore?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(req))}`);
     requests++;
     const w = ex.widgets.find(x => x.id === 'TIMESERIES');
-    await sleep(1500);
+    await sleep(3000);
     const data = await g(`https://trends.google.com/trends/api/widgetdata/multiline?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(w.request))}&token=${w.token}`);
     requests++;
     const tl = data.default.timelineData || [];
@@ -189,7 +196,7 @@ async function collectTrends() {
         await save(t, r.start, r.raw[i + (anchor ? 1 : 0)], size, r.related[i + (anchor ? 1 : 0)]);
       }
       anchor = next || anchor;
-    } catch (e) { for (const t of fresh) fail(t, e); }
+    } catch (e) { if (/429/.test(e.message)) blocked++; for (const t of fresh) fail(t, e); }
     await pause();
   }
   for (const [t, size] of single) {
@@ -200,6 +207,7 @@ async function collectTrends() {
       await save(t, r.start, r.raw[0], size, r.related[0]);
       await pause();
     } catch (e) {
+      if (/429/.test(e.message)) blocked++;
       fail(t, e);
       // die neue Größe trotzdem merken, damit das Thema beim nächsten Mal in eine passende Gruppe kommt
       if (!slot(t.id).trends.error) slot(t.id).trends.size = round(size, 2);
