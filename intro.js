@@ -1,15 +1,24 @@
 // SmartWin-Intro: Das Radar-Logo erscheint, die Kurslinie wird zur Elfenbein-Viper, die nach oben zuschlägt,
-// danach fliegt das Logo in die Kopfzeile. Läuft einmal pro Sitzung, Klick/Taste überspringt,
+// danach fliegt das Logo in die Kopfzeile. Klick/Taste überspringt,
 // bei „weniger Bewegung“ (prefers-reduced-motion) und im Retro-Modus gar nicht. Die Seite lädt dahinter normal weiter.
 (() => {
   // Ein Tab, der im Hintergrund lädt (z. B. angehefteter Tab beim Browserstart), spielt das Intro erst,
   // wenn man ihn das erste Mal ansieht.
+  // Läuft, wenn man die Seite von außen öffnet (neuer/angehefteter Tab, Lesezeichen, Neuladen).
+  // Nicht beim Wechsel zwischen Aktien, Krypto und Radar und nicht bei „Zurück“. Bewusst ohne gespeicherten Merker:
+  // Browser stellen sessionStorage bei angehefteten Tabs wieder her, dann kam das Intro gar nicht mehr.
   const allowed = () => {
     try {
       const de = document.documentElement;
+      if (/#intro/.test(location.hash)) return true;
       if (de.dataset.mode === 'retro' || /nointro/.test(location.hash) || matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
-      if (sessionStorage.getItem('rr:intro')) return false;
-      sessionStorage.setItem('rr:intro', '1');
+      const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+      if (nav && nav.type === 'back_forward') return false;
+      const dir = p => p.replace(/[^/]*$/, '');
+      if (document.referrer) {
+        const r = new URL(document.referrer);
+        if (r.origin === location.origin && dir(r.pathname) === dir(location.pathname)) return false;
+      }
       return true;
     } catch { return false; }
   };
@@ -53,7 +62,7 @@
   de.classList.add('rr-intro');
   const cache = {}, $ = id => cache[id] || (cache[id] = ov.querySelector('#ri-' + id));
   const logo = $('logo'), bg = ov.querySelector('.bg');
-  const size = Math.round(Math.min(220, innerWidth * 0.55));
+  const size = Math.round(Math.min(220, (innerWidth || document.documentElement.clientWidth || 400) * 0.55));
   Object.assign(logo.style, { left: '50%', top: '50%', width: size + 'px', height: size + 'px', margin: `${-size/2}px 0 0 ${-size/2}px` });
   // Ziel: Mitte und Größe des Logos in der Kopfzeile (Kreis füllt dort die ganze Fläche, im Intro 100/120 der Breite)
   let target = null;
