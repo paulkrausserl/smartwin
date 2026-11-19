@@ -23,7 +23,9 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const html = await readFile('radar.html', 'utf8');
 const THEMES = Function(`return ${html.match(/const THEMES = (\[[\s\S]*?\n\]);/)[1]}`)();
 const prev = await readFile(OUT, 'utf8').then(JSON.parse).catch(() => ({}));
-const out = { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [],
+// Zusatzlauf: nur Google Trends nachholen, alles andere bleibt wie im Hauptlauf
+const TRENDS_ONLY = process.env.TRENDS_ONLY === 'true';
+const out = TRENDS_ONLY ? { ...structuredClone(prev), themes: structuredClone(prev.themes || {}), trendsUpdated: new Date().toISOString() } : { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [],
   fred: {}, cot: {}, defi: {}, sentiment: {}, apps: {}, discover: {}, perps: {}, market: {}, fx: {}, poly: {}, so: {} };
 // weitere Quellen je Thema landen wie gewohnt in out.themes[id]: edits, fedreg, trials, manifold
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -88,7 +90,15 @@ async function collectNews() {
   log(`News fertig (${tried} abgefragt)`);
 }
 
-/* --- Google Trends: inoffizielle Schnittstelle, wöchentliche Werte 0–100 über 12 Monate --------- */
+/* --- Google Trends: inoffizielle Schnittstelle, wöchentliche Werte 0–100 über 12 Monate ---------
+   Google sperrt den Sammler nach rund 40 Abfragen. Darum:
+   - bis zu 5 Themen pro Abfrage (Google erlaubt 5 Suchbegriffe). Google rechnet sie auf eine gemeinsame Skala,
+     wir rechnen jede Kurve danach wieder auf ihr eigenes Maximum = 100 um, wie bei einer Einzelabfrage.
+     Damit ein kleines Thema neben einem großen nicht zur flachen Linie wird, kommen Themen ähnlicher Größe zusammen
+     (Größe aus früheren Läufen, anfangs aus den Wikipedia-Aufrufen). Bleibt eine Kurve trotzdem zu flach, wird sie einzeln abgefragt.
+   - zuerst die Themen mit dem ältesten Stand
+   - zusätzliche Läufe am Tag (TRENDS_ONLY) holen nach, was im Hauptlauf gesperrt war. --- */
+const TRENDS_BATCH = 5, TRENDS_MIN_PEAK = 15, RISING_PER_RUN = 8;
 async function collectTrends() {
   let cookie = '';
   try {
@@ -99,42 +109,103 @@ async function collectTrends() {
     const body = await get(url, { text: true, headers: { 'User-Agent': 'Mozilla/5.0', Cookie: cookie } });
     return JSON.parse(body.slice(body.indexOf('{')));
   };
-  let blocked = 0;
-  // „Steigende Suchanfragen“ kosten einen Abruf mehr: jeden Tag nur für die 20 Themen mit dem ältesten Stand
+  let blocked = 0, requests = 0, risingLeft = RISING_PER_RUN;
+  const pause = () => sleep(8000 + Math.random() * 4000);
+  const fail = (t, e) => {
+    if (/429/.test(e.message)) blocked++;
+    slot(t.id).trends = keep(t.id, 'trends', /429/.test(e.message) ? 'Google Trends bremst' : e.message);
+  };
+  // Größe: Schätzung der Suchmenge auf einer gemeinsamen Skala (nur zum Gruppieren)
+  const sizeOf = t => {
+    const old = prev.themes?.[t.id];
+    if (old?.trends?.size) return old.trends.size;
+    const w = old?.wiki?.v;
+    return w?.length ? Math.max(1, median(w.slice(-365))) : 100;
+  };
+  // Zusatzläufe: nur, was heute noch nicht frisch ist
+  const todo = THEMES.filter(t => !(TRENDS_ONLY && prev.themes?.[t.id]?.trends?.at === today));
+  // von groß nach klein, damit in einer Gruppe ähnlich große Themen landen
+  todo.sort((a, b) => sizeOf(b) - sizeOf(a));
+  // eine Abfrage für mehrere Themen; liefert je Thema die Rohwerte (gemeinsame Skala) und das Explore-Ergebnis
+  const query = async group => {
+    const req = { comparisonItem: group.map(t => ({ keyword: trendsFor(t), geo: '', time: 'today 12-m' })), category: 0, property: '' };
+    const ex = await g(`https://trends.google.com/trends/api/explore?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(req))}`);
+    requests++;
+    const w = ex.widgets.find(x => x.id === 'TIMESERIES');
+    await sleep(1500);
+    const data = await g(`https://trends.google.com/trends/api/widgetdata/multiline?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(w.request))}&token=${w.token}`);
+    requests++;
+    const tl = data.default.timelineData || [];
+    if (!tl.length) throw new Error('keine Daten');
+    // je Suchbegriff ein eigenes Widget „steigende Suchen“; über den Suchbegriff zuordnen, sonst nach Reihenfolge
+    const rq = ex.widgets.filter(x => x.id.startsWith('RELATED_QUERIES'));
+    const kwOf = x => x.request?.restriction?.complexKeywordsRestriction?.keyword?.[0]?.value?.toLowerCase();
+    const related = group.map((t, i) => rq.find(x => kwOf(x) === trendsFor(t).toLowerCase()) || rq[i] || null);
+    return { start: ymd(new Date(Number(tl[0].time) * 1000)), raw: group.map((_, i) => tl.map(p => p.value[i] ?? 0)), related };
+  };
   const risingAge = t => Date.parse(prev.themes?.[t.id]?.trends?.risingAt || '2000-01-01');
-  const risingToday = new Set([...THEMES].sort((a, b) => risingAge(a) - risingAge(b)).slice(0, 20).map(t => t.id));
-  // Google sperrt nach ~40 Abfragen. Darum zuerst die Themen mit dem ältesten Stand, damit jedes Thema regelmäßig drankommt.
-  const trendsAge = t => Date.parse(prev.themes?.[t.id]?.trends?.at || '2000-01-01');
-  for (const t of [...THEMES].sort((a, b) => trendsAge(a) - trendsAge(b))) {
-    if (blocked >= 3) { slot(t.id).trends = keep(t.id, 'trends', 'Google Trends hat den Sammler gesperrt'); continue; }
-    try {
-      const req = { comparisonItem: [{ keyword: trendsFor(t), geo: '', time: 'today 12-m' }], category: 0, property: '' };
-      const ex = await g(`https://trends.google.com/trends/api/explore?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(req))}`);
-      const w = ex.widgets.find(x => x.id === 'TIMESERIES');
-      const data = await g(`https://trends.google.com/trends/api/widgetdata/multiline?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(w.request))}&token=${w.token}`);
-      const tl = data.default.timelineData || [];
-      if (!tl.length) throw new Error('keine Daten');
-      const old = prev.themes?.[t.id]?.trends;
-      let rising = old?.rising || null, risingAt = old?.risingAt || null;
-      const rq = ex.widgets.find(x => x.id === 'RELATED_QUERIES');
-      if (rq && risingToday.has(t.id)) {
-        try {
-          await sleep(4000);
-          const rel = await g(`https://trends.google.com/trends/api/widgetdata/relatedsearches?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(rq.request))}&token=${rq.token}`);
-          rising = (rel.default?.rankedList?.[1]?.rankedKeyword || []).slice(0, 8).map(k => ({ q: k.query, v: k.formattedValue }));
-          risingAt = today;
-        } catch (e) { log(`  ${t.id}/steigende Suchen: ${e.message}`); }
-      }
-      // Wochenwerte sind lückenlos: erstes Datum genügt
-      slot(t.id).trends = { kw: trendsFor(t), start: ymd(new Date(Number(tl[0].time) * 1000)), v: tl.map(p => p.value[0]), rising, risingAt, at: today };
-      blocked = 0;
-    } catch (e) {
-      if (/429/.test(e.message)) blocked++;
-      slot(t.id).trends = keep(t.id, 'trends', /429/.test(e.message) ? 'Google Trends bremst' : e.message);
+  const save = async (t, start, raw, size, relWidget) => {
+    const peak = Math.max(...raw);
+    const v = peak > 0 ? raw.map(x => Math.round(x * 100 / peak)) : raw;
+    const old = prev.themes?.[t.id]?.trends;
+    let rising = old?.rising || null, risingAt = old?.risingAt || null;
+    if (relWidget && risingLeft > 0 && blocked < 3 && risingAt !== today && Date.now() - risingAge(t) > 2 * DAY_MS) {
+      risingLeft--;
+      try {
+        await sleep(4000);
+        const rel = await g(`https://trends.google.com/trends/api/widgetdata/relatedsearches?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(relWidget.request))}&token=${relWidget.token}`);
+        requests++;
+        rising = (rel.default?.rankedList?.[1]?.rankedKeyword || []).slice(0, 8).map(k => ({ q: k.query, v: k.formattedValue }));
+        risingAt = today;
+      } catch (e) { if (/429/.test(e.message)) blocked++; log(`  ${t.id}/steigende Suchen: ${e.message}`); }
     }
-    await sleep(9000 + Math.random() * 4000);
+    slot(t.id).trends = { kw: trendsFor(t), start, v, rising, risingAt, at: today, size: round(size, 2) };
+  };
+  // Jede Gruppe enthält als „Anker“ das kleinste brauchbare Thema der vorigen Gruppe. Über den Anker hängen alle Größen
+  // an einer gemeinsamen Skala, so stimmt die Gruppierung ab dem nächsten Lauf.
+  const single = [];
+  let anchor = null, groups = 0; // { t, size }
+  for (let k = 0; k < todo.length;) {
+    const fresh = todo.slice(k, k + TRENDS_BATCH - (anchor ? 1 : 0));
+    k += fresh.length;
+    if (blocked >= 3) { for (const t of fresh) slot(t.id).trends = keep(t.id, 'trends', 'Google Trends hat den Sammler gesperrt'); continue; }
+    const group = anchor ? [anchor.t, ...fresh] : fresh;
+    try {
+      const r = await query(group);
+      groups++;
+      blocked = 0;
+      const peaks = r.raw.map(v => Math.max(...v));
+      let unit; // Größe pro Punkt in dieser Abfrage
+      if (anchor && peaks[0] > 0) unit = anchor.size / peaks[0];
+      else {
+        const ok = fresh.map((t, i) => [t, peaks[i + (anchor ? 1 : 0)]]).filter(x => x[1] > 0);
+        unit = ok.length ? Math.exp(mean(ok.map(([t, p]) => Math.log(sizeOf(t) / p)))) : 1;
+      }
+      let next = null;
+      for (const [i, t] of fresh.entries()) {
+        const peak = peaks[i + (anchor ? 1 : 0)], size = unit * Math.max(peak, 0.5);
+        if (peak >= TRENDS_MIN_PEAK && (!next || size < next.size)) next = { t, size };
+        if (group.length > 1 && peak < TRENDS_MIN_PEAK) { single.push([t, size]); continue; } // zu flach: einzeln nachholen
+        await save(t, r.start, r.raw[i + (anchor ? 1 : 0)], size, r.related[i + (anchor ? 1 : 0)]);
+      }
+      anchor = next || anchor;
+    } catch (e) { for (const t of fresh) fail(t, e); }
+    await pause();
   }
-  log('Trends fertig');
+  for (const [t, size] of single) {
+    try {
+      if (blocked >= 3) throw new Error('Google Trends hat den Sammler gesperrt');
+      const r = await query([t]);
+      blocked = 0;
+      await save(t, r.start, r.raw[0], size, r.related[0]);
+      await pause();
+    } catch (e) {
+      fail(t, e);
+      // die neue Größe trotzdem merken, damit das Thema beim nächsten Mal in eine passende Gruppe kommt
+      if (!slot(t.id).trends.error) slot(t.id).trends.size = round(size, 2);
+    }
+  }
+  log(`Trends fertig: ${THEMES.filter(t => out.themes[t.id]?.trends?.at === today).length} von ${THEMES.length} frisch, ${groups} Gruppen, ${single.length} einzeln, ${requests} Abrufe`);
 }
 
 /* --- Hacker News (Algolia-Suche, ohne Key): Erwähnungen in Beiträgen und Kommentaren.
@@ -877,7 +948,8 @@ async function collectBskyTrends() {
   } catch (e) { log(`Bluesky-Trends: ${e.message}`); out.discover.bsky = prev.discover?.bsky || []; }
 }
 
-await Promise.all([
+if (TRENDS_ONLY) await collectTrends();
+else await Promise.all([
   (async () => { await collectWiki(); await collectEdits(); })(), collectNews(), collectTrends(), collectHn(), collectMasto(), collectGnews(), collectGithub(), collectArxiv(), collectSec(), collectDev(),
   (async () => { await collectPokemon(); await collectMtg(); await collectYugioh(); await collectLorcana(); await collectMacro(); await collectTrendingCoins(); })(),
   (async () => { await collectFred(); await collectCot(); await collectDefi(); await collectSentiment(); await collectApps(); await collectDiscover(); await collectPoly(); await collectBskyTrends(); })(),
@@ -983,9 +1055,11 @@ function backtest() {
     base30: baseRets.length ? { n: baseRets.length, hit: round(baseRets.filter(x => x > 0).length / baseRets.length, 2), avg: round(mean(baseRets), 1) } : null };
   log(`Rückblick: ${signals.length} Frühsignale, mit Kurs nach 30 Tagen: ${JSON.stringify(out.backtest.r30)}, Vergleich: ${JSON.stringify(out.backtest.base30)}`);
 }
-await collectPriceHistory();
-backtest();
-delete out.priceHist; // nur zum Rechnen, nicht in die Datei
+if (!TRENDS_ONLY) {
+  await collectPriceHistory();
+  backtest();
+  delete out.priceHist; // nur zum Rechnen, nicht in die Datei
+}
 
 const count = src => Object.values(out.themes).filter(x => x[src] && !x[src].error).length;
 out.summary = Object.fromEntries(['wiki', 'langs', 'edits', 'news', 'gnews', 'trends', 'hn', 'masto', 'github', 'arxiv', 'sec', 'dev', 'fedreg', 'trials', 'manifold'].map(s => [s, count(s)]));
