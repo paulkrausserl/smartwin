@@ -171,20 +171,22 @@
   }
   
   const END = 2450;
-  let t0 = null, done = false;
+  // Animationszeit läuft pro Bild höchstens 40 ms weiter: Ist die Seite beim Laden kurz ausgelastet,
+  // pausiert das Intro, statt Bilder zu überspringen (sonst wäre es vorbei, bevor man etwas sieht).
+  let t = 0, last = null, done = false;
   const finish = () => { if (done) return; done = true; ov.remove(); st.remove(); de.classList.remove('rr-intro'); };
   const tick = now => {
     if (done) return;
-    if (t0 === null) t0 = now;
-    const t = now - t0;
+    if (last !== null) t += Math.min(now - last, 40);
+    last = now;
     try { render(Math.min(t, END)); } catch { return finish(); }
     if (t >= END) finish(); else requestAnimationFrame(tick);
   };
   // Überspringen: direkt zum Schluss (Logo fliegt in die Ecke, Seite blendet ein)
-  const skip = () => { if (t0 !== null && performance.now() - t0 < 1950) t0 = performance.now() - 1950; else if (t0 === null) finish(); };
+  const skip = () => { if (t < 1950) t = 1950; };
   ov.addEventListener('pointerdown', skip);
   addEventListener('keydown', skip, { once: true });
-  setTimeout(finish, 5000);            // Sicherheitsnetz, falls der Browser keine Bilder zeichnet
+  setTimeout(finish, 12000);           // Sicherheitsnetz, falls der Browser gar keine Bilder zeichnet
   requestAnimationFrame(tick);
   }
 })();
