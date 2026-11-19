@@ -9,6 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Risk-Reward" />
   <meta name="theme-color" content="#0a0d13" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <title>SmartWin Risk-Reward</title>
   <script>
     // Gewählten Modus vor dem ersten Zeichnen setzen
@@ -132,6 +134,7 @@
     [data-mode="warm"] .text-amber-300 { color: #b45309 !important; }
     [data-mode="warm"] header .text-white { font: 600 21px Fraunces, Georgia, serif !important; }
     [data-mode="warm"] header .logo { background: var(--accent) !important; color: #fffdf8 !important; border-radius: 12px; }
+    header .logo.brand { background: none !important; border-radius: 50% !important; }
     [data-mode="warm"] .card { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 1px 2px rgba(43, 39, 34, .03); }
     [data-mode="warm"] .inset { background: var(--panel-2); border-color: var(--line); border-radius: 16px; }
     [data-mode="warm"] .eyebrow { color: #8a8173; letter-spacing: .07em; font-weight: 600; }
@@ -269,13 +272,14 @@
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
+  <script src="intro.js"></script>
   <div class="app max-w-7xl mx-auto py-6 sm:py-8">
 
     <!-- Kopfzeile -->
     <header class="flex flex-wrap items-center justify-between gap-4 mb-6">
       <div class="flex items-center gap-3">
-        <div class="logo w-9 h-9 rounded-lg grid place-items-center" style="background:var(--accent);color:var(--accent-ink)" aria-hidden="true">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M4 19V11M10 19V5M16 19v-6M22 19H2"/></svg>
+        <div class="logo brand w-9 h-9 grid place-items-center" aria-hidden="true">
+          <svg class="w-9 h-9" viewBox="10 10 100 100"><circle cx="60" cy="60" r="50" fill="#2f5d50"/><circle cx="60" cy="60" r="34" fill="none" stroke="#4f8a74" stroke-width="2"/><circle cx="60" cy="60" r="18" fill="none" stroke="#4f8a74" stroke-width="2"/><path d="M60 60 L60 10 A50 50 0 0 1 103 35 Z" fill="#f4c27a" opacity=".55"/><path d="M26 76 L44 64 L58 70 L76 46 L92 52" fill="none" stroke="#fffdf8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="92" cy="52" r="5" fill="#c2410c"/></svg>
         </div>
         <div>
           <div class="text-[15px] font-semibold text-white leading-tight">SmartWin</div>
@@ -610,7 +614,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '5.0';
+const APP_VERSION = '5.1';
 
 /* ---------------------------------------------------------------
    Scoring
