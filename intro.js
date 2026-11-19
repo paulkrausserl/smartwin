@@ -2,12 +2,23 @@
 // danach fliegt das Logo in die Kopfzeile. Läuft einmal pro Sitzung, Klick/Taste überspringt,
 // bei „weniger Bewegung“ (prefers-reduced-motion) und im Retro-Modus gar nicht. Die Seite lädt dahinter normal weiter.
 (() => {
-  try {
-    const de = document.documentElement;
-    if (de.dataset.mode === 'retro' || /nointro/.test(location.hash) || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    if (sessionStorage.getItem('rr:intro')) return;
-    sessionStorage.setItem('rr:intro', '1');
-  } catch { return; }
+  // Ein Tab, der im Hintergrund lädt (z. B. angehefteter Tab beim Browserstart), spielt das Intro erst,
+  // wenn man ihn das erste Mal ansieht.
+  const allowed = () => {
+    try {
+      const de = document.documentElement;
+      if (de.dataset.mode === 'retro' || /nointro/.test(location.hash) || matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+      if (sessionStorage.getItem('rr:intro')) return false;
+      sessionStorage.setItem('rr:intro', '1');
+      return true;
+    } catch { return false; }
+  };
+  if (document.hidden) {
+    const onVis = () => { if (document.hidden) return; document.removeEventListener('visibilitychange', onVis); if (allowed()) play(); };
+    document.addEventListener('visibilitychange', onVis);
+  } else if (allowed()) play();
+
+  function play() {
   const de = document.documentElement;
   const st = document.createElement('style');
   st.textContent = '.rr-intro header .logo{visibility:hidden}#rrIntro{position:fixed;inset:0;z-index:2147483000;cursor:pointer;-webkit-tap-highlight-color:transparent}#rrIntro .bg{position:absolute;inset:0;background:var(--bg,#f3eee5)}';
@@ -175,4 +186,5 @@
   addEventListener('keydown', skip, { once: true });
   setTimeout(finish, 5000);            // Sicherheitsnetz, falls der Browser keine Bilder zeichnet
   requestAnimationFrame(tick);
+  }
 })();
