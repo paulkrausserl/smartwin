@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Vom Home-Bildschirm gestartet: ohne Browserleisten -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SmartWin Depot" />
+  <meta name="theme-color" content="#0a0d13" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <title>SmartWin Depot</title>
+  <script>
+    // Gewählten Modus vor dem ersten Zeichnen setzen
+    try { const m = JSON.parse(localStorage.getItem('rr:mode')); document.documentElement.dataset.mode = m === 'clean' || m === 'retro' ? m : 'warm'; } catch { document.documentElement.dataset.mode = 'warm'; }
+  </script>
+  <script src="https://cdn.tailwindcss.com/3.4.5"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    /* Layout: Kopfzeile, Suche, Aktienkopf mit Kennzahlenleiste, dann Score | Teilbereiche, Kennzahlen | Gewichtung */
+    :root {
+      --bg: #0a0d13; --panel: #10151e; --panel-2: #151b26; --line: #1e2633; --line-2: #2a3443;
+      --text: #e6ebf2; --muted: #8e9aab; --faint: #5f6b7c;
+      --accent: #3ecf8e; --accent-ink: #03140c; --up: #3ecf8e; --down: #f06363;
+      color-scheme: dark;
+    }
+    html, body { background: var(--bg); color: var(--text); }
+    body { background: linear-gradient(180deg, #0e1420 0, var(--bg) 420px) no-repeat, var(--bg); }
+    .app { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+    .inset { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+    .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .faint { color: var(--faint); }
+
+    .btn { display: inline-flex; align-items: center; gap: .5rem; font-size: .875rem; line-height: 1.25rem; padding: .5rem .85rem;
+           border-radius: .6rem; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); transition: background .15s, border-color .15s; }
+    .btn:hover { background: #1a2230; border-color: #3a4657; }
+    .btn-sm { font-size: .8125rem; padding: .35rem .7rem; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+    .btn-primary:hover { background: #55dba0; border-color: #55dba0; }
+    .btn:disabled { opacity: .6; cursor: wait; }
+    .field { width: 100%; background: var(--bg); border: 1px solid var(--line-2); border-radius: .7rem; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s; }
+    .field::placeholder { color: var(--faint); }
+    .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(62, 207, 142, .18); }
+    .chip { font-size: .8125rem; padding: .35rem .75rem; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); background: transparent; transition: all .15s; }
+    .chip:hover { color: var(--text); border-color: #3a4657; }
+    .chip[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+    .seg { display: inline-flex; padding: 2px; border-radius: .7rem; border: 1px solid var(--line-2); }
+    .seg-item { font-size: .8125rem; padding: .4rem .8rem; border-radius: .55rem; color: var(--muted); transition: color .15s, background .15s; }
+    .seg-item:hover { color: var(--text); }
+    .seg-item[aria-current="page"] { background: var(--text); color: var(--bg); font-weight: 600; }
+    [hidden] { display: none !important; } /* sonst gewinnt z. B. .btn { display: inline-flex } */
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .metric > summary { list-style: none; cursor: pointer; }
+    .metric > summary::-webkit-details-marker { display: none; }
+    .metric > summary:hover { background: rgba(255, 255, 255, .02); }
+    .metric .chev { transition: transform .2s; }
+    .metric[open] .chev { transform: rotate(90deg); }
+    .raw > summary { list-style: none; cursor: pointer; }
+    .raw > summary::-webkit-details-marker { display: none; }
+    .raw[open] .chev { transform: rotate(90deg); }
+
+    dialog { color: var(--text); }
+    dialog::backdrop { background: rgba(3, 6, 12, .72); backdrop-filter: blur(2px); }
+    .score-scale { background: linear-gradient(90deg, hsl(0 70% 52%) 0%, hsl(30 70% 52%) 25%, hsl(55 70% 50%) 50%, hsl(90 60% 48%) 75%, hsl(140 55% 48%) 100%); }
+
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 9999px;
+                        background: linear-gradient(90deg, var(--c) var(--p), var(--line-2) var(--p)); outline: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+                        background: var(--text); border: 4px solid var(--c); cursor: pointer; }
+    input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--text); border: 4px solid var(--c); cursor: pointer; }
+
+    /* Standard-Design „Warm & ruhig“ (Konzept C): Creme, Serifenschrift für Namen und große Zahlen,
+       Dunkelgrün als Akzent, Terrakotta für Hervorhebungen. Als eigener Farbsatz, damit Clean und Retro unberührt bleiben. */
+    :root[data-mode="warm"] {
+      --bg: #f3eee5; --panel: #fffdf8; --panel-2: #f8f3ea; --line: #ebe4d8; --line-2: #ddd4c4;
+      --text: #2b2722; --muted: #6f665b; --faint: #9a9083; --accent: #2f5d50; --accent-ink: #fffdf8; --up: #2f6b4f; --down: #c2410c;
+      color-scheme: light;
+    }
+    [data-mode="warm"] body { background: var(--bg); font-family: Inter, -apple-system, 'Segoe UI', system-ui, sans-serif; }
+    [data-mode="warm"] .num { font-family: Inter, -apple-system, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+    [data-mode="warm"] .serif, [data-mode="warm"] h1, [data-mode="warm"] #stockName, [data-mode="warm"] #stockPrice,
+    [data-mode="warm"] #totalScore, [data-mode="warm"] .simple-score, [data-mode="warm"] dialog h2 {
+      font-family: Fraunces, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif; font-weight: 600; letter-spacing: -.01em; }
+    [data-mode="warm"] .text-white { color: var(--text) !important; }
+    [data-mode="warm"] .hover\:text-white:hover { color: var(--accent) !important; }
+    [data-mode="warm"] .text-amber-300 { color: #b45309 !important; }
+    [data-mode="warm"] header .text-white { font: 600 21px Fraunces, Georgia, serif !important; }
+    [data-mode="warm"] header .logo { background: var(--accent) !important; color: #fffdf8 !important; border-radius: 12px; }
+    header .logo.brand { background: none !important; border-radius: 50% !important; }
+    [data-mode="warm"] .card { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 1px 2px rgba(43, 39, 34, .03); }
+    [data-mode="warm"] .inset { background: var(--panel-2); border-color: var(--line); border-radius: 16px; }
+    [data-mode="warm"] .eyebrow { color: #8a8173; letter-spacing: .07em; font-weight: 600; }
+    [data-mode="warm"] .btn { background: var(--panel); border-color: var(--line-2); border-radius: 999px; color: var(--text); }
+    [data-mode="warm"] .btn:hover { background: #f1eadf; border-color: #cfc5b3; }
+    [data-mode="warm"] .btn-primary { background: var(--accent); border-color: var(--accent); color: #fffdf8; }
+    [data-mode="warm"] .btn-primary:hover { background: #264d42; border-color: #264d42; }
+    [data-mode="warm"] .field { background: var(--panel); border-color: var(--line-2); border-radius: 14px; color: var(--text); }
+    [data-mode="warm"] .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47, 93, 80, .15); }
+    [data-mode="warm"] .chip { border-color: #e3dbcd; color: #6b6358; }
+    [data-mode="warm"] .chip:hover { color: var(--text); border-color: #cfc5b3; }
+    [data-mode="warm"] .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fffdf8; }
+    [data-mode="warm"] .seg { border: 0; padding: 0; gap: 1.1rem; }
+    [data-mode="warm"] .seg-item { padding: .35rem 0; border-radius: 0; color: #7a7166; font-weight: 500; border-bottom: 2px solid transparent; }
+    [data-mode="warm"] .seg-item:hover { color: var(--text); }
+    [data-mode="warm"] .seg-item[aria-current="page"] { background: transparent; color: var(--text); border-bottom-color: #c2410c; font-weight: 600; }
+    [data-mode="warm"] .tabs { background: var(--bg); border-color: var(--line); }
+    [data-mode="warm"] .tab[aria-selected="true"] { border-color: #c2410c; }
+    [data-mode="warm"] .wrow:hover, [data-mode="warm"] .metric > summary:hover { background: var(--panel-2); }
+    [data-mode="warm"] tbody tr:hover { background: var(--panel-2); }
+    [data-mode="warm"] dialog::backdrop { background: rgba(43, 39, 34, .35); }
+    [data-mode="warm"] #appVersion { background: var(--panel) !important; border-color: var(--line-2) !important; color: var(--muted); }
+    [data-mode="warm"] #loadError { background: #fdf0ea !important; border-color: #f0c4b3 !important; color: #9a3412 !important; }
+    [data-mode="warm"] input[type=range]::-webkit-slider-thumb { background: var(--panel); }
+    /* Gesamtscore als dunkelgrüne Karte mit großer Zahl (statt Ring) */
+    [data-mode="warm"] .score-card { background: #2f5d50; border-color: #2f5d50;
+      --text: #fffdf8; --muted: #cfe0d8; --faint: #a9c4b9; --line: rgba(255, 255, 255, .14); --line-2: rgba(255, 255, 255, .22); color: var(--text); }
+    [data-mode="warm"] .score-card .eyebrow { color: #cfe0d8; }
+    [data-mode="warm"] .score-card .gauge-box { width: auto; height: auto; margin: 1rem 0 .5rem; }
+    [data-mode="warm"] .score-card .gauge-box svg { display: none; }
+    [data-mode="warm"] .score-card .gauge-center { position: static; }
+    [data-mode="warm"] .score-card #totalScore { font-size: 88px; line-height: 1; color: #fffdf8 !important; }
+    [data-mode="warm"] .score-card #verdict { background: transparent !important; color: #fffdf8 !important; font: 500 20px Fraunces, Georgia, serif;
+      text-transform: none; letter-spacing: 0; padding: 0; margin-top: .4rem; }
+    [data-mode="warm"] .score-card #scaleMarker { background: #fffdf8 !important; box-shadow: 0 0 0 2px #2f5d50 !important; }
+    [data-mode="warm"] .score-card .bar-fill { background: #f4c27a !important; }
+
+    /* Clean-Modus: reines Schwarz, keine Flächen, nur Haarlinien und Graustufen */
+    :root[data-mode="clean"] {
+      --bg: #000; --panel: #000; --panel-2: #0b0b0b; --line: #1c1c1c; --line-2: #2a2a2a;
+      --text: #fff; --muted: #8a8a8a; --faint: #5c5c5c; --accent: #fff; --accent-ink: #000; --up: #fff; --down: #8a8a8a;
+    }
+    [data-mode="clean"] body { background: #000; font-family: Inter, system-ui, sans-serif; font-feature-settings: 'tnum' 1, 'cv11' 1; }
+    [data-mode="clean"] .num { font-family: Inter, system-ui, sans-serif; font-feature-settings: 'tnum' 1; }
+    [data-mode="clean"] .card { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding-left: 0; padding-right: 0; }
+    [data-mode="clean"] .inset { background: transparent; }
+    [data-mode="clean"] .btn { background: transparent; border-color: transparent; color: var(--muted); }
+    [data-mode="clean"] .btn:hover { color: var(--text); background: transparent; }
+    [data-mode="clean"] .btn-primary { background: #fff; border-color: #fff; color: #000; }
+    [data-mode="clean"] .btn-primary:hover { background: #e6e6e6; color: #000; }
+    [data-mode="clean"] .field { background: transparent; border-width: 0 0 1px; border-radius: 0; }
+    [data-mode="clean"] .field:focus { box-shadow: none; border-color: #fff; }
+    [data-mode="clean"] #searchInput { padding-left: 2.25rem; }
+    [data-mode="clean"] .gauge-box { width: auto; height: auto; margin: 1.25rem 0 .5rem; }
+    [data-mode="clean"] .gauge-box svg { display: none; }
+    [data-mode="clean"] .gauge-center { position: static; align-items: flex-start; }
+    [data-mode="clean"] #totalScore { font-size: 112px; font-weight: 300; letter-spacing: -.05em; }
+    [data-mode="clean"] #verdict { background: transparent !important; color: var(--muted) !important; padding: 0; text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 400; }
+    [data-mode="clean"] .score-scale { background: linear-gradient(90deg, #262626, #fff); height: 2px; }
+    [data-mode="clean"] .logo { background: #fff !important; color: #000 !important; }
+    [data-mode="clean"] input[type=range] { --c: #fff !important; }
+    [data-mode="clean"] #keyStats { border-radius: 0; border-width: 1px 0 0 !important; }
+    [data-mode="clean"] #loadError { background: transparent !important; border-color: var(--line-2) !important; color: var(--text) !important; }
+    [data-mode="clean"] .metric > summary:hover { background: transparent; }
+
+    /* Retro-Modus: klassisches Finanzportal um 2010. Weiß, Dunkelblau, Arial, Tabellenoptik, unterstrichene Links. */
+    :root[data-mode="retro"] {
+      --bg: #fff; --panel: #fff; --panel-2: #f4f6f9; --line: #dde3ea; --line-2: #a9b8c7;
+      --text: #222; --muted: #555; --faint: #7a7a7a; --accent: #003366; --accent-ink: #fff; --up: #008000; --down: #cc0000;
+      color-scheme: light;
+    }
+    [data-mode="retro"] body { background: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
+    [data-mode="retro"] .num { font-family: Arial, Helvetica, sans-serif; font-variant-numeric: tabular-nums; }
+    [data-mode="retro"] .text-white { color: #222 !important; }
+    [data-mode="retro"] .hover\:text-white:hover { color: #00449e !important; }
+    [data-mode="retro"] .text-amber-300 { color: #8a6d00 !important; }
+    /* Kopfzeile: dunkelblauer Balken über die ganze Breite */
+    [data-mode="retro"] header { background: #003366; box-shadow: 0 0 0 100vmax #003366; clip-path: inset(-100vmax -100vmax 0); padding: 6px 0; margin-top: -24px; padding-top: 18px; }
+    [data-mode="retro"] header .text-white { color: #fff !important; font: bold 22px Georgia, 'Times New Roman', serif !important; letter-spacing: .02em; }
+    [data-mode="retro"] header .muted { color: #c9d6e4; }
+    [data-mode="retro"] header .logo { display: none; }
+    [data-mode="retro"] header .btn { background: transparent; border-color: transparent; color: #fff; padding: .3rem .5rem; }
+    [data-mode="retro"] header .btn:hover { text-decoration: underline; background: transparent; }
+    [data-mode="retro"] .seg { border: 0; padding: 0; gap: 2px; }
+    [data-mode="retro"] .seg-item { border-radius: 0; color: #fff; font-weight: bold; padding: .45rem .9rem; }
+    [data-mode="retro"] .seg-item:hover { text-decoration: underline; color: #fff; }
+    [data-mode="retro"] .seg-item[aria-current="page"] { background: #fff; color: #003366; border-top: 3px solid #ff9900; padding-top: calc(.45rem - 3px); }
+    /* Kästen mit hellblauem Titelbalken */
+    [data-mode="retro"] .card { background: #fff; border: 1px solid #b5c2cf; border-radius: 0; box-shadow: none; padding: 12px !important; }
+    [data-mode="retro"] .card > :first-child:not(form):not(.grid):not(.gauge-box) { margin: -12px -12px 12px; padding: 5px 12px; background: #d9e2ec; border-bottom: 1px solid #a9b8c7; }
+    [data-mode="retro"] details.card > summary:first-child { margin-bottom: 0; }
+    [data-mode="retro"] details.card[open] > summary:first-child { margin-bottom: 12px; }
+    [data-mode="retro"] .eyebrow { color: #003366; font-size: 12.5px; font-weight: bold; letter-spacing: 0; text-transform: none; }
+    [data-mode="retro"] .inset { background: #f4f6f9; border-color: #d0d8e0; border-radius: 0; }
+    [data-mode="retro"] .btn { background: linear-gradient(#fff, #dcdcdc); border: 1px solid #8a8a8a; border-radius: 2px; color: #222; font-size: 12px; padding: .3rem .7rem; }
+    [data-mode="retro"] .btn:hover { background: linear-gradient(#fff, #cfcfcf); border-color: #666; }
+    [data-mode="retro"] .btn-primary { color: #003366; font-weight: bold; }
+    [data-mode="retro"] .btn-primary:hover { background: linear-gradient(#fff, #cfcfcf); }
+    [data-mode="retro"] .field { background: #fff; border: 1px solid #8a8a8a; border-radius: 0; color: #222; box-shadow: inset 1px 1px 2px rgba(0,0,0,.12); }
+    [data-mode="retro"] .field:focus { border-color: #003366; box-shadow: none; }
+    [data-mode="retro"] .chip { border: 0; border-radius: 0; padding: .1rem .25rem; color: #00449e; text-decoration: underline; font-size: 12.5px; }
+    [data-mode="retro"] .chip:hover { color: #002a66; }
+    [data-mode="retro"] .chip[aria-pressed="true"] { background: transparent; color: #222; font-weight: bold; text-decoration: none; }
+    [data-mode="retro"] .tabs { background: #e8e8e8; border: 1px solid #bbb; padding-top: 0; }
+    [data-mode="retro"] .tab { color: #003366; font-weight: bold; font-size: 12.5px; padding: .5rem .9rem; border: 0; border-right: 1px solid #ccc; margin: 0; }
+    [data-mode="retro"] .tab[aria-selected="true"] { background: #fff; border-top: 3px solid #ff9900; padding-top: calc(.5rem - 3px); }
+    [data-mode="retro"] .tab .count { background: #fff; border-color: #bbb; color: #555; }
+    [data-mode="retro"] #loadError { background: #fdecec !important; border-color: #e0a0a0 !important; color: #a00000 !important; border-radius: 0; }
+    [data-mode="retro"] #keyStats { border-radius: 0; }
+    [data-mode="retro"] #keyStats .eyebrow, [data-mode="retro"] .tabs .eyebrow { font-weight: normal; color: #666; font-size: 11px; }
+    /* Score als große grüne/rote Zahl statt Ring */
+    [data-mode="retro"] .gauge-box { width: auto; height: auto; margin: .75rem 0 .25rem; }
+    [data-mode="retro"] .gauge-box svg { display: none; }
+    [data-mode="retro"] .gauge-center { position: static; }
+    [data-mode="retro"] #totalScore { font: bold 64px Arial, sans-serif; }
+    [data-mode="retro"] #verdict { background: transparent !important; color: #222 !important; text-transform: none; letter-spacing: 0; font-size: 13px; padding: 0; margin-top: .25rem; }
+    [data-mode="retro"] .score-scale { background: linear-gradient(90deg, #cc0000, #e6b800 50%, #008000); border-radius: 0; height: 6px; }
+    [data-mode="retro"] .wrow { border-radius: 0; border-bottom: 1px solid #e2e2e2; }
+    [data-mode="retro"] .wrow:nth-child(even of .wrow) { background: #f4f6f9; }
+    [data-mode="retro"] .wrow.on { background: #fff8dc; box-shadow: none; }
+    [data-mode="retro"] .wrow [data-open] .text-white { color: #00449e !important; text-decoration: underline; }
+    [data-mode="retro"] tbody tr:nth-child(even) { background: #f4f6f9; }
+    [data-mode="retro"] .metric > summary:hover { background: #f4f6f9; }
+    [data-mode="retro"] #appVersion { background: #eee !important; border-color: #bbb !important; color: #444; border-radius: 0; }
+    [data-mode="retro"] dialog { border-radius: 0 !important; border: 1px solid #8a8a8a !important; }
+    [data-mode="retro"] dialog::backdrop { background: rgba(0, 0, 0, .35); backdrop-filter: none; }
+    [data-mode="retro"] input[type=range]::-webkit-slider-thumb { background: #fff; border-width: 3px; }
+
+    .gauge-arc { transition: stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1), stroke .5s; }
+    .bar-fill  { transition: width .6s cubic-bezier(.2,.8,.2,1), background-color .4s; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+      /* Spieldepot */
+    .dv-big { font: 600 40px/1.1 Fraunces, Georgia, serif; color: var(--text); }
+    [data-mode="warm"] .score-card .dv-big, [data-mode="warm"] .score-card .dv-v { color: #fffdf8; }
+    .dv-k { color: var(--muted); } [data-mode="warm"] .score-card .dv-k { color: #cfe0d8; }
+    .dv-v { font-size: 15px; font-weight: 600; color: var(--text); margin-top: 2px; }
+    [data-mode="warm"] .score-card .dv-light { background: #fffdf8; border-color: #fffdf8; color: #2f5d50; font-weight: 600; }
+    [data-mode="warm"] .score-card .dv-ghost { background: transparent; border-color: rgba(255,253,248,.45); color: #fffdf8; }
+    .dv-legend { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; }
+    .dv-legend-dash { background: repeating-linear-gradient(90deg, rgba(255,255,255,.7) 0 4px, transparent 4px 7px); }
+    [data-mode="retro"] .dv-legend-dash { background: repeating-linear-gradient(90deg, #888 0 4px, transparent 4px 7px); }
+    .dv-hits { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; max-height: 260px; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+    .dv-hit { display: block; width: 100%; text-align: left; padding: .5rem .75rem; font-size: .875rem; border-bottom: 1px solid var(--line); }
+    .dv-hit:hover { background: var(--panel-2); }
+    .dv-tg { display: flex; padding: 3px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+    .dv-tg-item { flex: 1; font-size: .8125rem; padding: .4rem .6rem; border-radius: 8px; color: var(--muted); }
+    .dv-tg-item[aria-pressed="true"] { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    [data-mode="clean"] .dv-tg-item[aria-pressed="true"] { background: #fff; color: #000; }
+    [data-mode="retro"] .dv-tg-item[aria-pressed="true"] { background: #003366; color: #fff; }
+    .dv-preview { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: .75rem .9rem; }
+    .dv-table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+    .dv-table th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); padding: .4rem .5rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .dv-table td { padding: .6rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .dv-table .n { text-align: right; }
+    .dv-pill { font-size: 10.5px; font-weight: 500; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
+    .dv-badge { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; border: 1px solid; white-space: nowrap; }
+    [data-mode="clean"] .score-card .dv-legend-dash { background: repeating-linear-gradient(90deg, rgba(255,255,255,.7) 0 4px, transparent 4px 7px); }
+  </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+  <script src="intro.js?v=5.6"></script>
+  <div class="app max-w-7xl mx-auto py-6 sm:py-8">
+
+    <!-- Kopfzeile -->
+    <header class="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div class="flex items-center gap-3">
+        <div class="logo brand w-9 h-9 grid place-items-center" aria-hidden="true">
+          <svg class="w-9 h-9" viewBox="10 10 100 100"><circle cx="60" cy="60" r="50" fill="#2f5d50"/><circle cx="60" cy="60" r="34" fill="none" stroke="#4f8a74" stroke-width="2"/><circle cx="60" cy="60" r="18" fill="none" stroke="#4f8a74" stroke-width="2"/><path d="M60 60 L60 10 A50 50 0 0 1 103 35 Z" fill="#f4c27a" opacity=".55"/><path d="M26 76 L44 64 L58 70 L76 46 L92 52" fill="none" stroke="#fffdf8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="92" cy="52" r="5" fill="#c2410c"/></svg>
+        </div>
+        <div>
+          <div class="text-[15px] font-semibold text-white leading-tight">SmartWin</div>
+          <div class="text-xs muted leading-tight">Spieldepot · kein echtes Geld</div>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <nav class="seg" aria-label="Bereich">
+          <a href="./" class="seg-item">Aktien</a>
+          <a href="crypto.html" class="seg-item">Krypto</a>
+          <a href="radar.html" class="seg-item">Radar</a>
+          <a href="depot.html" class="seg-item" aria-current="page">Depot</a>
+        </nav>
+        <button id="modeBtn" type="button" class="btn" aria-pressed="false" title="Ansicht wechseln">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
+          <span id="modeLabel" class="hidden lg:inline">Clean</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Übersicht: Depotwert, Verlauf, Vergleich mit dem MSCI World -->
+    <section class="score-card card p-5 sm:p-6 mb-6">
+      <div class="grid lg:grid-cols-[300px_1fr] gap-6">
+        <div>
+          <h2 class="eyebrow">Depotwert (Spielgeld)</h2>
+          <div id="dvValue" class="num dv-big mt-2">–</div>
+          <div id="dvChange" class="num text-sm mt-1 font-semibold"></div>
+          <dl class="grid grid-cols-3 gap-3 mt-5 text-xs">
+            <div><dt class="dv-k">Eingezahlt</dt><dd id="dvIn" class="num dv-v"></dd></div>
+            <div><dt class="dv-k">Bargeld</dt><dd id="dvCash" class="num dv-v"></dd></div>
+            <div><dt class="dv-k">Positionen</dt><dd id="dvCount" class="num dv-v"></dd></div>
+          </dl>
+          <div class="flex flex-wrap gap-2 mt-5">
+            <button type="button" id="buyBtn" class="btn btn-sm dv-light">+ Probekauf</button>
+            <button type="button" id="setBtn" class="btn btn-sm dv-ghost">Einstellungen</button>
+          </div>
+        </div>
+        <div class="min-w-0">
+          <div class="flex flex-wrap justify-between gap-2 text-xs dv-k">
+            <span>Verlauf seit Start</span>
+            <span><span class="dv-legend" style="background:#f4c27a"></span> Depot &nbsp; <span class="dv-legend dv-legend-dash"></span> MSCI World (gleiche Einzahlungen)</span>
+          </div>
+          <div class="relative h-48 mt-2"><canvas id="dvChart" aria-label="Verlauf des Depotwerts"></canvas></div>
+          <p id="dvBench" class="text-xs mt-2 dv-k"></p>
+        </div>
+      </div>
+    </section>
+
+    <p id="dvStatus" class="text-xs faint mb-3 num"></p>
+
+    <!-- Offene Positionen -->
+    <section class="card p-4 sm:p-5 mb-6">
+      <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+        <div>
+          <h2 class="eyebrow">Offene Positionen</h2>
+          <p class="text-xs faint mt-1">„Wert“ ist, was du beim Verkauf jetzt zurückbekämst. „Zwangsschließung“: Kurs, bei dem der Broker die Position schließt (Sicherheit unter 50 %).</p>
+        </div>
+      </div>
+      <div id="openList" class="overflow-x-auto"></div>
+    </section>
+
+    <!-- Abgeschlossene Positionen -->
+    <section class="card p-4 sm:p-5 mb-6">
+      <h2 class="eyebrow mb-3">Abgeschlossen</h2>
+      <div id="closedList" class="overflow-x-auto"></div>
+    </section>
+
+    <!-- Probekauf -->
+    <dialog id="buyDialog" aria-labelledby="buyTitle" class="rounded-2xl p-0 w-[min(560px,calc(100vw-24px))] max-h-[92vh]" style="background:var(--panel);border:1px solid var(--line-2)">
+      <form id="buyForm" method="dialog" class="p-5 sm:p-6 space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <h2 id="buyTitle" class="text-lg font-semibold text-white">Probekauf</h2>
+          <button type="button" class="btn btn-sm" data-close>Schließen</button>
+        </div>
+        <div>
+          <div class="dv-tg" role="group" aria-label="Art">
+            <button type="button" class="dv-tg-item" data-kind="stock">Aktie / ETF</button>
+            <button type="button" class="dv-tg-item" data-kind="crypto">Krypto</button>
+          </div>
+          <div class="relative mt-2">
+            <input id="assetInput" class="field px-3 py-2 text-sm" autocomplete="off" placeholder="Name oder Kürzel, z. B. Nvidia oder Bitcoin" />
+            <div id="assetHits" class="dv-hits" hidden></div>
+          </div>
+          <p id="assetPicked" class="text-xs muted mt-1.5"></p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <div class="eyebrow mb-1.5">Richtung</div>
+            <div class="dv-tg" role="group" aria-label="Richtung">
+              <button type="button" class="dv-tg-item" data-side="1">Long ▲</button>
+              <button type="button" class="dv-tg-item" data-side="-1">Short ▼</button>
+            </div>
+          </div>
+          <div>
+            <div class="eyebrow mb-1.5">Hebel: <span id="levLabel" class="num">1×</span></div>
+            <input id="levInput" type="range" min="1" max="10" step="1" value="1" class="w-full" style="--c:var(--accent);--p:0%" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block">
+            <span class="eyebrow">Einsatz in €</span>
+            <input id="amountInput" type="number" min="1" step="any" inputmode="decimal" class="field px-3 py-2 text-sm mt-1.5 num" value="1000" />
+          </label>
+          <div>
+            <div class="eyebrow mb-1.5">Wann gekauft?</div>
+            <div class="dv-tg" role="group" aria-label="Zeitpunkt">
+              <button type="button" class="dv-tg-item" data-when="now">Heute</button>
+              <button type="button" class="dv-tg-item" data-when="past">Rückwirkend</button>
+            </div>
+            <input id="dateInput" type="date" class="field px-3 py-1.5 text-sm mt-2 num" hidden />
+          </div>
+        </div>
+        <label class="block">
+          <span class="eyebrow">Warum unsicher? (optional)</span>
+          <input id="noteInput" class="field px-3 py-2 text-sm mt-1.5" maxlength="120" placeholder="z. B. „KI-Hype noch nicht vorbei?“" />
+        </label>
+        <div id="buyPreview" class="dv-preview text-sm"></div>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn" data-close>Abbrechen</button>
+          <button type="submit" id="buyConfirm" class="btn btn-primary">Mit Spielgeld kaufen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Einstellungen -->
+    <dialog id="setDialog" aria-labelledby="setTitle" class="rounded-2xl p-0 w-[min(560px,calc(100vw-24px))] max-h-[90vh]" style="background:var(--panel);border:1px solid var(--line-2)">
+      <div class="p-5 sm:p-6 space-y-5">
+        <div class="flex items-center justify-between gap-3">
+          <h2 id="setTitle" class="text-lg font-semibold text-white">Einstellungen</h2>
+          <button type="button" class="btn btn-sm" data-close>Schließen</button>
+        </div>
+        <div>
+          <div class="eyebrow mb-1.5">Spielgeld nachschießen</div>
+          <div class="flex gap-2"><input id="depositInput" type="number" min="1" step="any" class="field px-3 py-2 text-sm num" value="5000" /><button type="button" id="depositBtn" class="btn btn-primary shrink-0">Einzahlen</button></div>
+          <p class="text-xs faint mt-1.5">Zählt als Einzahlung: Der Gewinn wird dadurch nicht verfälscht, und der MSCI-World-Vergleich „kauft“ am selben Tag mit.</p>
+        </div>
+        <div>
+          <div class="eyebrow mb-1.5">Sichern und auf ein anderes Gerät übertragen</div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" id="exportBtn" class="btn">↧ Export (Datei)</button>
+            <label class="btn cursor-pointer">↥ Import<input id="importInput" type="file" accept="application/json,.json" hidden /></label>
+          </div>
+          <p class="text-xs faint mt-1.5">Das Depot liegt nur in diesem Browser. Mit Export/Import hast du es auf Handy und Laptop gleich.</p>
+        </div>
+        <div>
+          <div class="eyebrow mb-1.5">Neu anfangen</div>
+          <div class="flex gap-2"><input id="resetInput" type="number" min="100" step="any" class="field px-3 py-2 text-sm num" value="10000" /><button type="button" id="resetBtn" class="btn shrink-0" style="color:var(--down)">Depot zurücksetzen</button></div>
+        </div>
+        <details class="text-sm">
+          <summary class="cursor-pointer font-semibold">Konditionen: so realistisch wird gerechnet</summary>
+          <ul class="mt-2 space-y-1.5 text-xs muted list-disc pl-4">
+            <li><b>Gebühr:</b> 1 € pro Kauf und Verkauf. <b>Spread</b> (Differenz zwischen Kauf- und Verkaufskurs): Aktien 0,1 %, Krypto 0,2 % auf die ganze Positionsgröße.</li>
+            <li><b>Hebel:</b> Dein Einsatz ist die Sicherheit, der Rest ist geliehen. Positionsgröße = Einsatz × Hebel, Gewinne und Verluste entsprechend vervielfacht.</li>
+            <li><b>Finanzierung</b> jede Nacht, auch am Wochenende: Long zahlt Zinsen auf den geliehenen Teil (Aktien 6,5 % p. a., Krypto 10 % p. a.). Short zahlt eine Leihgebühr auf die ganze Position (Aktien 3 % p. a., Krypto 10 % p. a.).</li>
+            <li><b>Zwangsschließung:</b> Fällt deine Sicherheit unter 50 % des Einsatzes, schließt der Broker die Position (EU-Regel für Privatkunden). Geprüft wird mit Tagestief/-hoch. Öffnet der Kurs über Nacht schon darunter (Kurslücke), wird zum schlechteren Eröffnungskurs geschlossen.</li>
+            <li><b>Kein Nachschuss:</b> Du kannst nie mehr als den Einsatz verlieren.</li>
+            <li><b>Währung:</b> Aktien in Dollar &amp; Co. werden mit dem EZB-Kurs des Tages in Euro umgerechnet, Wechselkursschwankungen zählen also mit.</li>
+            <li><b>Rückwirkend:</b> Kauf zum Schlusskurs des gewählten Tages (Krypto höchstens 1 Jahr zurück). Danach wird Tag für Tag nachgerechnet, auch ob die Position zwischendurch zwangsgeschlossen worden wäre.</li>
+          </ul>
+        </details>
+      </div>
+    </dialog>
+
+    <div id="appVersion" class="fixed z-20 num text-[11px] px-2 py-1 rounded-md muted pointer-events-none"
+         style="background:rgba(16,21,30,.9);border:1px solid var(--line-2);right:calc(12px + env(safe-area-inset-right, 0px));bottom:calc(12px + env(safe-area-inset-bottom, 0px))"></div>
+
+    <footer class="text-center text-[11px] faint mt-10 pb-8 leading-relaxed">
+      Kurse: Financial Modeling Prep (Aktien, mit deinem Key von der Aktien-Seite), CoinGecko (Krypto), Frankfurter/EZB (Wechselkurse).<br />
+      Spielgeld, keine echten Käufe. Keine Anlageberatung.
+    </footer>
+  </div>
+<script>
+const APP_VERSION = '5.6';
+
+/* ---------------------------------------------------------------
+   Spieldepot: virtuelles Geld, echte Kurse. Alles liegt im localStorage ('rr:depot').
+   Positionen mit Hebel verhalten sich wie bei einem CFD-/Margin-Broker:
+   Einsatz = Sicherheit, Finanzierung über Nacht, Spread, Zwangsschließung bei 50 % Sicherheit, kein Nachschuss.
+---------------------------------------------------------------- */
+const DAY_MS = 864e5;
+const COND = {
+  stock:  { spread: 0.001, longRate: 0.065, shortRate: 0.03, label: 'Aktie' },
+  crypto: { spread: 0.002, longRate: 0.10,  shortRate: 0.10, label: 'Krypto' },
+};
+const FEE = 1, CLOSEOUT = 0.5, MAX_LEV = 10;
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* voll oder gesperrt */ } },
+};
+const ymd = t => new Date(t).toISOString().slice(0, 10);
+const today = () => ymd(Date.now());
+const addDays = (d, n) => ymd(Date.parse(d) + n * DAY_MS);
+const daysBetween = (a, b) => Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / DAY_MS));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = d => d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(2, 4)}` : '–';
+const digits = v => { const a = Math.abs(v); return a >= 1000 ? 0 : a >= 1 ? 2 : a >= 0.01 ? 4 : 8; };
+const money = (v, ccy = 'EUR', d) => v == null || !Number.isFinite(v) ? '–'
+  : v.toLocaleString('de-DE', { style: 'currency', currency: ccy, minimumFractionDigits: d ?? digits(v), maximumFractionDigits: d ?? digits(v) });
+const eur0 = v => money(v, 'EUR', Math.abs(v) >= 100 ? 0 : 2);
+const signed = (v, f) => (v > 0 ? '+' : v < 0 ? '−' : '') + f(Math.abs(v));
+const pctTxt = v => v == null || !Number.isFinite(v) ? '–' : signed(v, x => x.toLocaleString('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' %');
+const upDown = v => v > 0 ? 'var(--up)' : v < 0 ? 'var(--down)' : 'var(--muted)';
+
+/* ---------- Depot-Daten ---------- */
+const DKEY = 'rr:depot';
+const newDepot = (start = 10000) => ({ v: 1, created: today(), flows: [{ kind: 'start', date: today(), amount: start }], pos: [] });
+let depot = store.get(DKEY);
+if (!depot || !Array.isArray(depot.pos)) depot = newDepot();
+const save = () => store.set(DKEY, depot);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+// Beginn des Depots: frühestes Datum aus Anlage, Einzahlungen und (rückwirkenden) Käufen. Das Startkapital gilt ab dort.
+const depotStart = () => [depot.created, ...depot.flows.map(f => f.date), ...depot.pos.map(p => p.date)].sort()[0];
+const flowDate = f => f.kind === 'start' ? depotStart() : f.date;
+const invested = () => depot.flows.reduce((s, f) => s + f.amount, 0);
+// Bargeld zu einem Tag (Ende des Tages)
+function cashAt(day = today()) {
+  let c = 0;
+  for (const f of depot.flows) if (flowDate(f) <= day) c += f.amount;
+  for (const p of depot.pos) {
+    if (p.date <= day) c -= p.margin + FEE;
+    if (p.close && p.close.date <= day) c += p.close.value - (p.close.reason === 'sell' ? FEE : 0);
+  }
+  return c;
+}
+
+/* ---------- Datenquellen ---------- */
+const apiKey = store.get('rr:apiKey') || '';
+const mem = new Map();
+// Zwischenspeicher: erst im Speicher, dann localStorage mit Ablaufzeit
+async function cached(key, maxAge, fn) {
+  const k = 'rr:dpc:' + key;
+  if (maxAge > 0 && mem.has(k)) return mem.get(k);
+  const hit = store.get(k);
+  if (hit && Date.now() - hit.t < maxAge) return hit.v;
+  const p = fn().then(v => { store.set(k, { t: Date.now(), v }); return v; });
+  mem.set(k, p);
+  p.catch(() => mem.delete(k));
+  return p;
+}
+async function getJSON(url) {
+  let res;
+  try { res = await fetch(url); } catch { throw new Error('nicht erreichbar'); }
+  if (res.status === 429) throw new Error('Abruflimit erreicht, später nochmal');
+  if (!res.ok) throw new Error(`Fehler ${res.status}`);
+  return res.json();
+}
+async function fmp(path, params) {
+  if (!apiKey) throw new Error('FMP-Key fehlt (auf der Aktien-Seite unter „Datenquelle“ eintragen)');
+  const url = new URL('https://financialmodelingprep.com/stable/' + path);
+  for (const [k, v] of Object.entries({ ...params, apikey: apiKey })) url.searchParams.set(k, v);
+  const ck = `rr:calls:${today()}`; store.set(ck, (store.get(ck) || 0) + 1); // gleicher Zähler wie auf der Aktien-Seite
+  let res;
+  try { res = await fetch(url); } catch { throw new Error('FMP nicht erreichbar'); }
+  if (res.status === 402 || res.status === 403) throw new Error('im FMP-Gratis-Tarif nicht enthalten');
+  if (res.status === 429) throw new Error('FMP-Tageslimit erreicht');
+  const body = await res.json().catch(() => null);
+  if (!res.ok || (body && !Array.isArray(body) && (body['Error Message'] || body.message))) throw new Error('FMP-Fehler');
+  return body;
+}
+const CG = 'https://api.coingecko.com/api/v3/';
+
+// Währung einer Aktie (einmal laden, dann dauerhaft gemerkt). London notiert in Pence.
+async function stockMeta(sym) {
+  if (!apiKey) throw new Error('FMP-Key fehlt (auf der Aktien-Seite unter „Datenquelle“ eintragen)');
+  return cached('meta:' + sym, 365 * DAY_MS, async () => {
+    const p = (await fmp('profile', { symbol: sym }).catch(() => null))?.[0] || {};
+    const raw = p.currency || (/\.(DE|F|PA|AS|MI|MC|BR|VI|HE|LS)$/.test(sym) ? 'EUR' : 'USD');
+    const pence = raw === 'GBp' || raw === 'GBX';
+    return { name: p.companyName || sym, ccy: pence ? 'GBP' : raw.toUpperCase(), div: pence ? 100 : 1 };
+  });
+}
+// Wechselkurse (EUR je 1 Einheit Fremdwährung), täglich von der EZB über Frankfurter
+async function fxSeries(ccy, from) {
+  if (ccy === 'EUR') return null;
+  const key = `fx:${ccy}`, have = store.get('rr:dpc:' + key);
+  const fetchFrom = have?.v?.from && have.v.from <= from ? have.v.from : from;
+  const maxAge = have?.v?.from && have.v.from <= from ? 6 * 3600e3 : 0;
+  return cached(key, maxAge, async () => {
+    const [hist, latest] = await Promise.all([
+      getJSON(`https://api.frankfurter.app/${addDays(fetchFrom, -7)}..?from=${ccy}&to=EUR`),
+      getJSON(`https://api.frankfurter.app/latest?from=${ccy}&to=EUR`),
+    ]);
+    const rates = Object.entries(hist.rates || {}).map(([d, r]) => [d, r.EUR]).filter(r => r[1]);
+    if (latest?.rates?.EUR) rates.push([latest.date, latest.rates.EUR]);
+    return { from: fetchFrom, rates };
+  });
+}
+const fxAt = (fx, day) => {
+  if (!fx) return 1;
+  let v = fx.rates[0]?.[1] ?? 1;
+  for (const [d, r] of fx.rates) { if (d > day) break; v = r; }
+  return v;
+};
+
+// Kursverlauf in Originalwährung: [{d, o, h, l, c}] aufsteigend
+async function stockHistory(sym, from) {
+  const key = `hist:${sym}`, have = store.get('rr:dpc:' + key);
+  const ok = have?.v?.from && have.v.from <= from;
+  return cached(key, ok ? 6 * 3600e3 : 0, async () => {
+    const f = ok ? have.v.from : addDays(from, -10);
+    let rows = await fmp('historical-price-eod/full', { symbol: sym, from: f }).catch(() => null);
+    let bars;
+    if (Array.isArray(rows) && rows.length) bars = rows.map(r => ({ d: r.date, o: r.open, h: r.high, l: r.low, c: r.close }));
+    else {
+      rows = await fmp('historical-price-eod/light', { symbol: sym, from: f });
+      bars = (rows || []).map(r => { const c = r.price ?? r.close; return { d: r.date, o: c, h: c, l: c, c }; });
+    }
+    bars = bars.filter(b => b.d && Number.isFinite(b.c)).sort((a, b) => a.d.localeCompare(b.d));
+    return { from: f, bars };
+  });
+}
+async function stockQuote(sym) {
+  return cached('q:' + sym, 10 * 60e3, async () => {
+    const q = (await fmp('quote', { symbol: sym }))?.[0];
+    if (!q || !Number.isFinite(q.price)) throw new Error('kein Kurs');
+    return q.price;
+  });
+}
+// Krypto in Euro: Tageskurse und (für Hebel) Hoch/Tief-Kerzen
+const CG_OHLC_DAYS = [1, 7, 14, 30, 90, 180, 365];
+async function cryptoHistory(id, from) {
+  const need = Math.min(365, daysBetween(from, today()) + 2);
+  const key = `chist:${id}`, have = store.get('rr:dpc:' + key);
+  const ok = have?.v?.days >= need;
+  return cached(key, ok ? 6 * 3600e3 : 0, async () => {
+    const days = Math.max(need, ok ? have.v.days : 0, 7);
+    const ohlcDays = CG_OHLC_DAYS.find(x => x >= days) || 365;
+    const [chart, ohlc] = await Promise.all([
+      getJSON(`${CG}coins/${encodeURIComponent(id)}/market_chart?vs_currency=eur&days=${days}&interval=daily`),
+      getJSON(`${CG}coins/${encodeURIComponent(id)}/ohlc?vs_currency=eur&days=${ohlcDays}`).catch(() => []),
+    ]);
+    const byDay = new Map();
+    for (const [t, p] of chart.prices || []) byDay.set(ymd(t), { d: ymd(t), o: p, h: p, l: p, c: p });
+    // Kerzen (je nach Zeitraum 4 h bis 4 Tage) auf die Tage verteilen: Hoch/Tief gelten für alle Tage der Kerze
+    for (const [t, o, h, l] of Array.isArray(ohlc) ? ohlc : []) {
+      const span = ohlcDays > 30 ? 3 : 0; // ab 31 Tagen liefert CoinGecko 4-Tages-Kerzen
+      for (let i = 0; i <= span; i++) {
+        const b = byDay.get(ymd(t - i * DAY_MS));
+        if (b) { b.h = Math.max(b.h, h); b.l = Math.min(b.l, l); }
+      }
+    }
+    return { days, bars: [...byDay.values()].sort((a, b) => a.d.localeCompare(b.d)) };
+  });
+}
+async function cryptoPrices(ids) {
+  if (!ids.length) return {};
+  return cached('cp:' + ids.slice().sort().join(','), 3 * 60e3, async () => {
+    const r = await getJSON(`${CG}simple/price?ids=${ids.map(encodeURIComponent).join(',')}&vs_currencies=eur`);
+    return Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.eur]));
+  });
+}
+
+// Alles, was es zu einem Wert braucht: Tageskerzen in EUR, aktueller Kurs (Original und EUR), Währung
+async function assetData(kind, sym, from) {
+  if (kind === 'crypto') {
+    const [h, live] = await Promise.all([cryptoHistory(sym, from), cryptoPrices([sym]).catch(() => ({}))]);
+    const last = live[sym] ?? h.bars.at(-1)?.c;
+    return { ccy: 'EUR', div: 1, fx: null, bars: h.bars, eurBars: h.bars, live: last, liveEur: last, fxNow: 1 };
+  }
+  const meta = await stockMeta(sym);
+  const [h, q, fx] = await Promise.all([stockHistory(sym, from), stockQuote(sym).catch(() => null), fxSeries(meta.ccy, addDays(from, -10))]);
+  const div = meta.div;
+  const bars = h.bars.map(b => ({ d: b.d, o: b.o / div, h: b.h / div, l: b.l / div, c: b.c / div }));
+  const eurBars = bars.map(b => { const f = fxAt(fx, b.d); return { d: b.d, o: b.o * f, h: b.h * f, l: b.l * f, c: b.c * f }; });
+  const live = q != null ? q / div : bars.at(-1)?.c;
+  const fxNow = fxAt(fx, today());
+  return { ccy: meta.ccy, div, fx, bars, eurBars, live, liveEur: live * fxNow, fxNow, name: meta.name };
+}
+
+/* ---------- Rechenkern einer Position ---------- */
+// Finanzierung bis zu einem Tag (Kalendertage, wie bei CFDs über Nacht und am Wochenende)
+function financing(p, day) {
+  const c = COND[p.kind];
+  const base = p.side > 0 ? p.margin * (p.lev - 1) : p.margin * p.lev;
+  const rate = p.side > 0 ? c.longRate : c.shortRate;
+  return base * rate * daysBetween(p.date, day) / 365;
+}
+// Wert (Sicherheit + Gewinn/Verlust − Finanzierung) bei einem Euro-Kurs, nie unter 0 (kein Nachschuss)
+const equityAt = (p, priceEur, day) => Math.max(0, p.margin + p.side * (p.qty * priceEur - p.qty * p.entryEur) - financing(p, day));
+// Kurs (EUR), bei dem die Sicherheit auf 50 % fällt
+const liqPriceEur = (p, day) => p.entryEur + (CLOSEOUT * p.margin - p.margin + financing(p, day)) / (p.side * p.qty);
+const canLiquidate = p => p.lev > 1 || p.side < 0;
+const exitPrice = (p, px) => px * (1 - p.side * COND[p.kind].spread / 2);
+
+// Geht Tag für Tag durch: Wäre die Position zwischendurch zwangsgeschlossen worden?
+function checkLiquidation(p, data) {
+  if (p.close || !canLiquidate(p)) return null;
+  for (const b of data.eurBars) {
+    if (b.d <= p.date) continue;
+    const lp = liqPriceEur(p, b.d), worst = p.side > 0 ? b.l : b.h;
+    if (p.side > 0 ? worst > lp : worst < lp) continue;
+    // Kurslücke: Eröffnung schon jenseits der Schwelle -> zum Eröffnungskurs, sonst an der Schwelle
+    const gap = p.side > 0 ? b.o <= lp : b.o >= lp;
+    const px = exitPrice(p, gap ? b.o : lp);
+    return { date: b.d, priceEur: px, value: equityAt(p, px, b.d), reason: 'liq', gap };
+  }
+  if (data.liveEur != null) {
+    const lp = liqPriceEur(p, today());
+    if (p.side > 0 ? data.liveEur <= lp : data.liveEur >= lp) {
+      const px = exitPrice(p, lp);
+      return { date: today(), priceEur: px, value: equityAt(p, px, today()), reason: 'liq', gap: false };
+    }
+  }
+  return null;
+}
+
+/* ---------- Laden und Bewerten ---------- */
+let assets = new Map();        // key -> Promise<data>
+const assetKey = p => `${p.kind}:${p.sym}`;
+function loadAssets() {
+  const need = new Map();
+  for (const p of depot.pos) {
+    const k = assetKey(p), from = p.date;
+    if (!need.has(k) || need.get(k).from > from) need.set(k, { kind: p.kind, sym: p.sym, from });
+  }
+  const out = new Map();
+  for (const [k, n] of need) out.set(k, assetData(n.kind, n.sym, addDays(n.from, -3)).catch(e => ({ error: e.message })));
+  return out;
+}
+let bench = null; // MSCI World (iShares URTH) in EUR
+async function loadBench() {
+  try { return await assetData('stock', 'URTH', depotStart()); } catch (e) { return { error: e.message }; }
+}
+
+let chart = null, rendering = 0;
+async function refresh() {
+  const run = ++rendering;
+  setStatus('Kurse werden geladen …');
+  assets = loadAssets();
+  const benchP = loadBench();
+  render(new Map(), null, true);
+  const resolved = new Map();
+  await Promise.all([...assets].map(async ([k, p]) => resolved.set(k, await p)));
+  // Zwangsschließungen feststellen und dauerhaft eintragen
+  let changed = false;
+  for (const p of depot.pos) {
+    const d = resolved.get(assetKey(p));
+    if (!d || d.error) continue;
+    const liq = checkLiquidation(p, d);
+    if (liq) { p.close = liq; changed = true; }
+  }
+  if (changed) save();
+  const b = await benchP;
+  if (run !== rendering) return;
+  render(resolved, b, false);
+  const errs = [...resolved.values()].filter(d => d.error).map(d => d.error);
+  setStatus(errs.length ? `Einige Kurse fehlen: ${[...new Set(errs)].join(' · ')}` : `Kurse aktualisiert ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`);
+}
+const setStatus = t => { document.getElementById('dvStatus').textContent = t; };
+
+// Wert einer offenen Position jetzt
+function posNow(p, d) {
+  if (!d || d.error || d.liveEur == null) return { value: p.margin - financing(p, today()), priceNative: null, missing: true };
+  const px = exitPrice(p, d.liveEur);
+  return { value: equityAt(p, px, today()), priceNative: d.live, liq: canLiquidate(p) ? liqPriceEur(p, today()) / d.fxNow : null };
+}
+
+// Tagesreihe des Depots (und des Vergleichs), Wochenenden mit dem letzten Kurs
+function series(resolved, b) {
+  const start = depotStart(), end = today(), days = [];
+  for (let d = start; d <= end; d = addDays(d, 1)) days.push(d);
+  const lastClose = (data, day) => {
+    if (!data || data.error) return null;
+    if (day === end && data.liveEur != null) return data.liveEur;
+    let v = null;
+    for (const bar of data.eurBars) { if (bar.d > day) break; v = bar.c; }
+    return v;
+  };
+  const dep = days.map(day => {
+    let v = cashAt(day);
+    for (const p of depot.pos) {
+      if (p.date > day || (p.close && p.close.date <= day)) continue;
+      const px = lastClose(resolved.get(assetKey(p)), day);
+      v += px == null ? p.margin : equityAt(p, px, day);
+    }
+    return v;
+  });
+  let ben = null;
+  if (b && !b.error && b.eurBars.length) {
+    // gleiche Einzahlungen, jeweils am selben Tag in den MSCI World
+    let units = 0;
+    const flows = depot.flows.map(f => ({ d: flowDate(f), a: f.amount })).sort((x, y) => x.d.localeCompare(y.d));
+    ben = days.map(day => {
+      const px = lastClose(b, day) ?? b.eurBars.find(x => x.d >= day)?.c;
+      while (flows.length && flows[0].d <= day) { const f = flows.shift(); if (px) units += f.a / px; }
+      return px ? units * px : null;
+    });
+  }
+  return { days, dep, ben };
+}
+
+/* ---------- Darstellung ---------- */
+const kindPill = p => `<span class="dv-pill">${COND[p.kind].label}</span>`;
+const sideBadge = p => `<span class="dv-badge" style="color:${p.side > 0 ? 'var(--up)' : 'var(--down)'};border-color:currentColor">${p.side > 0 ? 'Long' : 'Short'} ${p.lev}×</span>`;
+
+function render(resolved, b, loading) {
+  const open = depot.pos.filter(p => !p.close), closed = depot.pos.filter(p => p.close).sort((x, y) => y.close.date.localeCompare(x.close.date));
+  const nows = new Map(open.map(p => [p.id, posNow(p, resolved.get(assetKey(p)))]));
+  const cash = cashAt(), total = cash + open.reduce((s, p) => s + nows.get(p.id).value, 0), inv = invested();
+  document.getElementById('dvValue').textContent = eur0(total);
+  const ch = total - inv;
+  const chEl = document.getElementById('dvChange');
+  chEl.innerHTML = `${ch >= 0 ? '▲' : '▼'} ${signed(ch, eur0)} · ${pctTxt(ch / inv * 100)} seit Start`;
+  chEl.style.color = ch >= 0 ? '#f4c27a' : '#ffb59a';
+  document.getElementById('dvIn').textContent = eur0(inv);
+  document.getElementById('dvCash').textContent = eur0(cash);
+  document.getElementById('dvCount').textContent = open.length;
+
+  // offene Positionen
+  const ol = document.getElementById('openList');
+  if (!open.length) ol.innerHTML = `<p class="text-sm faint py-2">Noch nichts gekauft. Tippe auf <b class="muted">+ Probekauf</b> oder auf der Aktien-, Krypto- oder Radar-Seite bei einem Wert auf „Probekauf“.</p>`;
+  else ol.innerHTML = `<table class="dv-table"><thead><tr><th>Name</th><th>Gekauft</th><th class="n">Einstand</th><th class="n">Aktuell</th><th class="n">Einsatz</th><th class="n">Wert</th><th class="n">Gewinn/Verlust</th><th class="n">Zwangsschließung</th><th></th></tr></thead><tbody>${open.map(p => {
+    const n = nows.get(p.id), d = resolved.get(assetKey(p)), pnl = n.value - p.margin;
+    const dist = n.liq != null && n.priceNative ? (n.liq / n.priceNative - 1) * 100 : null;
+    const danger = dist != null && Math.abs(dist) < 5;
+    return `<tr>
+      <td><div class="font-semibold text-white">${esc(p.name)} ${kindPill(p)} ${sideBadge(p)}</div>${p.note ? `<div class="text-xs faint italic">„${esc(p.note)}“</div>` : ''}</td>
+      <td class="num">${fmtDate(p.date)}</td>
+      <td class="n num">${money(p.entry, p.ccy)}</td>
+      <td class="n num">${loading && !d ? '<span class="faint">…</span>' : n.missing ? `<span class="faint" title="${esc(d?.error || '')}">fehlt</span>` : money(n.priceNative, p.ccy)}</td>
+      <td class="n num">${eur0(p.margin)}</td>
+      <td class="n num">${n.missing ? '–' : eur0(n.value)}</td>
+      <td class="n num font-semibold" style="color:${upDown(pnl)}">${n.missing ? '–' : `${signed(pnl, eur0)}<div class="text-xs">${pctTxt(pnl / p.margin * 100)}</div>`}</td>
+      <td class="n num">${n.liq == null ? '<span class="faint">–</span>' : `${money(n.liq, p.ccy)}<div class="text-xs" style="color:${danger ? 'var(--down)' : 'var(--faint)'}">${danger ? '⚠ ' : ''}${pctTxt(dist)} entfernt</div>`}</td>
+      <td class="n whitespace-nowrap"><button type="button" class="btn btn-sm" data-sell="${p.id}" ${n.missing ? 'disabled' : ''}>Verkaufen</button> <button type="button" class="btn btn-sm" data-del="${p.id}" title="Löschen, als hätte es den Kauf nie gegeben" aria-label="Löschen">✕</button></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+
+  // abgeschlossene
+  const cl = document.getElementById('closedList');
+  if (!closed.length) cl.innerHTML = `<p class="text-sm faint py-2">Noch nichts verkauft.</p>`;
+  else cl.innerHTML = `<table class="dv-table"><thead><tr><th>Name</th><th>Zeitraum</th><th>Ausgang</th><th class="n">Einsatz</th><th class="n">Ergebnis</th><th></th></tr></thead><tbody>${closed.map(p => {
+    const res = p.close.value - (p.close.reason === 'sell' ? FEE : 0) - p.margin - FEE;
+    const why = p.close.reason === 'liq'
+      ? `<span style="color:var(--down)">Zwangsgeschlossen</span><div class="text-xs faint">Sicherheit unter 50 %${p.close.gap ? ', Kurslücke' : ''}</div>`
+      : 'Verkauft';
+    return `<tr><td><div class="font-semibold text-white">${esc(p.name)} ${kindPill(p)} ${sideBadge(p)}</div>${p.note ? `<div class="text-xs faint italic">„${esc(p.note)}“</div>` : ''}</td>
+      <td class="num">${fmtDate(p.date)} – ${fmtDate(p.close.date)}</td><td>${why}</td><td class="n num">${eur0(p.margin)}</td>
+      <td class="n num font-semibold" style="color:${upDown(res)}">${signed(res, eur0)}<div class="text-xs">${pctTxt(res / p.margin * 100)}</div></td>
+      <td class="n"><button type="button" class="btn btn-sm" data-del="${p.id}" title="Aus der Liste löschen" aria-label="Löschen">✕</button></td></tr>`;
+  }).join('')}</tbody></table>`;
+
+  if (!loading) drawChart(resolved, b);
+}
+
+function drawChart(resolved, b) {
+  const s = series(resolved, b);
+  const benchEl = document.getElementById('dvBench');
+  const lastDep = s.dep.at(-1), lastBen = s.ben?.at(-1);
+  if (lastBen != null) {
+    const diff = (lastDep - lastBen) / invested() * 100;
+    benchEl.innerHTML = `${diff >= 0 ? 'Du liegst' : 'Du liegst'} <b style="color:#f4c27a">${pctTxt(diff).replace(' %', ' %-Punkte')} ${diff >= 0 ? 'vor' : 'hinter'} dem MSCI World</b>. Hättest du alles in einen MSCI-World-ETF gesteckt, hättest du jetzt ${eur0(lastBen)}.`;
+  } else benchEl.textContent = b?.error ? `MSCI-World-Vergleich fehlt: ${b.error}` : '';
+  const labels = s.days.map(fmtDate);
+  const retro = document.documentElement.dataset.mode === 'retro';
+  const data = {
+    labels,
+    datasets: [
+      { label: 'Depot', data: s.dep, borderColor: retro ? '#003366' : '#f4c27a', borderWidth: 2.5, pointRadius: 0, tension: 0.25 },
+      ...(s.ben ? [{ label: 'MSCI World', data: s.ben, borderColor: retro ? '#888' : 'rgba(255,255,255,.6)', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, tension: 0.25 }] : []),
+    ],
+  };
+  const tick = retro ? '#555' : 'rgba(255,255,255,.6)';
+  if (chart) { chart.data = data; chart.update('none'); return; }
+  chart = new Chart(document.getElementById('dvChart'), {
+    type: 'line', data,
+    options: {
+      maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { color: tick, maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false } },
+        y: { ticks: { color: tick, callback: v => eur0(v) }, grid: { color: 'rgba(255,255,255,.08)' } },
+      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${eur0(c.parsed.y)}` } } },
+    },
+  });
+}
+
+/* ---------- Probekauf ---------- */
+const buy = { kind: 'stock', sym: null, name: null, side: 1, lev: 1, when: 'now', quote: null, seq: 0 };
+const $ = id => document.getElementById(id);
+function setSeg(attr, val) {
+  document.querySelectorAll(`#buyForm [data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(val))));
+}
+function openBuy(pre) {
+  Object.assign(buy, { sym: null, name: null, side: 1, lev: 1, when: 'now', quote: null });
+  if (pre) Object.assign(buy, pre);
+  $('assetInput').value = buy.name || '';
+  $('levInput').value = buy.lev; $('noteInput').value = '';
+  $('dateInput').value = addDays(today(), -30); $('dateInput').max = today();
+  syncBuy(); loadQuote();
+  $('buyDialog').showModal();
+}
+function syncBuy() {
+  setSeg('kind', buy.kind); setSeg('side', buy.side); setSeg('when', buy.when);
+  $('dateInput').hidden = buy.when !== 'past';
+  $('dateInput').min = buy.kind === 'crypto' ? addDays(today(), -364) : addDays(today(), -5 * 365);
+  $('levLabel').textContent = `${buy.lev}×`;
+  $('levInput').style.setProperty('--p', `${(buy.lev - 1) / 9 * 100}%`);
+  $('assetPicked').innerHTML = buy.sym ? `Gewählt: <b class="text-white">${esc(buy.name)}</b> <span class="faint">(${esc(buy.sym)})</span>` : (buy.kind === 'stock' && !apiKey ? '<span style="color:var(--down)">Für Aktien brauchst du deinen FMP-Key (Aktien-Seite → Datenquelle).</span>' : '');
+  preview();
+}
+// Kaufkurs: heute = aktueller Kurs, rückwirkend = Schlusskurs des Tages (oder des letzten Handelstags davor)
+async function loadQuote() {
+  const seq = ++buy.seq;
+  buy.quote = null; preview();
+  if (!buy.sym) return;
+  const day = buy.when === 'past' ? $('dateInput').value : today();
+  if (!day) return;
+  try {
+    const d = await assetData(buy.kind, buy.sym, addDays(day, -7));
+    if (seq !== buy.seq) return;
+    if (buy.when === 'past' && day < today()) {
+      const bar = [...d.bars].reverse().find(b => b.d <= day);
+      if (!bar) throw new Error('für dieses Datum gibt es keinen Kurs');
+      buy.quote = { price: bar.c, fx: fxAt(d.fx, bar.d), day: bar.d, ccy: d.ccy, data: d };
+    } else buy.quote = { price: d.live, fx: d.fxNow, day: today(), ccy: d.ccy, data: d };
+    if (d.name && buy.kind === 'stock' && (!buy.name || buy.name === buy.sym)) { buy.name = d.name; syncBuy(); return; }
+  } catch (e) { if (seq === buy.seq) buy.quote = { error: e.message }; }
+  if (seq === buy.seq) preview();
+}
+// Baut die Position aus den Eingaben (auch für die Vorschau)
+function draft() {
+  const q = buy.quote, margin = parseFloat($('amountInput').value);
+  if (!q || q.error || !Number.isFinite(q.price) || !(margin > 0)) return null;
+  const c = COND[buy.kind];
+  const entry = q.price * (1 + buy.side * c.spread / 2);
+  const entryEur = entry * q.fx;
+  return { id: uid(), kind: buy.kind, sym: buy.sym, name: buy.name || buy.sym, ccy: q.ccy, side: buy.side, lev: buy.lev,
+    margin, qty: margin * buy.lev / entryEur, entry, entryFx: q.fx, entryEur, date: q.day, note: $('noteInput').value.trim(), src: buy.src || 'Depot', close: null };
+}
+function preview() {
+  const el = $('buyPreview'), btn = $('buyConfirm');
+  const q = buy.quote, p = draft(), cash = cashAt();
+  btn.disabled = !p;
+  if (!buy.sym) { el.innerHTML = '<span class="faint">Wähle zuerst eine Aktie oder einen Coin.</span>'; return; }
+  if (!q) { el.innerHTML = '<span class="faint">Kurs wird geladen …</span>'; return; }
+  if (q.error) { el.innerHTML = `<span style="color:var(--down)">Kein Kurs: ${esc(q.error)}</span>`; return; }
+  if (!p) { el.innerHTML = '<span class="faint">Einsatz eingeben.</span>'; return; }
+  const c = COND[p.kind], size = p.margin * p.lev, spreadCost = size * c.spread;
+  const finDay = (p.side > 0 ? p.margin * (p.lev - 1) * c.longRate : size * c.shortRate) / 365;
+  const lp = canLiquidate(p) ? liqPriceEur(p, p.date) / p.entryFx : null;
+  const move = (1 - CLOSEOUT) / p.lev * 100;
+  const tooMuch = p.margin + FEE > cash + 1e-9;
+  btn.disabled = tooMuch;
+  el.innerHTML = `<dl class="grid grid-cols-2 gap-x-4 gap-y-1">
+    <dt class="muted">Kaufkurs${q.day < today() ? ` (${fmtDate(q.day)})` : ''}</dt><dd class="num text-right">${money(p.entry, p.ccy)}</dd>
+    <dt class="muted">Positionsgröße</dt><dd class="num text-right">${eur0(size)} <span class="faint">(${(+p.qty.toPrecision(4)).toLocaleString('de-DE')} Stück)</span></dd>
+    <dt class="muted">Kosten</dt><dd class="num text-right">${money(FEE)} + ${money(spreadCost, 'EUR', 2)} Spread</dd>
+    ${finDay > 0 ? `<dt class="muted">Finanzierung</dt><dd class="num text-right">ca. ${money(finDay, 'EUR', 2)} pro Tag</dd>` : ''}
+    ${lp != null ? `<dt class="muted">Zwangsschließung</dt><dd class="num text-right" style="color:var(--down)">bei ${money(lp, p.ccy)} (${p.side > 0 ? '−' : '+'}${move.toLocaleString('de-DE', { maximumFractionDigits: 1 })} %)</dd>` : ''}
+    <dt class="muted">Bargeld danach</dt><dd class="num text-right" style="${tooMuch ? 'color:var(--down)' : ''}">${eur0(cash - p.margin - FEE)}</dd>
+  </dl>${tooMuch ? '<p class="text-xs mt-2" style="color:var(--down)">Nicht genug Spielgeld. Unter „Einstellungen“ kannst du nachschießen.</p>' : ''}
+  ${p.lev >= 5 ? `<p class="text-xs mt-2 muted">Mit ${p.lev}× Hebel reicht eine Bewegung von ${move.toLocaleString('de-DE', { maximumFractionDigits: 1 })} % gegen dich, und die Hälfte des Einsatzes ist weg.</p>` : ''}`;
+}
+// Suche: Aktien über FMP, Krypto über CoinGecko
+let searchTimer = null, searchSeq = 0;
+async function search(q) {
+  const seq = ++searchSeq, box = $('assetHits');
+  if (q.trim().length < 2) { box.hidden = true; return; }
+  let hits = [];
+  try {
+    if (buy.kind === 'crypto') {
+      const r = await getJSON(`${CG}search?query=${encodeURIComponent(q)}`);
+      hits = (r.coins || []).slice(0, 8).map(c => ({ sym: c.id, name: c.name, sub: c.symbol }));
+    } else {
+      const [byName, bySym] = await Promise.all([
+        fmp('search-name', { query: q, limit: 8 }).catch(() => []),
+        fmp('search-symbol', { query: q, limit: 4 }).catch(() => []),
+      ]);
+      const seen = new Set();
+      hits = [...(bySym || []), ...(byName || [])].filter(h => h.symbol && !seen.has(h.symbol) && seen.add(h.symbol)).slice(0, 8)
+        .map(h => ({ sym: h.symbol, name: h.name || h.symbol, sub: [h.symbol, h.exchange || h.exchangeShortName, h.currency].filter(Boolean).join(' · ') }));
+    }
+  } catch (e) { hits = []; box.innerHTML = `<div class="px-3 py-2 text-xs" style="color:var(--down)">${esc(e.message)}</div>`; box.hidden = false; return; }
+  if (seq !== searchSeq) return;
+  box.innerHTML = hits.length ? hits.map(h => `<button type="button" class="dv-hit" data-sym="${esc(h.sym)}" data-name="${esc(h.name)}"><span class="text-white">${esc(h.name)}</span> <span class="faint text-xs">${esc(h.sub)}</span></button>`).join('')
+    : '<div class="px-3 py-2 text-xs faint">Nichts gefunden.</div>';
+  box.hidden = false;
+}
+
+function confirmBuy(e) {
+  e.preventDefault();
+  const p = draft();
+  if (!p || p.margin + FEE > cashAt() + 1e-9) return;
+  depot.pos.push(p); save();
+  $('buyDialog').close();
+  refresh();
+}
+function sell(id) {
+  const p = depot.pos.find(x => x.id === id);
+  const d = p && assets.get(assetKey(p));
+  if (!p || !d) return;
+  d.then(data => {
+    if (data.error || data.liveEur == null) return;
+    const px = exitPrice(p, data.liveEur), value = equityAt(p, px, today());
+    if (!confirm(`${p.name} verkaufen?\nDu bekommst ${eur0(value - FEE)} zurück (nach 1 € Gebühr).`)) return;
+    p.close = { date: today(), priceEur: px, value, reason: 'sell' };
+    save(); refresh();
+  });
+}
+function del(id) {
+  const p = depot.pos.find(x => x.id === id);
+  if (!p || !confirm(`${p.name} löschen? Die Position verschwindet, als hätte es sie nie gegeben, das Geld fließt zurück.`)) return;
+  depot.pos = depot.pos.filter(x => x.id !== id); save(); refresh();
+}
+
+/* ---------- Einstellungen ---------- */
+function exportDepot() {
+  const blob = new Blob([JSON.stringify(depot, null, 2)], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `smartwin-depot-${today()}.json` });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function importDepot(file) {
+  file.text().then(t => {
+    const d = JSON.parse(t);
+    if (!d || !Array.isArray(d.pos) || !Array.isArray(d.flows)) throw new Error();
+    if (!confirm('Das aktuelle Depot wird durch die Datei ersetzt. Weiter?')) return;
+    depot = d; save(); $('setDialog').close(); refresh();
+  }).catch(() => alert('Die Datei ist kein SmartWin-Depot.'));
+}
+
+/* ---------- Ansicht (wie auf den anderen Seiten) ---------- */
+const MODES = ['standard', 'clean', 'retro'], MODE_LABEL = { standard: 'Standard', clean: 'Clean', retro: 'Retro' };
+let mode = store.get('rr:mode') || 'standard';
+function applyMode() {
+  if (!MODES.includes(mode)) mode = 'standard';
+  document.documentElement.dataset.mode = mode === 'standard' ? 'warm' : mode;
+  $('modeLabel').textContent = MODE_LABEL[MODES[(MODES.indexOf(mode) + 1) % MODES.length]];
+  $('modeBtn').setAttribute('aria-pressed', String(mode !== 'standard'));
+  if (chart) { chart.destroy(); chart = null; }
+}
+
+function init() {
+  $('appVersion').textContent = `v${APP_VERSION}`;
+  applyMode();
+  $('modeBtn').addEventListener('click', () => { mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]; store.set('rr:mode', mode); applyMode(); refresh(); });
+  $('buyBtn').addEventListener('click', () => openBuy());
+  $('setBtn').addEventListener('click', () => $('setDialog').showModal());
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+  document.querySelectorAll('#buyForm [data-kind]').forEach(b => b.addEventListener('click', () => {
+    if (buy.kind === b.dataset.kind) return;
+    Object.assign(buy, { kind: b.dataset.kind, sym: null, name: null, quote: null });
+    $('assetInput').value = ''; $('assetHits').hidden = true; syncBuy();
+  }));
+  document.querySelectorAll('#buyForm [data-side]').forEach(b => b.addEventListener('click', () => { buy.side = +b.dataset.side; syncBuy(); }));
+  document.querySelectorAll('#buyForm [data-when]').forEach(b => b.addEventListener('click', () => { buy.when = b.dataset.when; syncBuy(); loadQuote(); }));
+  $('levInput').addEventListener('input', e => { buy.lev = Math.min(MAX_LEV, Math.max(1, +e.target.value)); syncBuy(); });
+  $('amountInput').addEventListener('input', preview);
+  $('dateInput').addEventListener('change', loadQuote);
+  $('assetInput').addEventListener('input', e => { clearTimeout(searchTimer); searchTimer = setTimeout(() => search(e.target.value), 300); });
+  $('assetHits').addEventListener('click', e => {
+    const h = e.target.closest('[data-sym]'); if (!h) return;
+    Object.assign(buy, { sym: h.dataset.sym, name: h.dataset.name, src: 'Depot' });
+    $('assetInput').value = h.dataset.name; $('assetHits').hidden = true; syncBuy(); loadQuote();
+  });
+  $('buyForm').addEventListener('submit', confirmBuy);
+  document.addEventListener('click', e => {
+    const s = e.target.closest('[data-sell]'), d = e.target.closest('[data-del]');
+    if (s) sell(s.dataset.sell); if (d) del(d.dataset.del);
+  });
+  $('depositBtn').addEventListener('click', () => {
+    const a = parseFloat($('depositInput').value); if (!(a > 0)) return;
+    depot.flows.push({ kind: 'deposit', date: today(), amount: a }); save(); $('setDialog').close(); refresh();
+  });
+  $('exportBtn').addEventListener('click', exportDepot);
+  $('importInput').addEventListener('change', e => { if (e.target.files[0]) importDepot(e.target.files[0]); e.target.value = ''; });
+  $('resetBtn').addEventListener('click', () => {
+    const a = parseFloat($('resetInput').value); if (!(a >= 100)) return;
+    if (!confirm(`Depot wirklich löschen und mit ${eur0(a)} neu anfangen? Alle Positionen gehen verloren (vorher ggf. exportieren).`)) return;
+    depot = newDepot(a); save(); $('setDialog').close(); refresh();
+  });
+  // Probekauf von einer anderen Seite: depot.html#kauf=stock:NVDA:Nvidia
+  const m = decodeURIComponent(location.hash).match(/^#kauf=(stock|crypto):([^:]+):?(.*)$/);
+  if (m) { history.replaceState(null, '', location.pathname); openBuy({ kind: m[1], sym: m[2], name: m[3] || m[2], src: 'Link' }); }
+  refresh();
+}
+init();
+</script>
+</body>
+</html>

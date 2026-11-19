@@ -241,7 +241,7 @@
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
-  <script src="intro.js?v=5.5"></script>
+  <script src="intro.js?v=5.6"></script>
   <div class="app max-w-7xl mx-auto py-6 sm:py-8">
 
     <!-- Kopfzeile -->
@@ -260,6 +260,7 @@
           <a href="./" class="seg-item">Aktien</a>
           <a href="crypto.html" class="seg-item">Krypto</a>
           <a href="radar.html" class="seg-item" aria-current="page">Radar</a>
+          <a href="depot.html" class="seg-item">Depot</a>
         </nav>
         <button type="button" id="helpBtn" class="btn" aria-label="So funktioniert's" title="So funktioniert's">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
@@ -359,6 +360,7 @@
           <p id="detailSub" class="text-xs muted"></p>
         </div>
         <div class="flex gap-2 shrink-0">
+          <a id="tryBtn" href="depot.html" class="btn btn-sm" hidden title="Mit Spielgeld kaufen und schauen, wie es läuft">💸 Probekauf</a>
           <button type="button" id="favBtn" class="btn btn-sm" aria-pressed="false">☆ Favorit</button>
           <button type="button" id="closeDetail" class="btn btn-sm">Schließen</button>
         </div>
@@ -385,7 +387,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '5.5';
+const APP_VERSION = '5.6';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -1370,6 +1372,9 @@ function renderDetail() {
   if (!t) return;
   const r = compute(t);
   document.getElementById('detailTitle').textContent = t.name;
+  const tb = document.getElementById('tryBtn'), tp = t.price?.fmp ? ['stock', t.price.fmp] : t.price?.cg ? ['crypto', t.price.cg] : null;
+  tb.hidden = !tp;
+  if (tp) tb.href = `depot.html#kauf=${tp[0]}:${encodeURIComponent(tp[1])}:${encodeURIComponent(t.price.label || t.name)}`;
   const fb = document.getElementById('favBtn');
   fb.textContent = state.fav.has(t.id) ? '★ Favorit' : '☆ Favorit';
   fb.setAttribute('aria-pressed', String(state.fav.has(t.id)));

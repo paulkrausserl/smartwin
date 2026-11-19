@@ -272,7 +272,7 @@
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
-  <script src="intro.js?v=5.5"></script>
+  <script src="intro.js?v=5.6"></script>
   <div class="app max-w-7xl mx-auto py-6 sm:py-8">
 
     <!-- Kopfzeile -->
@@ -291,6 +291,7 @@
           <a href="./" class="seg-item" aria-current="page">Aktien</a>
           <a href="crypto.html" class="seg-item">Krypto</a>
           <a href="radar.html" class="seg-item">Radar</a>
+          <a href="depot.html" class="seg-item">Depot</a>
         </nav>
         <div id="viewSeg" class="seg" role="group" aria-label="Ansicht">
           <button type="button" class="seg-item" data-view="simple" title="Nur das Wichtigste, in Klartext">Einfach</button>
@@ -383,6 +384,7 @@
                 <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path id="watchStar" d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
                 <span id="watchLabel">Merken</span>
               </button>
+              <a id="tryBtn" href="depot.html" class="btn btn-sm" title="Mit Spielgeld kaufen und schauen, wie es läuft">💸 Probekauf</a>
             </div>
             <p id="stockMeta" class="text-sm muted mt-1"></p>
           </div>
@@ -614,7 +616,7 @@ const STOCKS = [
   { name: 'Intel',      ticker: 'INTC', sector: 'Halbleiter',        country: 'USA', growth: -3, pe: 90, margin: -20, de: 0.5, cr: 1.3, z: 1.4, rsi: 47, fromHigh: -25, sma50: false, sma200: true, moat: 5, beta: 1.2 },
 ];
 const QUICK = ['Microsoft', 'Allianz', 'Cloudflare', 'Tesla'];
-const APP_VERSION = '5.5';
+const APP_VERSION = '5.6';
 
 /* ---------------------------------------------------------------
    Scoring
@@ -2233,6 +2235,10 @@ function openEntry(id) {
 const SORTS = [['score', 'Score'], ['change', 'Heute'], ['name', 'Name']];
 
 function renderWatchBtn() {
+  const tb = document.getElementById('tryBtn'), s = state.stock;
+  const sym = s && !s.simulated ? typeof s.live === 'string' ? s.live : s.ticker : null;
+  tb.hidden = !sym;
+  if (sym) tb.href = `depot.html#kauf=stock:${encodeURIComponent(sym)}:${encodeURIComponent(s.name)}`;
   const on = !!state.stock && isWatched(state.stock);
   const btn = document.getElementById('watchBtn');
   btn.setAttribute('aria-pressed', String(on));
