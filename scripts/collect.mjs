@@ -103,7 +103,9 @@ async function collectTrends() {
   // „Steigende Suchanfragen“ kosten einen Abruf mehr: jeden Tag nur für die 20 Themen mit dem ältesten Stand
   const risingAge = t => Date.parse(prev.themes?.[t.id]?.trends?.risingAt || '2000-01-01');
   const risingToday = new Set([...THEMES].sort((a, b) => risingAge(a) - risingAge(b)).slice(0, 20).map(t => t.id));
-  for (const t of THEMES) {
+  // Google sperrt nach ~40 Abfragen. Darum zuerst die Themen mit dem ältesten Stand, damit jedes Thema regelmäßig drankommt.
+  const trendsAge = t => Date.parse(prev.themes?.[t.id]?.trends?.at || '2000-01-01');
+  for (const t of [...THEMES].sort((a, b) => trendsAge(a) - trendsAge(b))) {
     if (blocked >= 3) { slot(t.id).trends = keep(t.id, 'trends', 'Google Trends hat den Sammler gesperrt'); continue; }
     try {
       const req = { comparisonItem: [{ keyword: trendsFor(t), geo: '', time: 'today 12-m' }], category: 0, property: '' };
@@ -124,7 +126,7 @@ async function collectTrends() {
         } catch (e) { log(`  ${t.id}/steigende Suchen: ${e.message}`); }
       }
       // Wochenwerte sind lückenlos: erstes Datum genügt
-      slot(t.id).trends = { kw: trendsFor(t), start: ymd(new Date(Number(tl[0].time) * 1000)), v: tl.map(p => p.value[0]), rising, risingAt };
+      slot(t.id).trends = { kw: trendsFor(t), start: ymd(new Date(Number(tl[0].time) * 1000)), v: tl.map(p => p.value[0]), rising, risingAt, at: today };
       blocked = 0;
     } catch (e) {
       if (/429/.test(e.message)) blocked++;
