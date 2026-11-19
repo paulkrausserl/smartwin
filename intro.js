@@ -4,24 +4,34 @@
 (() => {
   // Ein Tab, der im Hintergrund lädt (z. B. angehefteter Tab beim Browserstart), spielt das Intro erst,
   // wenn man ihn das erste Mal ansieht.
-  // Läuft, wenn man die Seite von außen öffnet (neuer/angehefteter Tab, Lesezeichen, Neuladen).
-  // Nicht beim Wechsel zwischen Aktien, Krypto und Radar und nicht bei „Zurück“. Bewusst ohne gespeicherten Merker:
-  // Browser stellen sessionStorage bei angehefteten Tabs wieder her, dann kam das Intro gar nicht mehr.
-  const allowed = () => {
-    try {
-      const de = document.documentElement;
-      if (/#intro/.test(location.hash)) return true;
-      if (de.dataset.mode === 'retro' || /nointro/.test(location.hash) || matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
-      const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
-      if (nav && nav.type === 'back_forward') return false;
-      const dir = p => p.replace(/[^/]*$/, '');
-      if (document.referrer) {
-        const r = new URL(document.referrer);
-        if (r.origin === location.origin && dir(r.pathname) === dir(location.pathname)) return false;
-      }
-      return true;
-    } catch { return false; }
+  // Läuft bei jedem Öffnen der Seite (angehefteter/neuer Tab, Lesezeichen, Neuladen). Übersprungen wird es nur,
+  // wenn man unmittelbar davor innerhalb von SmartWin auf einen Link geklickt hat (Aktien ↔ Krypto ↔ Radar).
+  // Dafür wird beim Klick ein Zeitstempel gesetzt, der nur 8 Sekunden gilt. Referrer und Navigationsart taugen nicht:
+  // Browser melden wiederhergestellte (angeheftete) Tabs als „Zurück“ und behalten den alten Referrer.
+  const KEY = 'rr:introSkip';
+  const reasons = () => {
+    const out = [], de = document.documentElement;
+    if (de.dataset.mode === 'retro') out.push('Retro-Modus ist an');
+    if (/nointro/.test(location.hash)) out.push('#nointro in der Adresse');
+    try { if (matchMedia('(prefers-reduced-motion: reduce)').matches) out.push('Gerät ist auf „Bewegung reduzieren“ / Animationen aus gestellt'); } catch {}
+    try { const ts = +sessionStorage.getItem(KEY); if (ts && Date.now() - ts < 8000) out.push('gerade innerhalb der Seite gewechselt'); } catch {}
+    return out;
   };
+  const allowed = () => {
+    if (/#introcheck/.test(location.hash)) { const r = reasons(); alert(r.length ? 'Intro wird übersprungen, weil: ' + r.join(', ') : 'Intro würde laufen.'); }
+    if (/#intro\b/.test(location.hash)) return true;
+    const r = reasons();
+    try { sessionStorage.removeItem(KEY); } catch {}
+    return !r.length;
+  };
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.target === '_blank') return;
+    try {
+      const u = new URL(a.href, location.href), dir = p => p.replace(/[^/]*$/, '');
+      if (u.origin === location.origin && dir(u.pathname) === dir(location.pathname)) sessionStorage.setItem(KEY, String(Date.now()));
+    } catch {}
+  }, true);
   if (document.hidden) {
     const onVis = () => { if (document.hidden) return; document.removeEventListener('visibilitychange', onVis); if (allowed()) play(); };
     document.addEventListener('visibilitychange', onVis);
