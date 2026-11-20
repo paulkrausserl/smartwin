@@ -970,7 +970,8 @@ const NC_SKIP_Q = new Set(['Q5', 'Q5296', 'Q4167410', 'Q13406463', 'Q11424', 'Q2
   'Q46135307', 'Q1190554', 'Q178561', 'Q198', 'Q645883', 'Q2223653', 'Q8065', 'Q7944', 'Q8092', 'Q6256', 'Q3624078', 'Q515', 'Q1549591', 'Q486972',
   'Q35657', 'Q12136', 'Q3918', 'Q11032', 'Q41298', 'Q4164871', 'Q132241', 'Q47150325', 'Q18536594', 'Q1079023', 'Q7725634', 'Q8261', 'Q47461344',
   'Q3305213', 'Q17633526']);
-const NC_SKIP_DESC = /\b(actor|actress|singer|rapper|footballer|cricketer|boxer|wrestler|athlete|player|politician|film|movie|series|season|episode|album|song|single|band|musician|election|referendum|tournament|championship|cup final|olympic|league|match|born|murder|killing|shooting|attack|bombing|earthquake|hurricane|typhoon|cyclone|storm|flood|wildfire|war|battle|conflict|protest|award|ceremony|festival|television|tv |novel|manga|anime|comic book series|disambiguation|list of|city|town|village|country|province|state of|county|district|youtuber|streamer|influencer|journalist|businessman|businesswoman|entrepreneur|president|minister|king|queen|prince|princess|director|producer|comedian|holiday|observance|day of|sports team|football club|university|school|newspaper|airline flight|crash|incident|scandal|trial|case|lawsuit|deaths?|disease|virus|outbreak|pandemic|software bug)\b/i;
+const NC_SKIP_DESC = /\b(actor|actress|singer|rapper|footballer|cricketer|boxer|wrestler|athlete|player|politician|film|movie|series|season|episode|album|song|single|band|musician|election|referendum|tournament|championship|cup final|olympic|league|match|born|murder|killing|shooting|attack|bombing|earthquake|hurricane|typhoon|cyclone|storm|flood|wildfire|war|battle|conflict|protest|award|ceremony|festival|television|tv |novel|manga|anime|comic book series|disambiguation|list of|city|town|village|country|province|state of|county|district|youtuber|streamer|influencer|journalist|businessman|businesswoman|entrepreneur|president|minister|king|queen|prince|princess|director|producer|comedian|holiday|observance|day of|sports team|football club|university|school|newspaper|airline flight|crash|incident|scandal|trial|case|lawsuit|deaths?|disease|virus|outbreak|pandemic|software bug|edition|competition|pageant|military|mission|intervention|polling|political|party|organisation|organization|indigenous|ethnic group|people of|natural number|franchise|bishop|religious|church|entertainment|media company|mass media|studio|visual effects|broadcaster|television network|record label|conglomerate|newspaper|agency|government|ministry|court|law|act of)\b/i;
+const NC_SKIP_TITLE = /\b(1[89]|20)\d\d\b|election|season|saison|edizione|edition|miss |polling|referendum|cup\b|league|liga/i;
 const NC_CATS = [
   ['spielzeug', 'Sammeln & Spielzeug', /\b(toy|figure|figurine|plush|collectible|trading card|doll|blind box|character|mascot|sticker)\b/i],
   ['essen', 'Essen & Trinken', /\b(food|dish|dessert|pastry|beverage|drink|chocolate|snack|tea|coffee|cuisine|candy|confectionery|fruit|cocktail|ingredient|sauce|noodle|bread|cake|ice cream|spice)\b/i],
@@ -989,7 +990,7 @@ async function ncViews(wiki, title, from, to) {
   return { v: out2, first: [...m.keys()].sort()[0] || null };
 }
 // Regeln, angewandt auf eine Tagesreihe bis Index i (einschließlich). Liefert null oder die Kennzahlen.
-function ncCheck(v, i, minLevel) {
+function ncCheck(v, i, minLevel, maxYear = Infinity) {
   if (i < 120) return null;
   const mean2 = (a, b) => mean(v.slice(Math.max(0, a), b + 1));
   const now = mean2(i - 13, i);
@@ -997,7 +998,7 @@ function ncCheck(v, i, minLevel) {
   const year = i >= 395 ? mean2(i - 395, i - 335) : null;
   const firstNonZero = v.findIndex(x => x > 0);
   const young = firstNonZero >= 0 && i - firstNonZero < 330;
-  if (!young && !(year != null && now >= 4 * (year + 5))) return null;
+  if (!young && !(year != null && now >= 4 * (year + 5) && year <= maxYear)) return null; // vor einem Jahr kaum bekannt
   const w4 = mean2(i - 27, i), w4b = mean2(i - 55, i - 28), w4c = mean2(i - 83, i - 56);
   if (!(w4 >= 1.4 * (w4b + 1) && w4b >= 0.9 * w4c)) return null;
   const last28 = v.slice(i - 27, i + 1), med = median(last28);
@@ -1005,6 +1006,7 @@ function ncCheck(v, i, minLevel) {
   // Wochen in Folge, in denen der 2-Wochen-Schnitt nicht gefallen ist
   let streak = 0;
   for (let k = 0; k < 30; k++) { const a = mean2(i - 7 * k - 13, i - 7 * k), b = mean2(i - 7 * k - 20, i - 7 * k - 7); if (a > 0 && a >= 0.95 * b) streak++; else break; }
+  if (streak < 4) return null; // mindestens 4 Wochen stetig
   return { now: Math.round(now), year: year == null ? null : Math.round(year), young, g4: round(w4 / (w4b + 1), 2), streak };
 }
 async function collectNewcomers() {
@@ -1059,7 +1061,9 @@ async function collectNewcomers() {
           const p31 = (e.claims?.P31 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
           const desc = e.descriptions?.en?.value || e.descriptions?.de?.value || '';
           const en = e.sitelinks?.enwiki?.title || null;
-          if (p31.some(q => NC_SKIP_Q.has(q)) || NC_SKIP_DESC.test(desc) || (en && known.has(en.toLowerCase()))) continue;
+          if (p31.some(q => NC_SKIP_Q.has(q)) || !desc || NC_SKIP_DESC.test(desc) || NC_SKIP_TITLE.test(en || '') || (en && known.has(en.toLowerCase()))) continue;
+          // nur Dinge, die sich einer Kategorie zuordnen lassen (Spielzeug, Essen, Marken, Technik, Spiele)
+          if (!NC_CATS.some(([, , re]) => re.test(desc))) continue;
           const src = e.sitelinks?.[`${wiki}wiki`]?.title;
           if (!src) continue;
           const prevItem = items.get(e.id);
@@ -1080,11 +1084,11 @@ async function collectNewcomers() {
       const wiki = it.found.includes('en') ? 'en' : it.wiki, title = wiki === 'en' ? it.en : it.title;
       const { v, first } = await ncViews(wiki, title, from, to);
       n++;
-      const c = ncCheck(v, v.length - 1, (cutoff[wiki] || 1000) * 0.5);
+      const c = ncCheck(v, v.length - 1, (cutoff[wiki] || 1000) * 0.5, (cutoff[wiki] || 1000) * 0.1);
       if (!c) continue;
       const weeks = [];
       for (let k = 25; k >= 0; k--) weeks.push(Math.round(mean(v.slice(v.length - 7 * k - 7, v.length - 7 * k))));
-      const cat = NC_CATS.find(([, , re]) => re.test(it.desc))?.[0] || 'sonst';
+      const cat = NC_CATS.find(([, , re]) => re.test(it.desc))?.[0];
       found.push({ q: it.q, name: it.name, desc: it.desc, cat, en: it.en, wiki, title, langs: it.langs, found: it.found, first, ...c,
         stage: c.streak <= 8 ? 'early' : 'growing', weeks, score: round(Math.log(c.g4) + 0.5 * Math.log(Math.min(c.year == null ? 20 : c.now / (c.year + 5), 50)), 3) });
     } catch (e) { /* Artikel ohne Daten: egal */ }
@@ -1105,7 +1109,7 @@ async function collectNewcomers() {
       const smooth = v.map((_, i) => mean(v.slice(Math.max(0, i - 29), i + 1)));
       const pk = smooth.indexOf(Math.max(...smooth));
       let hit = null;
-      for (let i = 120; i <= pk; i++) if (ncCheck(v, i, enMin)) { hit = i; break; }
+      for (let i = 120; i <= pk; i++) if (ncCheck(v, i, enMin, enMin * 0.2)) { hit = i; break; }
       const dayOf = i => ymd(new Date(Date.parse(start) + i * DAY_MS));
       back.push({ label, peak: dayOf(pk), first: hit == null ? null : dayOf(hit), lead: hit == null ? null : Math.round((pk - hit) / 30.4 * 10) / 10 });
     } catch (e) { log(`  Rückwärts-Test ${title}: ${e.message}`); }
