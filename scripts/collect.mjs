@@ -997,6 +997,63 @@ for (const t of THEMES) {
   out.history[t.id] = hist;
 }
 
+/* --- Momentum Map: Welcher Anteil der gesamten Aufmerksamkeit entfällt auf ein Thema, und wie verschiebt er sich?
+   Je Quelle (Wikipedia-Aufrufe, Google-Suchen, Nachrichten, Wettgeld) der Anteil jedes Themas an der Summe aller Themen,
+   dann gewichtet gemittelt. „Jetzt“ = letzte 7 Tage (Google: letzte volle Woche), „vorher“ = Schnitt der 4 Wochen davor.
+   Die versteckte Gruppe Popkultur zählt nicht mit. --- */
+const MOMENTUM_GROUP_SKIP = 'Popkultur';
+function computeMomentum() {
+  const list = THEMES.filter(t => t.group !== MOMENTUM_GROUP_SKIP);
+  const sum = a => a.reduce((x, y) => x + y, 0);
+  const sources = {
+    wiki: { w: 1, f: x => { const v = x.wiki?.v; if (!(v?.length > 40)) return null; return [sum(v.slice(-7)), sum(v.slice(-35, -7)) / 4]; } },
+    google: { w: 1, f: x => { const tr = x.trends, v = tr?.v; if (!(v?.length > 8) || !tr.size) return null; const k = tr.size / 100;
+      return [v.at(-2) * k, mean(v.slice(-6, -2)) * k]; } }, // letzte Woche ist bei Google noch unvollständig
+    news: { w: 1, f: x => { const v = x.news?.v; if (!(v?.length > 40) || !(x.news.d?.at(-1) >= ymd(new Date(Date.now() - 5 * DAY_MS)))) return null; return [sum(v.slice(-7)), sum(v.slice(-35, -7)) / 4]; } },
+    bets: { w: 0.5, f: (x, t) => { const p = out.poly?.[t.id]; if (!p?.vol24) return null; const h = (p.hist || []).filter(e => e[0] <= ymd(new Date(Date.now() - 7 * DAY_MS)));
+      return [p.vol24, h.length >= 5 ? median(h.map(e => e[1])) : p.vol24]; } },
+  };
+  const lv = {};
+  for (const [k, src] of Object.entries(sources)) {
+    const vals = list.map(t => [t.id, src.f(out.themes[t.id] || {}, t)]).filter(([, v]) => v && v[0] >= 0 && v[1] >= 0);
+    const tn = sum(vals.map(([, v]) => v[0])), tp = sum(vals.map(([, v]) => v[1]));
+    if (!tn || !tp) continue;
+    lv[k] = Object.fromEntries(vals.map(([id, v]) => [id, [v[0] / tn, v[1] / tp]]));
+  }
+  const W = sum(Object.keys(lv).map(k => sources[k].w));
+  const themes = {};
+  for (const t of list) {
+    let s = 0, s0 = 0;
+    for (const k of Object.keys(lv)) { const v = lv[k][t.id]; if (v) { s += sources[k].w * v[0]; s0 += sources[k].w * v[1]; } }
+    if (!s && !s0) continue;
+    s /= W; s0 /= W;
+    // Was die Aufmerksamkeit zieht: neueste Schlagzeile, steigende Google-Suche, meistgehandelte Wette
+    const x = out.themes[t.id] || {}, why = [];
+    const head = x.gnews?.headlines?.[0];
+    if (head?.t) why.push({ k: 'news', t: head.t.replace(/\s+-\s+[^-]+$/, ''), src: head.src || null });
+    // nur steigende Suchen, die den Suchbegriff enthalten (sonst landet z. B. „lidl near me“ bei Gold)
+    const kwWords = trendsFor(t).toLowerCase().split(/\s+/).filter(w => w.length >= 3 && !['price', 'prices', 'stock', 'stocks', 'the', 'and', 'card', 'cards', 'game', 'news', 'index', 'exchange', 'collecting', 'markets', 'energy', 'fine', 'book', 'bag', 'records', 'set', 'oil'].includes(w));
+    if (!kwWords.length) kwWords.push(...trendsFor(t).toLowerCase().split(/\s+/));
+    // „Breakout“-Suchen sind oft Spam oder Musiktitel, darum nur solche mit Prozentangabe
+    const rise = x.trends?.rising?.find(q => q.q && q.v !== 'Breakout' && !/casino|bet\b|porn|song|montagem/i.test(q.q) && kwWords.some(w => q.q.toLowerCase().includes(w)));
+    if (rise) why.push({ k: 'search', t: rise.q, v: rise.v });
+    const bet = out.poly?.[t.id]?.top?.[0];
+    if (bet?.title) why.push({ k: 'bet', t: bet.title });
+    themes[t.id] = { s: round(s * 100, 3), s0: round(s0 * 100, 3), r: round(s0 > 0 ? s / s0 : 1, 3), why };
+  }
+  out.momentum = { at: today, sources: Object.keys(lv), themes };
+  // Verlauf des Anteils für die Kurve im Thema (90 Tage)
+  const hist = prev.momentumHist || {};
+  out.momentumHist = {};
+  for (const [id, m] of Object.entries(themes)) {
+    const h = (hist[id] || []).filter(e => e[0] !== today);
+    h.push([today, m.s]);
+    out.momentumHist[id] = h.slice(-90);
+  }
+  log(`Momentum: ${Object.keys(themes).length} Themen aus ${Object.keys(lv).join(', ')}`);
+}
+computeMomentum();
+
 /* --- Signal-Logbuch und Rückblick (Trefferquote).
    Vereinfachtes Frühsignal, das sich rückwirkend berechnen lässt: Wikipedia-Aufrufe seit Wochen mindestens 1,5× über normal
    (in 3 der letzten 4 Wochen), kein sehr bekanntes Thema, Google Trends oder News bestätigen, und der Preis ist in den

@@ -107,6 +107,12 @@
     [data-mode="warm"] header .text-white { font: 600 21px Fraunces, Georgia, serif !important; }
     [data-mode="warm"] header .logo { background: var(--accent) !important; color: #fffdf8 !important; border-radius: 12px; }
     header .logo.brand { background: none !important; border-radius: 50% !important; }
+    .mm-map { position: relative; width: 100%; }
+    .mm-t { position: absolute; border: 2px solid var(--panel); border-radius: 8px; padding: 6px 8px; overflow: hidden; cursor: pointer; text-align: left; transition: filter .15s; }
+    .mm-t:hover, .mm-t:focus-visible { filter: brightness(1.08); outline: none; box-shadow: inset 0 0 0 2px var(--text); }
+    .mm-t b { display: block; font-weight: 600; font-size: 13px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; hyphens: auto; }
+    .mm-t span { font-size: 12px; opacity: .9; }
+    .mm-grad { width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--down), var(--panel-2), var(--up)); }
     [data-mode="warm"] .card { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 1px 2px rgba(43, 39, 34, .03); }
     [data-mode="warm"] .inset { background: var(--panel-2); border-color: var(--line); border-radius: 16px; }
     [data-mode="warm"] .eyebrow { color: #8a8173; letter-spacing: .07em; font-weight: 600; }
@@ -241,7 +247,7 @@
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
-  <script src="intro.js?v=5.9"></script>
+  <script src="intro.js?v=6.0"></script>
   <div class="app max-w-7xl mx-auto py-6 sm:py-8">
 
     <!-- Kopfzeile -->
@@ -285,6 +291,9 @@
 
     <!-- Marktstimmung: Fear & Greed und App-Store-Ränge -->
     <section id="mood" hidden class="card p-4 sm:p-5 mb-6"></section>
+
+    <!-- Momentum Map: wohin die Aufmerksamkeit fließt -->
+    <section id="momentum" hidden class="card p-4 sm:p-5 mb-6"></section>
 
     <!-- Aufsteiger -->
     <section class="card p-4 sm:p-5 mb-6">
@@ -387,7 +396,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '5.9';
+const APP_VERSION = '6.0';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -403,7 +412,7 @@ const THEMES = [
   { id: 'pokemon', name: 'Pokémon-Karten', group: 'Sammelobjekte', wiki: 'Pokémon Trading Card Game', scarcity: 'Ältere Sets werden nicht nachgedruckt, gefragte Neuerscheinungen sind oft schnell vergriffen.', price: { idx: 'pokemon', label: 'Kartenpreis-Index' }, tag: 'pokemontcg', news: '"Pokemon cards"' },
   { id: 'onepiece', name: 'One-Piece-Karten', group: 'Sammelobjekte', wiki: 'One Piece Card Game', tag: 'onepiecetcg', news: '"One Piece card game"' },
   { id: 'mtg', name: 'Magic-Karten', group: 'Sammelobjekte', wiki: 'Magic: The Gathering', scarcity: 'Frühe Karten stehen auf der „Reserved List“ und werden nie nachgedruckt.', price: { idx: 'mtg', label: 'Kartenpreis-Index' }, tag: 'mtg', news: '"Magic The Gathering"' },
-  { id: 'labubu', name: 'Labubu', group: 'Sammelobjekte', wiki: 'Labubu', scarcity: 'Verkauf in Blindboxen und limitierten Drops.', tag: 'labubu', news: 'Labubu' },
+  { id: 'labubu', name: 'Labubu', group: 'Popkultur', wiki: 'Labubu', scarcity: 'Verkauf in Blindboxen und limitierten Drops.', tag: 'labubu', news: 'Labubu' },
   { id: 'lego', name: 'LEGO', group: 'Sammelobjekte', wiki: 'Lego', scarcity: 'Sets werden nach einigen Jahren eingestellt und danach nur noch gebraucht gehandelt.', tag: 'lego', news: 'LEGO' },
   { id: 'rolex', name: 'Rolex', group: 'Sammelobjekte', wiki: 'Rolex', scarcity: 'Begrenzte Produktion, beliebte Modelle mit Wartelisten.', tag: 'rolex', news: 'Rolex' },
   { id: 'whisky', name: 'Whisky', group: 'Sammelobjekte', wiki: 'Scotch whisky', scarcity: 'Alte Abfüllungen sind endlich, jede geöffnete Flasche verschwindet vom Markt.', tag: 'whisky', news: 'whisky' },
@@ -412,21 +421,21 @@ const THEMES = [
   { id: 'yugioh', name: 'Yu-Gi-Oh!-Karten', group: 'Sammelobjekte', wiki: 'Yu-Gi-Oh! Trading Card Game', price: { idx: 'yugioh', label: 'Kartenpreis-Index' }, tag: 'yugioh', news: '"Yu-Gi-Oh" cards' },
   { id: 'lorcana', name: 'Lorcana-Karten', group: 'Sammelobjekte', wiki: 'Disney Lorcana', scarcity: 'Begehrte Sets sind kurz nach Erscheinen oft ausverkauft.', tag: 'lorcana', news: 'Lorcana', price: { idx: 'lorcana', label: 'Kartenpreis-Index' } },
   { id: 'sportscards', name: 'Sportkarten', group: 'Sammelobjekte', wiki: 'Baseball card', scarcity: 'Rookie-Karten und nummerierte Parallels gibt es nur in kleiner Auflage.', tag: 'sportscards', news: '"sports cards"' },
-  { id: 'funko', name: 'Funko Pops', group: 'Sammelobjekte', wiki: 'Funko', price: { fmp: 'FNKO', label: 'Funko' }, scarcity: 'Limitierte Editionen und „vaulted“ Figuren werden nicht mehr produziert.', tag: 'funkopop', news: '"Funko Pop"' },
-  { id: 'sonnyangel', name: 'Sonny Angels', group: 'Sammelobjekte', wiki: 'Sonny Angel', scarcity: 'Verkauf in Blindboxen mit seltenen „Secret“-Figuren.', tag: 'sonnyangel', news: '"Sonny Angel"' },
-  { id: 'jellycat', name: 'Jellycat', group: 'Sammelobjekte', wiki: 'Jellycat', scarcity: 'Einzelne Designs werden „retired“ und danach nur noch gebraucht gehandelt.', tag: 'jellycat', news: 'Jellycat' },
-  { id: 'hotwheels', name: 'Hot Wheels', group: 'Sammelobjekte', wiki: 'Hot Wheels', price: { fmp: 'MAT', label: 'Mattel' }, scarcity: 'Seltene „Treasure Hunts“ werden nur in kleiner Stückzahl beigemischt.', tag: 'hotwheels', news: '"Hot Wheels"' },
+  { id: 'funko', name: 'Funko Pops', group: 'Popkultur', wiki: 'Funko', price: { fmp: 'FNKO', label: 'Funko' }, scarcity: 'Limitierte Editionen und „vaulted“ Figuren werden nicht mehr produziert.', tag: 'funkopop', news: '"Funko Pop"' },
+  { id: 'sonnyangel', name: 'Sonny Angels', group: 'Popkultur', wiki: 'Sonny Angel', scarcity: 'Verkauf in Blindboxen mit seltenen „Secret“-Figuren.', tag: 'sonnyangel', news: '"Sonny Angel"' },
+  { id: 'jellycat', name: 'Jellycat', group: 'Popkultur', wiki: 'Jellycat', scarcity: 'Einzelne Designs werden „retired“ und danach nur noch gebraucht gehandelt.', tag: 'jellycat', news: 'Jellycat' },
+  { id: 'hotwheels', name: 'Hot Wheels', group: 'Popkultur', wiki: 'Hot Wheels', price: { fmp: 'MAT', label: 'Mattel' }, scarcity: 'Seltene „Treasure Hunts“ werden nur in kleiner Stückzahl beigemischt.', tag: 'hotwheels', news: '"Hot Wheels"' },
   { id: 'retrogames', name: 'Retro-Videospiele', group: 'Sammelobjekte', wiki: 'Retrogaming', scarcity: 'Originale Module und versiegelte Spiele werden nicht mehr hergestellt.', tag: 'retrogaming', news: '"retro games"' },
   { id: 'vinyl', name: 'Vinyl-Platten', group: 'Sammelobjekte', wiki: 'Phonograph record', scarcity: 'Limitierte Pressungen und Erstauflagen.', tag: 'vinyl', news: '"vinyl records"' },
   { id: 'comics', name: 'Comics', group: 'Sammelobjekte', wiki: 'Comic book collecting', scarcity: 'Erstausgaben in gutem Zustand sind selten, bewertete Exemplare noch seltener.', tag: 'comicbooks', news: '"comic book" collecting' },
   { id: 'coins', name: 'Münzen', group: 'Sammelobjekte', wiki: 'Coin collecting', scarcity: 'Kleine Prägeauflagen und Fehlprägungen.', tag: 'numismatics', news: '"coin collecting"' },
   { id: 'birkin', name: 'Hermès Birkin', group: 'Sammelobjekte', wiki: 'Birkin bag', scarcity: 'Hermès verkauft die Tasche nur an ausgewählte Kunden, die Produktion ist bewusst knapp.', tag: 'birkin', news: '"Birkin bag"' },
   { id: 'wine', name: 'Wein als Anlage', group: 'Sammelobjekte', wiki: 'Investment wine', scarcity: 'Jeder Jahrgang ist endlich, getrunkene Flaschen verschwinden vom Markt.', tag: 'finewine', news: '"fine wine"' },
-  { id: 'matcha', name: 'Matcha', group: 'Lifestyle', wiki: 'Matcha', scarcity: 'Hochwertiger Matcha kommt aus wenigen Regionen Japans, die Produktion wächst nur langsam. 2024/25 gab es Lieferengpässe.', tag: 'matcha', news: 'matcha' },
-  { id: 'dubaichoc', name: 'Dubai-Schokolade', group: 'Lifestyle', wiki: 'Dubai chocolate', scarcity: 'Der Trend hat Pistazien knapper und teurer gemacht.', tag: 'dubaichocolate', news: '"Dubai chocolate"' },
-  { id: 'smartglasses', name: 'Smart Glasses', group: 'Lifestyle', wiki: 'Smartglasses', tag: 'smartglasses', news: '"smart glasses"' },
-  { id: 'padel', name: 'Padel', group: 'Lifestyle', wiki: 'Padel', tag: 'padel', news: 'padel' },
-  { id: 'pickleball', name: 'Pickleball', group: 'Lifestyle', wiki: 'Pickleball', tag: 'pickleball', news: 'pickleball' },
+  { id: 'matcha', name: 'Matcha', group: 'Popkultur', wiki: 'Matcha', scarcity: 'Hochwertiger Matcha kommt aus wenigen Regionen Japans, die Produktion wächst nur langsam. 2024/25 gab es Lieferengpässe.', tag: 'matcha', news: 'matcha' },
+  { id: 'dubaichoc', name: 'Dubai-Schokolade', group: 'Popkultur', wiki: 'Dubai chocolate', scarcity: 'Der Trend hat Pistazien knapper und teurer gemacht.', tag: 'dubaichocolate', news: '"Dubai chocolate"' },
+  { id: 'smartglasses', name: 'Smart Glasses', group: 'Technologie', wiki: 'Smartglasses', tag: 'smartglasses', news: '"smart glasses"' },
+  { id: 'padel', name: 'Padel', group: 'Popkultur', wiki: 'Padel', tag: 'padel', news: 'padel' },
+  { id: 'pickleball', name: 'Pickleball', group: 'Popkultur', wiki: 'Pickleball', tag: 'pickleball', news: 'pickleball' },
   { id: 'gold', name: 'Gold', group: 'Rohstoffe', wiki: 'Gold', price: { fmp: 'GLD', label: 'Gold-ETF GLD' }, scarcity: 'Die Fördermenge wächst nur um wenige Prozent pro Jahr.', tag: 'gold', news: '"gold price"', cot: ['GOLD - COMMODITY EXCHANGE%'] },
   { id: 'silver', name: 'Silber', group: 'Rohstoffe', wiki: 'Silver', price: { fmp: 'SLV', label: 'Silber-ETF SLV' }, scarcity: 'Wird überwiegend als Nebenprodukt anderer Minen gefördert, das Angebot reagiert kaum auf den Preis.', tag: 'silver', news: '"silver price"', cot: ['SILVER - COMMODITY EXCHANGE%'] },
   { id: 'uranium', name: 'Uran', group: 'Rohstoffe', wiki: 'Uranium', price: { fmp: 'URA', label: 'Uran-ETF URA' }, scarcity: 'Neue Minen brauchen viele Jahre bis zur Förderung.', tag: 'uranium', news: 'uranium' },
@@ -474,7 +483,9 @@ const THEMES = [
   { id: 'saudi', iso: 'SAU', name: 'Saudi-Arabien', group: 'Länder', wiki: 'Saudi Exchange', price: { fmp: 'KSA', label: 'Saudi-ETF KSA' }, driver: 'Ölpreis, Umbau der Wirtschaft (Vision 2030), Investitionen in KI-Rechenzentren.', tag: 'tadawul', news: 'Tadawul' },
   { id: 'poland', iso: 'POL', name: 'Polen', group: 'Länder', wiki: 'WIG20', price: { fmp: 'EPOL', label: 'Polen-ETF EPOL' }, driver: 'Starkes Wachstum, Banken, Rüstungsausgaben.', tag: 'wig20', news: '"Warsaw Stock Exchange"', ccy: 'PLN' },
 ];
-const GROUPS = ['Alle', 'Sammelobjekte', 'Lifestyle', 'Rohstoffe', 'Krypto', 'Technologie', 'Länder', 'Eigene'];
+const GROUPS = ['Alle', 'Sammelobjekte', 'Rohstoffe', 'Krypto', 'Technologie', 'Länder', 'Eigene', 'Popkultur'];
+// Popkultur (Spielzeug-, Food- und Freizeit-Hypes) ist versteckt: nur sichtbar, wenn man die Gruppe ausdrücklich wählt
+const HIDDEN_GROUP = 'Popkultur';
 
 /* ---------------------------------------------------------------
    Helfer
@@ -1118,12 +1129,99 @@ const isNew = r => !!state.basePhases && NEWSWORTHY.includes(r.phase) && state.b
 
 const earlyScore = r => (r.a ? Math.log2(r.a.ratio) + 0.5 * Math.log2(r.a.accel) - (has(r.p?.p30) ? Math.max(0, r.p.p30) / 30 : 0) - (r.a.established ? 1.5 : 0) - (r.a.sustained ? 0 : 0.5) : -99);
 
+/* ---------- Momentum Map: Fläche = Anteil an der gesamten Aufmerksamkeit, Farbe = Zu- oder Abfluss ---------- */
+const MM_GROUPS = ['Alle', 'Krypto', 'Rohstoffe', 'Technologie', 'Länder', 'Sammelobjekte'];
+// bis +100 % als Prozent, darüber als Faktor (×2,8)
+const mmRatioTxt = r => `${r >= 1 ? '▲' : '▼'}&nbsp;${r >= 2 ? `×${num(r, r >= 10 ? 0 : 1)}` : `${r >= 1 ? '+' : '−'}${num(Math.abs(r - 1) * 100, 0)}&nbsp;%`}`;
+// Stärke der Farbe: ×1,8 oder ÷1,8 = volle Farbe
+const mmTone = r => Math.max(-1, Math.min(1, Math.log(r) / Math.log(1.8)));
+function mmStyle(r) {
+  const k = mmTone(r), p = Math.round(Math.abs(k) * 88);
+  return `background:color-mix(in srgb, ${k >= 0 ? 'var(--up)' : 'var(--down)'} ${p}%, var(--panel-2));color:${Math.abs(k) > 0.55 ? 'var(--bg)' : 'var(--text)'}`;
+}
+function squarify(items, x, y, w, h, out) {
+  if (!items.length || w <= 0 || h <= 0) return out;
+  const tot = items.reduce((a, i) => a + i.v, 0), side = Math.min(w, h);
+  const worst = row => { const sr = row.reduce((a, i) => a + i.v, 0) * w * h / tot; return Math.max(...row.map(i => { const a = i.v * w * h / tot; return Math.max(side * side * a / (sr * sr), sr * sr / (side * side * a)); })); };
+  let row = [], best = Infinity, i = 0;
+  for (; i < items.length; i++) { const r = [...row, items[i]], wr = worst(r); if (row.length && wr > best) break; row = r; best = wr; }
+  const f = row.reduce((a, it) => a + it.v, 0) / tot;
+  let o = 0;
+  if (w >= h) { const rw = w * f; for (const it of row) { const hh = h * it.v / (f * tot); out.push({ ...it, x, y: y + o, w: rw, h: hh }); o += hh; } return squarify(items.slice(i), x + rw, y, w - rw, h, out); }
+  const rh = h * f; for (const it of row) { const ww = w * it.v / (f * tot); out.push({ ...it, x: x + o, y, w: ww, h: rh }); o += ww; }
+  return squarify(items.slice(i), x, y + rh, w, h - rh, out);
+}
+const WHY_LABEL = { news: 'Schlagzeile', search: 'Steigende Google-Suche', bet: 'Meistgehandelte Wette' };
+function renderMomentum() {
+  const el = document.getElementById('momentum'), m = state.collected?.momentum;
+  el.hidden = !m;
+  if (!m) return;
+  const byId = Object.fromEntries(THEMES.map(t => [t.id, t]));
+  const g = state.mmGroup || 'Alle';
+  const all = Object.entries(m.themes).filter(([id]) => byId[id]).map(([id, v]) => ({ id, t: byId[id], ...v }));
+  const items = all.filter(x => g === 'Alle' || x.t.group === g).filter(x => x.s > 0).sort((a, b) => b.s - a.s);
+  const W = el.clientWidth - (innerWidth >= 640 ? 42 : 34) || 320, phone = W < 560;
+  const shown = items.slice(0, phone ? 18 : 40).map(x => ({ ...x, v: x.s }));
+  const H = Math.round(Math.max(300, Math.min(470, W * (phone ? 1.1 : 0.42))));
+  const tiles = squarify(shown, 0, 0, W, H, []);
+  // Größte Zu- und Abflüsse: nur Themen mit spürbarem Anteil, sonst dominiert Rauschen kleiner Themen
+  const solid = all.filter(x => Math.max(x.s, x.s0) >= 0.4 && (g === 'Alle' || x.t.group === g));
+  const ins = [...solid].filter(x => x.r > 1.05).sort((a, b) => b.r - a.r).slice(0, 3);
+  const outs = [...solid].filter(x => x.r < 0.95).sort((a, b) => a.r - b.r).slice(0, 3);
+  const flowRow = x => `<button type="button" data-open="${esc(x.id)}" class="w-full flex items-baseline gap-3 py-2 text-left" style="border-top:1px solid var(--line)">
+      <span class="text-sm font-medium text-white shrink-0" style="min-width:7.5rem">${esc(x.t.name)}</span>
+      <span class="num text-sm font-semibold shrink-0" style="color:${x.r >= 1 ? 'var(--up)' : 'var(--down)'}">${mmRatioTxt(x.r)}</span>
+      <span class="text-xs faint truncate min-w-0 ml-auto">${esc(x.why?.[0]?.t || '')}</span></button>`;
+  el.innerHTML = `
+    <div class="flex flex-wrap items-end justify-between gap-3 mb-3">
+      <div>
+        <h2 class="eyebrow">Momentum Map</h2>
+        <p class="text-xs faint mt-1">Wohin die Aufmerksamkeit fließt. Fläche = Anteil an der gesamten Aufmerksamkeit, Farbe = fließt zu oder ab (letzte 7 Tage ggü. den 4 Wochen davor).</p>
+      </div>
+      <div class="flex flex-wrap gap-1.5">${MM_GROUPS.map(x => `<button type="button" class="chip" data-mm="${x}" aria-pressed="${g === x}">${x}</button>`).join('')}</div>
+    </div>
+    <div class="mm-map" style="height:${H}px">${tiles.map(x => `<button type="button" class="mm-t" data-open="${esc(x.id)}" title="${esc(x.t.name)}: ${num(x.s, 1)} % der Aufmerksamkeit, vorher ${num(x.s0, 1)} %"
+      style="left:${x.x}px;top:${x.y}px;width:${x.w}px;height:${x.h}px;${mmStyle(x.r)}">${x.w > 70 && x.h > 40 ? `<b>${esc(x.t.name)}</b><span class="num">${mmRatioTxt(x.r)}</span>` : x.w > 44 && x.h > 22 ? `<span class="num">${mmRatioTxt(x.r)}</span>` : ''}</button>`).join('')}</div>
+    <div class="flex flex-wrap items-center gap-2 mt-3 text-[11px] faint">
+      <span>fließt ab</span><span class="mm-grad"></span><span>fließt zu</span>
+      <span class="sm:ml-auto">Aus Suchen, Lesern, Nachrichten und Wettgeld${items.length > shown.length ? ` · ${items.length - shown.length} kleine Themen ausgeblendet` : ''}</span>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3 mt-4">
+      <div><div class="eyebrow mb-1">Größter Zufluss</div>${ins.map(flowRow).join('') || '<p class="text-xs faint py-2">Gerade nichts Auffälliges.</p>'}</div>
+      <div><div class="eyebrow mb-1">Größter Abfluss</div>${outs.map(flowRow).join('') || '<p class="text-xs faint py-2">Gerade nichts Auffälliges.</p>'}</div>
+    </div>`;
+}
+function momentumBlock(t) {
+  const m = state.collected?.momentum?.themes?.[t.id];
+  if (!m) return '';
+  const h = state.collected.momentumHist?.[t.id] || [];
+  const k = m.r;
+  const verdict = k >= 2 ? 'mehr als verdoppelt' : k >= 1.3 ? 'deutlich mehr' : k > 1.05 ? 'leicht mehr' : k >= 0.95 ? 'unverändert' : k > 0.7 ? 'leicht weniger' : k > 0.5 ? 'deutlich weniger' : 'mehr als halbiert';
+  return `<div class="inset p-4">
+    <div class="flex flex-wrap items-start" style="gap:1rem 2.5rem">
+      <div class="shrink-0">
+        <h3 class="eyebrow mb-1">Momentum</h3>
+        <div class="text-[11px] faint mb-1">Anteil an der Aufmerksamkeit</div>
+        <div class="num text-3xl text-white">${num(m.s, m.s < 1 ? 2 : 1)} %</div>
+        <div class="text-sm mt-1" style="color:${k >= 1 ? 'var(--up)' : 'var(--down)'}">${mmRatioTxt(k)} · vorher ${num(m.s0, m.s0 < 1 ? 2 : 1)} % · ${verdict}</div>
+        ${h.length >= 5 ? `<div class="mt-2">${spark(h.map(e => e[1]), { w: 220, h: 36, color: k >= 1 ? 'var(--up)' : 'var(--down)', fill: true })}</div><div class="text-[11px] faint">${h.length} Tage</div>` : ''}
+      </div>
+      ${m.why?.length ? `<div class="flex-1 min-w-[220px]">
+        <h3 class="eyebrow mb-1">Was die Aufmerksamkeit zieht</h3>
+        <ul class="space-y-1.5 text-sm">${m.why.map(w => `<li><span class="text-[11px] faint block">${WHY_LABEL[w.k] || ''}${w.v ? ` · ${esc(w.v)}` : ''}</span>${esc(w.t)}</li>`).join('')}</ul>
+      </div>` : ''}
+    </div>
+    <p class="text-[11px] faint mt-3">Anteil an der Aufmerksamkeit aller Themen (ohne Popkultur), aus Wikipedia-Aufrufen, Google-Suchen, Nachrichten und Wettgeld.</p>
+  </div>`;
+}
+
 function render() {
   renderMood();
+  renderMomentum();
   renderDiscover();
   renderBacktest();
   const rows = allThemes().map(compute);
-  const loaded = rows.filter(r => r.a);
+  const loaded = rows.filter(r => r.a && r.t.group !== HIDDEN_GROUP);
 
   // Aufsteiger
   // Rangfolge: Anstieg und Beschleunigung, abgewertet wenn saisonal, nicht von anderen Quellen bestätigt oder längst bekannt
@@ -1142,7 +1240,7 @@ function render() {
     : '<p class="text-sm faint col-span-full py-2">Lade Daten …</p>';
 
   // Neu seit dem letzten Besuch
-  const fresh = rows.filter(isNew);
+  const fresh = rows.filter(r => isNew(r) && r.t.group !== HIDDEN_GROUP);
   const sv = document.getElementById('sinceVisit');
   sv.hidden = !fresh.length;
   if (fresh.length) {
@@ -1157,11 +1255,11 @@ function render() {
   // Gruppen und Sortierung
   if (state.group === 'Favoriten' && !state.fav.size) state.group = 'Alle';
   document.getElementById('groupBtns').innerHTML = [...(state.fav.size ? ['Favoriten'] : []), ...GROUPS.filter(g => g !== 'Eigene' || state.custom.length)]
-    .map(g => `<button type="button" class="chip" data-group="${g}" aria-pressed="${state.group === g}">${g === 'Favoriten' ? `★ Favoriten (${state.fav.size})` : g}</button>`).join('');
+    .map(g => `<button type="button" class="chip${g === HIDDEN_GROUP ? ' ml-auto' : ''}" data-group="${g}" aria-pressed="${state.group === g}"${g === HIDDEN_GROUP && state.group !== g ? ' style="opacity:.55"' : ''} title="${g === HIDDEN_GROUP ? 'Versteckte Gruppe: Spielzeug-, Food- und Freizeit-Hypes' : ''}">${g === 'Favoriten' ? `★ Favoriten (${state.fav.size})` : g}</button>`).join('');
   document.getElementById('sortBtns').innerHTML = SORTS
     .map(([k, l]) => `<button type="button" class="chip" data-sort="${k}" aria-pressed="${state.sort === k}">${l}</button>`).join('');
 
-  const list = rows.filter(r => state.group === 'Alle' || (state.group === 'Favoriten' ? state.fav.has(r.t.id) : r.t.group === state.group));
+  const list = rows.filter(r => state.group === 'Alle' ? r.t.group !== HIDDEN_GROUP : state.group === 'Favoriten' ? state.fav.has(r.t.id) : r.t.group === state.group);
   const by = {
     hype: r => r.hype ?? -1, early: earlyScore, week: r => r.week ?? -99, attn: r => r.a?.ratio ?? -1, price: r => r.p?.p30 ?? -999,
   }[state.sort];
@@ -1461,6 +1559,7 @@ function renderDetail() {
       ${phaseBadge(r.phase)}
       <span class="text-sm muted">${r.phase ? PHASES[r.phase].text : esc(r.d.viewsError || 'Noch keine Daten.')}</span>
     </div>
+    ${momentumBlock(t)}
     <div>${chart}</div>
     ${moreSection(t)}
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden" style="background:var(--line);border:1px solid var(--line)">${stats}</dl>
@@ -2234,6 +2333,8 @@ function init() {
     }
     const open = e.target.closest('[data-open]')?.dataset.open;
     if (open) { openDetail(open); return; }
+    const mm = e.target.closest('[data-mm]')?.dataset.mm;
+    if (mm) { state.mmGroup = mm; renderMomentum(); return; }
     const group = e.target.closest('[data-group]')?.dataset.group;
     if (group) { state.group = group; render(); return; }
     const sort = e.target.closest('[data-sort]')?.dataset.sort;
@@ -2275,6 +2376,8 @@ function init() {
   });
 }
 init();
+// Momentum Map passt sich der Breite an
+{ let mmT; addEventListener('resize', () => { clearTimeout(mmT); mmT = setTimeout(renderMomentum, 150); }); }
 </script>
 </body>
 </html>
