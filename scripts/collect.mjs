@@ -25,7 +25,8 @@ const THEMES = Function(`return ${html.match(/const THEMES = (\[[\s\S]*?\n\]);/)
 const prev = await readFile(OUT, 'utf8').then(JSON.parse).catch(() => ({}));
 // Zusatzlauf: nur Google Trends nachholen, alles andere bleibt wie im Hauptlauf
 const TRENDS_ONLY = process.env.TRENDS_ONLY === 'true';
-const out = TRENDS_ONLY ? { ...structuredClone(prev), themes: structuredClone(prev.themes || {}), trendsUpdated: new Date().toISOString() } : { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [],
+const NEWCOMERS_ONLY = process.env.NEWCOMERS_ONLY === 'true'; // nur zum Testen: nur den Newcomer-Scanner laufen lassen
+const out = TRENDS_ONLY || NEWCOMERS_ONLY ? { ...structuredClone(prev), themes: structuredClone(prev.themes || {}), trendsUpdated: new Date().toISOString() } : { updated: new Date().toISOString(), themes: {}, cards: {}, history: {}, macro: {}, trendingCoins: [],
   fred: {}, cot: {}, defi: {}, sentiment: {}, apps: {}, discover: {}, perps: {}, market: {}, fx: {}, poly: {}, so: {} };
 // weitere Quellen je Thema landen wie gewohnt in out.themes[id]: edits, fedreg, trials, manifold
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -956,8 +957,154 @@ async function collectBskyTrends() {
   } catch (e) { log(`Bluesky-Trends: ${e.message}`); out.discover.bsky = prev.discover?.bsky || []; }
 }
 
-if (TRENDS_ONLY) await collectTrends();
+/* --- Newcomer-Scanner: Dinge, die vor einem Jahr kaum jemand kannte und seit Wochen stetig wachsen.
+   1. Kandidaten: an mindestens 3 der letzten 7 Tage unter den 1.000 meistgelesenen Artikeln einer von 14 Wikipedias
+      (kleinere Sprachen haben niedrigere Schwellen, dort tauchen Trends aus Asien oder Südamerika früher auf).
+   2. Wikidata ordnet ein: Personen, Filme, Serien, Musik, Sport, Wahlen, Katastrophen, Orte usw. fliegen raus.
+   3. Verlauf über 13 Monate: neu (vor einem Jahr höchstens ein Viertel der heutigen Leser) und stetig steigend
+      (4 Wochen klar über den 4 Wochen davor, kein einzelner Ausschlag).
+   Dazu ein Rückwärts-Test: Ab wann hätten dieselben Regeln bekannte Hypes in der englischen Wikipedia gemeldet? --- */
+const NC_WIKIS = ['en', 'de', 'fr', 'es', 'it', 'pt', 'ja', 'zh', 'ko', 'th', 'id', 'vi', 'pl', 'tr'];
+const NC_SKIP_Q = new Set(['Q5', 'Q5296', 'Q4167410', 'Q13406463', 'Q11424', 'Q24856', 'Q5398426', 'Q3464665', 'Q21191270', 'Q1983062', 'Q15416', 'Q63952888',
+  'Q482994', 'Q134556', 'Q7366', 'Q105543609', 'Q215380', 'Q5741069', 'Q1656682', 'Q40231', 'Q858439', 'Q27020041', 'Q16510064', 'Q18608583', 'Q13406554',
+  'Q46135307', 'Q1190554', 'Q178561', 'Q198', 'Q645883', 'Q2223653', 'Q8065', 'Q7944', 'Q8092', 'Q6256', 'Q3624078', 'Q515', 'Q1549591', 'Q486972',
+  'Q35657', 'Q12136', 'Q3918', 'Q11032', 'Q41298', 'Q4164871', 'Q132241', 'Q47150325', 'Q18536594', 'Q1079023', 'Q7725634', 'Q8261', 'Q47461344',
+  'Q3305213', 'Q17633526']);
+const NC_SKIP_DESC = /\b(actor|actress|singer|rapper|footballer|cricketer|boxer|wrestler|athlete|player|politician|film|movie|series|season|episode|album|song|single|band|musician|election|referendum|tournament|championship|cup final|olympic|league|match|born|murder|killing|shooting|attack|bombing|earthquake|hurricane|typhoon|cyclone|storm|flood|wildfire|war|battle|conflict|protest|award|ceremony|festival|television|tv |novel|manga|anime|comic book series|disambiguation|list of|city|town|village|country|province|state of|county|district|youtuber|streamer|influencer|journalist|businessman|businesswoman|entrepreneur|president|minister|king|queen|prince|princess|director|producer|comedian|holiday|observance|day of|sports team|football club|university|school|newspaper|airline flight|crash|incident|scandal|trial|case|lawsuit|deaths?|disease|virus|outbreak|pandemic|software bug)\b/i;
+const NC_CATS = [
+  ['spielzeug', 'Sammeln & Spielzeug', /\b(toy|figure|figurine|plush|collectible|trading card|doll|blind box|character|mascot|sticker)\b/i],
+  ['essen', 'Essen & Trinken', /\b(food|dish|dessert|pastry|beverage|drink|chocolate|snack|tea|coffee|cuisine|candy|confectionery|fruit|cocktail|ingredient|sauce|noodle|bread|cake|ice cream|spice)\b/i],
+  ['spiele', 'Spiele', /\b(video game|game|board game|card game|mobile game)\b/i],
+  ['technik', 'Technik', /\b(software|app|application|technology|device|smartphone|chatbot|artificial intelligence|language model|cryptocurrency|token|blockchain|robot|vehicle|car model|chip|processor|platform|website)\b/i],
+  ['marken', 'Marken & Produkte', /\b(brand|company|product|retailer|business|manufacturer|cosmetic|fashion|clothing|shoe|sneaker|bag|drinkware|watch|label|chain|store)\b/i],
+];
+const NC_HYPES = [['Labubu', 'Labubu'], ['Dubai-Schokolade', 'Dubai chocolate'], ['Pickleball', 'Pickleball'], ['Squishmallows', 'Squishmallows'],
+  ['Prime (Getränk)', 'Prime (drink)'], ['Wordle', 'Wordle'], ['ChatGPT', 'ChatGPT'], ['Fidget Spinner', 'Fidget spinner']];
+const ncYmd = d => d.replace(/-/g, '');
+async function ncViews(wiki, title, from, to) {
+  const body = await get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${wiki}.wikipedia/all-access/user/${encodeURIComponent(title.replace(/ /g, '_'))}/daily/${ncYmd(from)}00/${ncYmd(to)}00`);
+  const m = new Map((body.items || []).map(i => [`${i.timestamp.slice(0, 4)}-${i.timestamp.slice(4, 6)}-${i.timestamp.slice(6, 8)}`, i.views]));
+  const out2 = [];
+  for (let t = Date.parse(from); t <= Date.parse(to); t += DAY_MS) out2.push(m.get(ymd(new Date(t))) || 0);
+  return { v: out2, first: [...m.keys()].sort()[0] || null };
+}
+// Regeln, angewandt auf eine Tagesreihe bis Index i (einschließlich). Liefert null oder die Kennzahlen.
+function ncCheck(v, i, minLevel) {
+  if (i < 120) return null;
+  const mean2 = (a, b) => mean(v.slice(Math.max(0, a), b + 1));
+  const now = mean2(i - 13, i);
+  if (now < minLevel) return null;
+  const year = i >= 395 ? mean2(i - 395, i - 335) : null;
+  const firstNonZero = v.findIndex(x => x > 0);
+  const young = firstNonZero >= 0 && i - firstNonZero < 330;
+  if (!young && !(year != null && now >= 4 * (year + 5))) return null;
+  const w4 = mean2(i - 27, i), w4b = mean2(i - 55, i - 28), w4c = mean2(i - 83, i - 56);
+  if (!(w4 >= 1.4 * (w4b + 1) && w4b >= 0.9 * w4c)) return null;
+  const last28 = v.slice(i - 27, i + 1), med = median(last28);
+  if (!(Math.max(...last28) < 5 * (med + 1))) return null; // ein einzelner Ausschlag (Nachricht, Todesfall) zählt nicht
+  // Wochen in Folge, in denen der 2-Wochen-Schnitt nicht gefallen ist
+  let streak = 0;
+  for (let k = 0; k < 30; k++) { const a = mean2(i - 7 * k - 13, i - 7 * k), b = mean2(i - 7 * k - 20, i - 7 * k - 7); if (a > 0 && a >= 0.95 * b) streak++; else break; }
+  return { now: Math.round(now), year: year == null ? null : Math.round(year), young, g4: round(w4 / (w4b + 1), 2), streak };
+}
+async function collectNewcomers() {
+  const to = ymd(new Date(Date.now() - 2 * DAY_MS)), from = ymd(new Date(Date.now() - 400 * DAY_MS));
+  // 1. Kandidaten aus den Top-1000-Listen
+  const hits = new Map(), cutoff = {};
+  for (const wiki of NC_WIKIS) {
+    const cut = [];
+    for (let k = 2; k <= 8; k++) {
+      const d = new Date(Date.now() - k * DAY_MS);
+      try {
+        const body = await get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/top/${wiki}.wikipedia/all-access/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}`);
+        const arts = body.items?.[0]?.articles || [];
+        if (arts.length) cut.push(arts.at(-1).views);
+        for (const a of arts) {
+          if (a.article.includes(':') || a.article === '-' || a.article.startsWith('Special')) continue;
+          const key = `${wiki}|${a.article}`;
+          hits.set(key, (hits.get(key) || 0) + 1);
+        }
+      } catch (e) { log(`  Newcomer ${wiki} ${ymd(d)}: ${e.message}`); }
+    }
+    if (cut.length) cutoff[wiki] = Math.round(median(cut));
+  }
+  const cands = [...hits].filter(([, n]) => n >= 3).map(([k]) => { const [wiki, ...t] = k.split('|'); return { wiki, title: t.join('|').replace(/_/g, ' ') }; });
+  log(`Newcomer: ${cands.length} Kandidaten aus ${Object.keys(cutoff).length} Wikipedias`);
+  // 2. Wikidata: Art des Artikels, Beschreibung, Name, Sprachen, englischer Titel
+  const items = new Map(); // Q -> Eintrag
+  const known = new Set(THEMES.map(t => (t.wiki || '').toLowerCase()));
+  for (const wiki of NC_WIKIS) {
+    const list = cands.filter(c => c.wiki === wiki);
+    for (let k = 0; k < list.length; k += 50) {
+      const part = list.slice(k, k + 50);
+      try {
+        const body = await get(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&sites=${wiki}wiki&titles=${encodeURIComponent(part.map(c => c.title).join('|'))}&props=claims|descriptions|labels|sitelinks&languages=en|de&normalize=1`);
+        for (const e of Object.values(body.entities || {})) {
+          if (!e.id || e.missing !== undefined) continue;
+          const p31 = (e.claims?.P31 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
+          const desc = e.descriptions?.en?.value || e.descriptions?.de?.value || '';
+          const en = e.sitelinks?.enwiki?.title || null;
+          if (p31.some(q => NC_SKIP_Q.has(q)) || NC_SKIP_DESC.test(desc) || (en && known.has(en.toLowerCase()))) continue;
+          const src = e.sitelinks?.[`${wiki}wiki`]?.title;
+          if (!src) continue;
+          const prevItem = items.get(e.id);
+          if (prevItem) { prevItem.found.push(wiki); continue; }
+          items.set(e.id, { q: e.id, wiki, title: src, en, name: e.labels?.en?.value || e.labels?.de?.value || src, desc,
+            langs: Object.keys(e.sitelinks || {}).filter(x => /^[a-z_]+wiki$/.test(x) && !['commonswiki', 'specieswiki', 'metawiki'].includes(x)).length, found: [wiki] });
+        }
+      } catch (e) { log(`  Wikidata ${wiki}: ${e.message}`); }
+      await sleep(300);
+    }
+  }
+  log(`Newcomer: ${items.size} nach Wikidata-Filter`);
+  // 3. Verlauf prüfen (englische Wikipedia, wenn es dort einen Artikel gibt und er dort genug Leser hat; sonst die Fund-Sprache)
+  const found = [];
+  let n = 0;
+  for (const it of [...items.values()].slice(0, 220)) {
+    try {
+      const wiki = it.found.includes('en') ? 'en' : it.wiki, title = wiki === 'en' ? it.en : it.title;
+      const { v, first } = await ncViews(wiki, title, from, to);
+      n++;
+      const c = ncCheck(v, v.length - 1, (cutoff[wiki] || 1000) * 0.5);
+      if (!c) continue;
+      const weeks = [];
+      for (let k = 25; k >= 0; k--) weeks.push(Math.round(mean(v.slice(v.length - 7 * k - 7, v.length - 7 * k))));
+      const cat = NC_CATS.find(([, , re]) => re.test(it.desc))?.[0] || 'sonst';
+      found.push({ q: it.q, name: it.name, desc: it.desc, cat, en: it.en, wiki, title, langs: it.langs, found: it.found, first, ...c,
+        stage: c.streak <= 8 ? 'early' : 'growing', weeks, score: round(Math.log(c.g4) + 0.5 * Math.log(Math.min(c.year == null ? 20 : c.now / (c.year + 5), 50)), 3) });
+    } catch (e) { /* Artikel ohne Daten: egal */ }
+    await sleep(120);
+  }
+  found.sort((a, b) => b.score - a.score);
+  log(`Newcomer: ${found.length} von ${n} geprüften erfüllen die Regeln: ${found.slice(0, 8).map(f => f.name).join(', ')}`);
+  // Logbuch: wann ein Newcomer zum ersten Mal gemeldet wurde (für die spätere Trefferquote)
+  const logbook = { ...(prev.newcomers?.log || {}) };
+  for (const f of found) logbook[f.q] ||= { name: f.name, d: today, views: f.now };
+  // 4. Rückwärts-Test an bekannten Hypes (englische Wikipedia, Schwelle wie heute)
+  const back = [];
+  const enMin = (cutoff.en || prev.newcomers?.cutoff?.en || 8000) * 0.5;
+  for (const [label, title] of NC_HYPES) {
+    try {
+      const start = '2015-07-01';
+      const { v } = await ncViews('en', title, start, to);
+      const smooth = v.map((_, i) => mean(v.slice(Math.max(0, i - 29), i + 1)));
+      const pk = smooth.indexOf(Math.max(...smooth));
+      let hit = null;
+      for (let i = 120; i <= pk; i++) if (ncCheck(v, i, enMin)) { hit = i; break; }
+      const dayOf = i => ymd(new Date(Date.parse(start) + i * DAY_MS));
+      back.push({ label, peak: dayOf(pk), first: hit == null ? null : dayOf(hit), lead: hit == null ? null : Math.round((pk - hit) / 30.4 * 10) / 10 });
+    } catch (e) { log(`  Rückwärts-Test ${title}: ${e.message}`); }
+    await sleep(200);
+  }
+  log(`Newcomer-Rückblick: ${back.map(b => `${b.label} ${b.lead == null ? 'nicht erkannt' : `${b.lead} Mon. vorher`}`).join(', ')}`);
+  out.newcomers = { at: today, cutoff, list: found.slice(0, 30).map(({ score, ...f }) => f), back: back.length ? back : prev.newcomers?.back || [],
+    log: Object.fromEntries(Object.entries(logbook).filter(([, x]) => Date.parse(x.d) > Date.now() - 400 * DAY_MS)) };
+}
+
+if (NEWCOMERS_ONLY) await collectNewcomers();
+else if (TRENDS_ONLY) await collectTrends();
 else await Promise.all([
+  collectNewcomers().catch(e => { log(`Newcomer: ${e.message}`); if (prev.newcomers) out.newcomers = prev.newcomers; }),
   (async () => { await collectWiki(); await collectEdits(); })(), collectNews(), collectTrends(), collectHn(), collectMasto(), collectGnews(), collectGithub(), collectArxiv(), collectSec(), collectDev(),
   (async () => { await collectPokemon(); await collectMtg(); await collectYugioh(); await collectLorcana(); await collectMacro(); await collectTrendingCoins(); })(),
   (async () => { await collectFred(); await collectCot(); await collectDefi(); await collectSentiment(); await collectApps(); await collectDiscover(); await collectPoly(); await collectBskyTrends(); })(),
@@ -1120,7 +1267,7 @@ function backtest() {
     base30: baseRets.length ? { n: baseRets.length, hit: round(baseRets.filter(x => x > 0).length / baseRets.length, 2), avg: round(mean(baseRets), 1) } : null };
   log(`Rückblick: ${signals.length} Frühsignale, mit Kurs nach 30 Tagen: ${JSON.stringify(out.backtest.r30)}, Vergleich: ${JSON.stringify(out.backtest.base30)}`);
 }
-if (!TRENDS_ONLY) {
+if (!TRENDS_ONLY && !NEWCOMERS_ONLY) {
   await collectPriceHistory();
   backtest();
   delete out.priceHist; // nur zum Rechnen, nicht in die Datei

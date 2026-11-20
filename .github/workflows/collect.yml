@@ -14,6 +14,10 @@ on:
         description: 'Nur Google Trends nachholen'
         type: boolean
         default: false
+      nur_newcomer:
+        description: 'Nur den Newcomer-Scanner laufen lassen (Test)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -39,6 +43,7 @@ jobs:
           # Kontakt-E-Mail für die SEC-Volltextsuche (verlangt die SEC); als Secret, damit sie nicht öffentlich im Code steht.
           # Ohne das Secret überspringt der Sammler die SEC.
           SEC_CONTACT: ${{ secrets.SEC_CONTACT }}
+          NEWCOMERS_ONLY: ${{ inputs.nur_newcomer == true }}
           # Nachmittags- und Abendlauf: nur Google Trends
           TRENDS_ONLY: ${{ github.event.schedule == '47 10 * * *' || github.event.schedule == '47 16 * * *' || inputs.nur_trends == true }}
       - name: Speichern
