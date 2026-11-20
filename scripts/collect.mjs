@@ -1088,6 +1088,14 @@ async function collectNewcomers() {
       const cut = cutoff[wiki] || 1000;
       const strict = ncCheck(v, v.length - 1, cut * 0.5, cut * 0.1), c = strict || ncCheck(v, v.length - 1, cut * 0.3, cut * 0.2, true);
       if (!c) continue;
+      // Gegenprobe in der englischen Wikipedia: umbenannte oder neu angelegte Artikel in kleineren Sprachen
+      // sehen sonst „neu“ aus, obwohl das Ding längst bekannt ist (z. B. TSMC auf Chinesisch)
+      if (wiki !== 'en' && it.en) {
+        const ev = (await ncViews('en', it.en, from, to)).v, i = ev.length - 1;
+        const enNow = mean(ev.slice(i - 13, i + 1)), enYear = mean(ev.slice(i - 395, i - 334)), enFirst = ev.findIndex(x => x > 0);
+        if (!(enFirst >= 0 && i - enFirst < 330) && !(enNow >= 2.5 * (enYear + 20))) continue;
+        await sleep(120);
+      }
       const weeks = [];
       for (let k = 25; k >= 0; k--) weeks.push(Math.round(mean(v.slice(v.length - 7 * k - 7, v.length - 7 * k))));
       const cat = NC_CATS.find(([, , re]) => re.test(it.desc))?.[0];
