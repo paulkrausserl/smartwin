@@ -248,7 +248,7 @@
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
-  <script src="intro.js?v=6.1"></script>
+  <script src="intro.js?v=6.2"></script>
   <div class="app max-w-7xl mx-auto py-6 sm:py-8">
 
     <!-- Kopfzeile -->
@@ -400,7 +400,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '6.1';
+const APP_VERSION = '6.2';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -1235,7 +1235,7 @@ function renderNewcomers() {
   const card = f => {
     const xr = f.xr !== undefined ? f.xr : f.young || f.year == null ? null : f.now / Math.max(f.year, 1);
     const big = xr == null
-      ? `<b class="num text-2xl text-white">neu</b><span class="text-xs faint">Artikel erst seit ${f.first ? `${months(f.first)} Monat${months(f.first) > 1 ? 'en' : ''}` : 'kurzem'}</span>`
+      ? `<b class="num text-2xl text-white">neu</b><span class="text-xs faint">${f.young && f.first ? `Artikel erst seit ${months(f.first)} Monat${months(f.first) > 1 ? 'en' : ''}` : 'vor einem Jahr kaum gelesen'}</span>`
       : `<b class="num text-2xl text-white">×${num(xr, xr >= 10 ? 0 : 1)}</b><span class="text-xs faint">Leser ggü. vor einem Jahr</span>`;
     return `<div class="inset flex flex-col gap-2.5 min-w-0" style="padding:14px">
       <div class="flex items-start justify-between gap-2">
