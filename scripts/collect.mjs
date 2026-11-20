@@ -1090,16 +1090,19 @@ async function collectNewcomers() {
       if (!c) continue;
       // Gegenprobe in der englischen Wikipedia: umbenannte oder neu angelegte Artikel in kleineren Sprachen
       // sehen sonst „neu“ aus, obwohl das Ding längst bekannt ist (z. B. TSMC auf Chinesisch)
+      // Faktor „ggü. vor einem Jahr“ für die Anzeige (bei Gegenprobe aus der englischen Wikipedia, die ist verlässlicher)
+      let xr = c.year == null || c.young ? null : round(c.now / Math.max(c.year, 1), 1);
       if (wiki !== 'en' && it.en) {
         const ev = (await ncViews('en', it.en, from, to)).v, i = ev.length - 1;
         const enNow = mean(ev.slice(i - 13, i + 1)), enYear = mean(ev.slice(i - 395, i - 334)), enFirst = ev.findIndex(x => x > 0);
         if (!(enFirst >= 0 && i - enFirst < 330) && !(enNow >= 2.5 * (enYear + 20))) continue;
+        xr = enFirst >= 0 && i - enFirst < 330 ? null : round(enNow / Math.max(enYear, 1), 1);
         await sleep(120);
       }
       const weeks = [];
       for (let k = 25; k >= 0; k--) weeks.push(Math.round(mean(v.slice(v.length - 7 * k - 7, v.length - 7 * k))));
       const cat = NC_CATS.find(([, , re]) => re.test(it.desc))?.[0];
-      found.push({ q: it.q, name: it.name, desc: it.desc, cat, en: it.en, wiki, title, langs: it.langs, found: it.found, first, ...c,
+      found.push({ q: it.q, name: it.name, desc: it.desc, cat, en: it.en, wiki, title, langs: it.langs, found: it.found, first, ...c, xr,
         stage: !strict ? 'watch' : c.streak <= 8 ? 'early' : 'growing', weeks, score: round((strict ? 2 : 0) + Math.log(c.g4) + 0.5 * Math.log(Math.min(c.year == null ? 20 : c.now / (c.year + 5), 50)), 3) });
     } catch (e) { /* Artikel ohne Daten: egal */ }
     await sleep(120);

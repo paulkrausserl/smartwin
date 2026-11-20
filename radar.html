@@ -112,6 +112,7 @@
     .mm-t:hover, .mm-t:focus-visible { filter: brightness(1.08); outline: none; box-shadow: inset 0 0 0 2px var(--text); }
     .mm-t b { display: block; font-weight: 600; font-size: 13px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; hyphens: auto; }
     .mm-t span { font-size: 12px; opacity: .9; }
+    .nc-spark svg { width: 100%; height: auto; display: block; }
     .mm-grad { width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--down), var(--panel-2), var(--up)); }
     [data-mode="warm"] .card { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 1px 2px rgba(43, 39, 34, .03); }
     [data-mode="warm"] .inset { background: var(--panel-2); border-color: var(--line); border-radius: 16px; }
@@ -247,7 +248,7 @@
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
-  <script src="intro.js?v=6.0"></script>
+  <script src="intro.js?v=6.1"></script>
   <div class="app max-w-7xl mx-auto py-6 sm:py-8">
 
     <!-- Kopfzeile -->
@@ -294,6 +295,9 @@
 
     <!-- Momentum Map: wohin die Aufmerksamkeit fließt -->
     <section id="momentum" hidden class="card p-4 sm:p-5 mb-6"></section>
+
+    <!-- Newcomer: neu und stetig wachsend -->
+    <section id="newcomers" hidden class="card p-4 sm:p-5 mb-6"></section>
 
     <!-- Aufsteiger -->
     <section class="card p-4 sm:p-5 mb-6">
@@ -396,7 +400,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '6.0';
+const APP_VERSION = '6.1';
 
 /* ---------------------------------------------------------------
    Themen-Universum. `wiki`: englischer Wikipedia-Artikel (Weiterleitungen werden aufgelöst).
@@ -1215,9 +1219,82 @@ function momentumBlock(t) {
   </div>`;
 }
 
+/* ---------- Newcomer: Dinge, die vor einem Jahr kaum jemand kannte und seit Wochen stetig wachsen ---------- */
+const NC_CATS = [['alle', 'Alle'], ['spielzeug', 'Sammeln & Spielzeug'], ['essen', 'Essen & Trinken'], ['marken', 'Marken & Produkte'], ['technik', 'Technik'], ['spiele', 'Spiele'], ['sonst', 'Sonstiges']];
+const NC_LANG = { en: 'Englisch', de: 'Deutsch', fr: 'Französisch', es: 'Spanisch', it: 'Italienisch', pt: 'Portugiesisch', ja: 'Japanisch', zh: 'Chinesisch', ko: 'Koreanisch', th: 'Thai', id: 'Indonesisch', vi: 'Vietnamesisch', pl: 'Polnisch', tr: 'Türkisch' };
+function renderNewcomers() {
+  const el = document.getElementById('newcomers'), nc = state.collected?.newcomers;
+  el.hidden = !nc;
+  if (!nc) return;
+  const cat = state.ncCat || 'alle', open = state.ncAll;
+  const own = new Set(allThemes().map(t => (t.wiki || t.name).toLowerCase()));
+  const all = (nc.list || []).filter(f => !own.has((f.en || '').toLowerCase()));
+  const list = all.filter(f => cat === 'alle' || f.cat === cat);
+  const cats = NC_CATS.filter(([k]) => k === 'alle' || all.some(f => f.cat === k));
+  const months = d => Math.max(1, Math.round((Date.now() - Date.parse(d)) / (30.4 * DAY_MS)));
+  const card = f => {
+    const xr = f.xr !== undefined ? f.xr : f.young || f.year == null ? null : f.now / Math.max(f.year, 1);
+    const big = xr == null
+      ? `<b class="num text-2xl text-white">neu</b><span class="text-xs faint">Artikel erst seit ${f.first ? `${months(f.first)} Monat${months(f.first) > 1 ? 'en' : ''}` : 'kurzem'}</span>`
+      : `<b class="num text-2xl text-white">×${num(xr, xr >= 10 ? 0 : 1)}</b><span class="text-xs faint">Leser ggü. vor einem Jahr</span>`;
+    return `<div class="inset flex flex-col gap-2.5 min-w-0" style="padding:14px">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0"><div class="text-base font-semibold text-white leading-tight">${esc(f.name)}</div>
+          <div class="text-[11px] faint mt-0.5 truncate" title="${esc(f.desc || '')}">${esc(f.desc || NC_CATS.find(c => c[0] === f.cat)?.[1] || '')}</div></div>
+        <span class="chip shrink-0" style="font-size:10px;font-weight:700;letter-spacing:.04em;color:${{ early: 'var(--up)', growing: '#b7791f', watch: 'var(--faint)' }[f.stage]}" title="${{ early: 'Erfüllt alle Regeln, fängt gerade an', growing: 'Erfüllt alle Regeln, wächst schon länger', watch: 'Erfüllt die Regeln noch nicht ganz: im Auge behalten' }[f.stage]}">${{ early: 'FRÜH', growing: 'WÄCHST', watch: 'BEOBACHTEN' }[f.stage]}</span>
+      </div>
+      <div class="flex items-baseline gap-2">${big}</div>
+      <div class="nc-spark">${spark(f.weeks, { w: 300, h: 40, color: 'var(--up)', fill: true })}</div>
+      <ul class="text-xs muted space-y-1">
+        <li><span style="color:var(--up)">✓</span> seit ${f.streak} Woche${f.streak === 1 ? '' : 'n'} stetig steigend · ${f.g4 >= 2 ? `×${num(f.g4, 1)}` : `+${num((f.g4 - 1) * 100, 0)} %`} in 4 Wochen</li>
+        <li><span style="color:var(--up)">✓</span> ${num(f.now, 0)} Leser/Tag (${esc(NC_LANG[f.wiki] || f.wiki)}) · Wikipedia in ${f.langs} Sprache${f.langs === 1 ? '' : 'n'}</li>
+        ${f.found?.length > 1 ? `<li><span style="color:var(--up)">✓</span> unter den Meistgelesenen in ${f.found.length} Sprachen</li>` : ''}
+      </ul>
+      <div class="flex flex-wrap gap-2 mt-auto pt-1">
+        ${f.en ? `<button type="button" class="btn btn-sm" data-add-theme="${esc(f.en)}">+ ins Radar</button>` : ''}
+        <a class="btn btn-sm" href="https://${esc(f.wiki)}.wikipedia.org/wiki/${encodeURIComponent((f.title || '').replace(/ /g, '_'))}" target="_blank" rel="noopener">Wikipedia</a>
+      </div>
+    </div>`;
+  };
+  const shown = open ? list : list.slice(0, 6);
+  const back = nc.back || [];
+  const hits = back.filter(b => b.first);
+  const t0 = Math.min(...back.map(b => Date.parse(b.first || b.peak) - 120 * DAY_MS)), t1 = Date.now();
+  const pos = d => `${((Date.parse(d) - t0) / (t1 - t0) * 100).toFixed(1)}%`;
+  el.innerHTML = `
+    <div class="flex flex-wrap items-end justify-between gap-3" style="margin-bottom:12px">
+      <div>
+        <h2 class="eyebrow">Newcomer</h2>
+        <p class="text-xs faint mt-1">Was vor einem Jahr kaum jemand kannte und seit Wochen stetig wächst. Keine Personen, Ereignisse, Filme oder Sport.</p>
+      </div>
+      <div class="flex flex-wrap gap-1.5">${cats.map(([k, l]) => `<button type="button" class="chip" data-nc="${k}" aria-pressed="${cat === k}">${l}</button>`).join('')}</div>
+    </div>
+    ${list.length ? `<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">${shown.map(card).join('')}</div>
+      ${list.length > 6 ? `<button type="button" class="btn btn-sm mt-3" data-nc-all="1">${open ? 'Weniger zeigen' : `Alle ${list.length} zeigen`}</button>` : ''}`
+      : '<p class="text-sm faint py-3">Gerade erfüllt nichts in dieser Gruppe die Regeln. Das ist normal: Echte Newcomer sind selten.</p>'}
+    ${list.length && !list.some(f => f.stage !== 'watch') ? '<p class="text-xs muted mt-3">Gerade erfüllt kein Kandidat alle Regeln. Oben stehen die, die am nächsten dran sind (BEOBACHTEN).</p>' : ''}
+    <p class="text-[11px] faint mt-3">Täglich aus den 1.000 meistgelesenen Artikeln von 14 Wikipedias, eingeordnet über Wikidata. Stand ${new Date(nc.at).toLocaleDateString('de-DE')}.</p>
+    ${back.length ? `<details class="raw mt-4 pt-3" style="border-top:1px solid var(--line)">
+      <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
+        <span><span class="eyebrow">Hätte es funktioniert?</span><span class="block text-xs faint mt-1">Dieselben Regeln rückwirkend auf bekannte Hypes angewandt: ${hits.length} von ${back.length} erkannt, im Schnitt ${hits.length ? num(mean(hits.map(b => b.lead)), 1) : '–'} Monate vor dem Höhepunkt.</span></span>
+        <span class="text-xs faint">ein-/ausklappen</span></summary>
+      <div class="mt-3 space-y-2">${back.map(b => `<div class="grid items-center gap-3" style="grid-template-columns:minmax(6rem,9rem) 1fr auto">
+        <span class="text-sm text-white truncate">${esc(b.label)}</span>
+        <div class="relative h-4 rounded" style="background:var(--panel-2)">
+          ${b.first ? `<div class="absolute top-0 h-4 rounded" style="left:${pos(b.first)};width:calc(${pos(b.peak)} - ${pos(b.first)});background:var(--up);opacity:.2"></div>
+          <div class="absolute top-0 h-4 rounded" style="left:${pos(b.first)};width:3px;background:var(--up)" title="erste Meldung ${new Date(b.first).toLocaleDateString('de-DE')}"></div>` : ''}
+          <div class="absolute top-0 h-4 rounded" style="left:${pos(b.peak)};width:3px;background:var(--down)" title="Höhepunkt ${new Date(b.peak).toLocaleDateString('de-DE')}"></div>
+        </div>
+        <span class="text-xs num text-right" style="color:${b.first ? 'var(--up)' : 'var(--faint)'}">${b.first ? `${num(b.lead, 0)} Mon. früher` : 'nicht erkannt'}</span></div>`).join('')}
+        <div class="flex justify-between text-[11px] faint" style="padding-left:min(9.75rem,30%);padding-right:6.5rem"><span>${new Date(t0).getFullYear()}</span><span>heute</span></div>
+        <p class="text-[11px] faint">Grün = erste Meldung, rot = Höhepunkt (30-Tage-Schnitt). Geprüft nur in der englischen Wikipedia mit der heutigen Schwelle; der echte Scanner schaut zusätzlich in 13 weitere Sprachen. Wie viele Meldungen später wirklich groß werden, zählt der Radar ab jetzt mit.</p>
+      </div></details>` : ''}`;
+}
+
 function render() {
   renderMood();
   renderMomentum();
+  renderNewcomers();
   renderDiscover();
   renderBacktest();
   const rows = allThemes().map(compute);
@@ -2333,6 +2410,9 @@ function init() {
     }
     const open = e.target.closest('[data-open]')?.dataset.open;
     if (open) { openDetail(open); return; }
+    const nc = e.target.closest('[data-nc]')?.dataset.nc;
+    if (nc) { state.ncCat = nc; renderNewcomers(); return; }
+    if (e.target.closest('[data-nc-all]')) { state.ncAll = !state.ncAll; renderNewcomers(); return; }
     const mm = e.target.closest('[data-mm]')?.dataset.mm;
     if (mm) { state.mmGroup = mm; renderMomentum(); return; }
     const group = e.target.closest('[data-group]')?.dataset.group;
