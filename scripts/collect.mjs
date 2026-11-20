@@ -1028,17 +1028,32 @@ async function collectNewcomers() {
     }
     if (cut.length) cutoff[wiki] = Math.round(median(cut));
   }
-  const cands = [...hits].filter(([, n]) => n >= 3).map(([k]) => { const [wiki, ...t] = k.split('|'); return { wiki, title: t.join('|').replace(/_/g, ' ') }; });
+  // Dauerbrenner raussortieren: was vor einem Jahr (gleiche Woche) schon unter den Top 1.000 war, ist nicht neu
+  const old = new Set();
+  for (const wiki of NC_WIKIS) for (const k of [365, 368, 371]) {
+    const d = new Date(Date.now() - k * DAY_MS);
+    try {
+      const body = await get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/top/${wiki}.wikipedia/all-access/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}`);
+      for (const a of body.items?.[0]?.articles || []) old.add(`${wiki}|${a.article}`);
+    } catch { /* fehlender Tag: egal */ }
+  }
+  const cands = [...hits].filter(([k, n]) => n >= 3 && !old.has(k)).map(([k]) => { const [wiki, ...t] = k.split('|'); return { wiki, title: t.join('|').replace(/_/g, ' ') }; });
   log(`Newcomer: ${cands.length} Kandidaten aus ${Object.keys(cutoff).length} Wikipedias`);
   // 2. Wikidata: Art des Artikels, Beschreibung, Name, Sprachen, englischer Titel
   const items = new Map(); // Q -> Eintrag
   const known = new Set(THEMES.map(t => (t.wiki || '').toLowerCase()));
   for (const wiki of NC_WIKIS) {
     const list = cands.filter(c => c.wiki === wiki);
-    for (let k = 0; k < list.length; k += 50) {
-      const part = list.slice(k, k + 50);
+    // höchstens 50 Titel und eine URL von höchstens ~6.000 Zeichen pro Abfrage (Thai oder Chinesisch werden kodiert sehr lang)
+    const batches = [];
+    for (const c of list) {
+      const last = batches.at(-1), len = encodeURIComponent(c.title).length + 3;
+      if (!last || last.n >= 50 || last.len + len > 6000) batches.push({ items: [c], n: 1, len }); else { last.items.push(c); last.n++; last.len += len; }
+    }
+    for (const { items: part } of batches) {
       try {
-        const body = await get(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&sites=${wiki}wiki&titles=${encodeURIComponent(part.map(c => c.title).join('|'))}&props=claims|descriptions|labels|sitelinks&languages=en|de&normalize=1`);
+        const body = await get(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&sites=${wiki}wiki&titles=${encodeURIComponent(part.map(c => c.title).join('|'))}&props=claims|descriptions|labels|sitelinks&languages=en|de`);
+        if (body.error) throw new Error(body.error.info || body.error.code);
         for (const e of Object.values(body.entities || {})) {
           if (!e.id || e.missing !== undefined) continue;
           const p31 = (e.claims?.P31 || []).map(c => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
