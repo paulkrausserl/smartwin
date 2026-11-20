@@ -990,7 +990,8 @@ async function ncViews(wiki, title, from, to) {
   return { v: out2, first: [...m.keys()].sort()[0] || null };
 }
 // Regeln, angewandt auf eine Tagesreihe bis Index i (einschließlich). Liefert null oder die Kennzahlen.
-function ncCheck(v, i, minLevel, maxYear = Infinity) {
+// loose = Stufe „Beobachten“: schwächere Schwellen, damit man Kandidaten schon vor dem klaren Signal sieht
+function ncCheck(v, i, minLevel, maxYear = Infinity, loose = false) {
   if (i < 120) return null;
   const mean2 = (a, b) => mean(v.slice(Math.max(0, a), b + 1));
   const now = mean2(i - 13, i);
@@ -998,15 +999,15 @@ function ncCheck(v, i, minLevel, maxYear = Infinity) {
   const year = i >= 395 ? mean2(i - 395, i - 335) : null;
   const firstNonZero = v.findIndex(x => x > 0);
   const young = firstNonZero >= 0 && i - firstNonZero < 330;
-  if (!young && !(year != null && now >= 4 * (year + 5) && year <= maxYear)) return null; // vor einem Jahr kaum bekannt
+  if (!young && !(year != null && now >= (loose ? 3 : 4) * (year + 5) && year <= maxYear)) return null; // vor einem Jahr kaum bekannt
   const w4 = mean2(i - 27, i), w4b = mean2(i - 55, i - 28), w4c = mean2(i - 83, i - 56);
-  if (!(w4 >= 1.4 * (w4b + 1) && w4b >= 0.9 * w4c)) return null;
+  if (!(w4 >= (loose ? 1.15 : 1.4) * (w4b + 1) && w4b >= (loose ? 0.8 : 0.9) * w4c)) return null;
   const last28 = v.slice(i - 27, i + 1), med = median(last28);
   if (!(Math.max(...last28) < 5 * (med + 1))) return null; // ein einzelner Ausschlag (Nachricht, Todesfall) zählt nicht
   // Wochen in Folge, in denen der 2-Wochen-Schnitt nicht gefallen ist
   let streak = 0;
   for (let k = 0; k < 30; k++) { const a = mean2(i - 7 * k - 13, i - 7 * k), b = mean2(i - 7 * k - 20, i - 7 * k - 7); if (a > 0 && a >= 0.95 * b) streak++; else break; }
-  if (streak < 4) return null; // mindestens 4 Wochen stetig
+  if (streak < (loose ? 2 : 4)) return null; // mindestens 4 Wochen stetig (Beobachten: 2)
   return { now: Math.round(now), year: year == null ? null : Math.round(year), young, g4: round(w4 / (w4b + 1), 2), streak };
 }
 async function collectNewcomers() {
@@ -1084,13 +1085,14 @@ async function collectNewcomers() {
       const wiki = it.found.includes('en') ? 'en' : it.wiki, title = wiki === 'en' ? it.en : it.title;
       const { v, first } = await ncViews(wiki, title, from, to);
       n++;
-      const c = ncCheck(v, v.length - 1, (cutoff[wiki] || 1000) * 0.5, (cutoff[wiki] || 1000) * 0.1);
+      const cut = cutoff[wiki] || 1000;
+      const strict = ncCheck(v, v.length - 1, cut * 0.5, cut * 0.1), c = strict || ncCheck(v, v.length - 1, cut * 0.3, cut * 0.2, true);
       if (!c) continue;
       const weeks = [];
       for (let k = 25; k >= 0; k--) weeks.push(Math.round(mean(v.slice(v.length - 7 * k - 7, v.length - 7 * k))));
       const cat = NC_CATS.find(([, , re]) => re.test(it.desc))?.[0];
       found.push({ q: it.q, name: it.name, desc: it.desc, cat, en: it.en, wiki, title, langs: it.langs, found: it.found, first, ...c,
-        stage: c.streak <= 8 ? 'early' : 'growing', weeks, score: round(Math.log(c.g4) + 0.5 * Math.log(Math.min(c.year == null ? 20 : c.now / (c.year + 5), 50)), 3) });
+        stage: !strict ? 'watch' : c.streak <= 8 ? 'early' : 'growing', weeks, score: round((strict ? 2 : 0) + Math.log(c.g4) + 0.5 * Math.log(Math.min(c.year == null ? 20 : c.now / (c.year + 5), 50)), 3) });
     } catch (e) { /* Artikel ohne Daten: egal */ }
     await sleep(120);
   }
@@ -1098,7 +1100,7 @@ async function collectNewcomers() {
   log(`Newcomer: ${found.length} von ${n} geprüften erfüllen die Regeln: ${found.slice(0, 8).map(f => f.name).join(', ')}`);
   // Logbuch: wann ein Newcomer zum ersten Mal gemeldet wurde (für die spätere Trefferquote)
   const logbook = { ...(prev.newcomers?.log || {}) };
-  for (const f of found) logbook[f.q] ||= { name: f.name, d: today, views: f.now };
+  for (const f of found.filter(x => x.stage !== 'watch')) logbook[f.q] ||= { name: f.name, d: today, views: f.now };
   // 4. Rückwärts-Test an bekannten Hypes (englische Wikipedia, Schwelle wie heute)
   const back = [];
   const enMin = (cutoff.en || prev.newcomers?.cutoff?.en || 8000) * 0.5;
