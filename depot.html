@@ -267,7 +267,7 @@
   </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
-  <script src="intro.js?v=6.2"></script>
+  <script src="intro.js?v=6.3"></script>
   <div class="app max-w-7xl mx-auto py-6 sm:py-8">
 
     <!-- Kopfzeile -->
@@ -359,6 +359,10 @@
             <div id="assetHits" class="dv-hits" hidden></div>
           </div>
           <p id="assetPicked" class="text-xs muted mt-1.5"></p>
+          <div id="keyBox" hidden class="mt-2 text-xs" style="color:var(--down)">
+            <p class="mb-1.5">Für Aktienkurse braucht es deinen kostenlosen FMP-Key. Er ist pro Browser gespeichert, auf diesem Gerät fehlt er noch.</p>
+            <div class="flex gap-2"><input id="keyInput" class="field px-3 py-1.5 text-sm" autocomplete="off" placeholder="FMP-Key einfügen" /><button type="button" id="keySave" class="btn btn-sm">Speichern</button></div>
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
@@ -447,7 +451,7 @@
     </footer>
   </div>
 <script>
-const APP_VERSION = '6.2';
+const APP_VERSION = '6.3';
 
 /* ---------------------------------------------------------------
    Spieldepot: virtuelles Geld, echte Kurse. Alles liegt im localStorage ('rr:depot').
@@ -502,7 +506,7 @@ function cashAt(day = today()) {
 }
 
 /* ---------- Datenquellen ---------- */
-const apiKey = store.get('rr:apiKey') || '';
+let apiKey = store.get('rr:apiKey') || ''; // derselbe Key wie auf der Aktien-Seite; kann auch hier im Depot eingetragen werden
 const mem = new Map();
 // Zwischenspeicher: erst im Speicher, dann localStorage mit Ablaufzeit
 async function cached(key, maxAge, fn) {
@@ -529,10 +533,15 @@ async function fmp(path, params) {
   const ck = `rr:calls:${today()}`; store.set(ck, (store.get(ck) || 0) + 1); // gleicher Zähler wie auf der Aktien-Seite
   let res;
   try { res = await fetch(url); } catch { throw new Error('FMP nicht erreichbar'); }
-  if (res.status === 402 || res.status === 403) throw new Error('im FMP-Gratis-Tarif nicht enthalten');
-  if (res.status === 429) throw new Error('FMP-Tageslimit erreicht');
+  if (res.status === 401) throw new Error('der FMP-Key ist ungültig');
+  if (res.status === 402 || res.status === 403) throw new Error('diese Aktie ist im FMP-Gratis-Tarif nicht enthalten (meist nur US-Börsen)');
+  if (res.status === 429) throw new Error(`das FMP-Tageslimit ist erreicht (${store.get(ck) || 0} Abrufe heute, 250 erlaubt), morgen geht es wieder`);
   const body = await res.json().catch(() => null);
-  if (!res.ok || (body && !Array.isArray(body) && (body['Error Message'] || body.message))) throw new Error('FMP-Fehler');
+  const msg = body && !Array.isArray(body) ? body['Error Message'] || body.message : null;
+  if (msg && /limit/i.test(msg)) throw new Error('das FMP-Tageslimit ist erreicht, morgen geht es wieder');
+  if (msg && /invalid api key/i.test(msg)) throw new Error('der FMP-Key ist ungültig');
+  if (msg && /premium|subscription|plan/i.test(msg)) throw new Error('diese Aktie ist im FMP-Gratis-Tarif nicht enthalten (meist nur US-Börsen)');
+  if (!res.ok || msg) throw new Error(`FMP antwortet mit Fehler ${res.status}`);
   return body;
 }
 const CG = 'https://api.coingecko.com/api/v3/';
@@ -541,7 +550,7 @@ const CG = 'https://api.coingecko.com/api/v3/';
 async function stockMeta(sym) {
   if (!apiKey) throw new Error('FMP-Key fehlt (auf der Aktien-Seite unter „Datenquelle“ eintragen)');
   return cached('meta:' + sym, 365 * DAY_MS, async () => {
-    const p = (await fmp('profile', { symbol: sym }).catch(() => null))?.[0] || {};
+    const p = (await fmp('profile', { symbol: sym }).catch(e => { if (/Key|Tageslimit|erreichbar/.test(e.message)) throw e; return null; }))?.[0] || {};
     const raw = p.currency || (/\.(DE|F|PA|AS|MI|MC|BR|VI|HE|LS)$/.test(sym) ? 'EUR' : 'USD');
     const pence = raw === 'GBp' || raw === 'GBX';
     return { name: p.companyName || sym, ccy: pence ? 'GBP' : raw.toUpperCase(), div: pence ? 100 : 1 };
@@ -554,9 +563,11 @@ async function fxSeries(ccy, from) {
   const fetchFrom = have?.v?.from && have.v.from <= from ? have.v.from : from;
   const maxAge = have?.v?.from && have.v.from <= from ? 6 * 3600e3 : 0;
   return cached(key, maxAge, async () => {
+    // Frankfurter (EZB-Kurse); falls die alte Adresse nicht antwortet, die neue
+    const fx2 = path => getJSON(`https://api.frankfurter.app/${path}`).catch(() => getJSON(`https://api.frankfurter.dev/v1/${path}`));
     const [hist, latest] = await Promise.all([
-      getJSON(`https://api.frankfurter.app/${addDays(fetchFrom, -7)}..?from=${ccy}&to=EUR`),
-      getJSON(`https://api.frankfurter.app/latest?from=${ccy}&to=EUR`),
+      fx2(`${addDays(fetchFrom, -7)}..?from=${ccy}&to=EUR`),
+      fx2(`latest?from=${ccy}&to=EUR`),
     ]);
     const rates = Object.entries(hist.rates || {}).map(([d, r]) => [d, r.EUR]).filter(r => r[1]);
     if (latest?.rates?.EUR) rates.push([latest.date, latest.rates.EUR]);
@@ -636,7 +647,11 @@ async function assetData(kind, sym, from) {
     return { ccy: 'EUR', div: 1, fx: null, bars: h.bars, eurBars: h.bars, live: last, liveEur: last, fxNow: 1 };
   }
   const meta = await stockMeta(sym);
-  const [h, q, fx] = await Promise.all([stockHistory(sym, from), stockQuote(sym).catch(() => null), fxSeries(meta.ccy, addDays(from, -10))]);
+  // Verlauf und aktueller Kurs unabhängig: fehlt einer, reicht der andere (heute kaufen geht auch nur mit dem Kurs)
+  const [hr, qr, fx] = await Promise.all([stockHistory(sym, from).then(v => ({ v }), e => ({ e })), stockQuote(sym).then(v => ({ v }), e => ({ e })),
+    fxSeries(meta.ccy, addDays(from, -10)).catch(() => { throw new Error('der Wechselkurs (EZB) ist gerade nicht erreichbar'); })]);
+  if (hr.e && qr.e) throw qr.e.message === 'kein Kurs' ? hr.e : qr.e;
+  const h = hr.v || { bars: [] }, q = qr.v ?? null;
   const div = meta.div;
   const bars = h.bars.map(b => ({ d: b.d, o: b.o / div, h: b.h / div, l: b.l / div, c: b.c / div }));
   const eurBars = bars.map(b => { const f = fxAt(fx, b.d); return { d: b.d, o: b.o * f, h: b.h * f, l: b.l * f, c: b.c * f }; });
@@ -874,7 +889,8 @@ function syncBuy() {
   $('dateInput').min = buy.kind === 'crypto' ? addDays(today(), -364) : addDays(today(), -5 * 365);
   $('levLabel').textContent = `${buy.lev}×`;
   $('levInput').style.setProperty('--p', `${(buy.lev - 1) / 9 * 100}%`);
-  $('assetPicked').innerHTML = buy.sym ? `Gewählt: <b class="text-white">${esc(buy.name)}</b> <span class="faint">(${esc(buy.sym)})</span>` : (buy.kind === 'stock' && !apiKey ? '<span style="color:var(--down)">Für Aktien brauchst du deinen FMP-Key (Aktien-Seite → Datenquelle).</span>' : '');
+  $('assetPicked').innerHTML = buy.sym ? `Gewählt: <b class="text-white">${esc(buy.name)}</b> <span class="faint">(${esc(buy.sym)})</span>` : '';
+  $('keyBox').hidden = !(buy.kind === 'stock' && !apiKey);
   preview();
 }
 // Kaufkurs: heute = aktueller Kurs, rückwirkend = Schlusskurs des Tages (oder des letzten Handelstags davor)
@@ -1013,6 +1029,12 @@ function init() {
   applyMode();
   $('modeBtn').addEventListener('click', () => { mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length]; store.set('rr:mode', mode); applyMode(); refresh(); });
   $('buyBtn').addEventListener('click', () => openBuy());
+  $('keySave').addEventListener('click', () => {
+    const k = $('keyInput').value.trim();
+    if (!k) return;
+    apiKey = k; store.set('rr:apiKey', k); // gleicher Speicherplatz wie auf der Aktien-Seite
+    syncBuy(); loadQuote(); refresh();
+  });
   $('setBtn').addEventListener('click', () => $('setDialog').showModal());
   document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
   document.querySelectorAll('#buyForm [data-kind]').forEach(b => b.addEventListener('click', () => {
